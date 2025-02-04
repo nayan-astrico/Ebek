@@ -1,0 +1,52 @@
+{% extends "assessments/base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mt-4">Welcome to the Dashboard</h1>
+    <p>This is your main dashboard page where you can access key information and actions.</p>
+
+    <!-- Placeholder for dashboard content (e.g., summaries, stats, etc.) -->
+    <div class="card mt-4">
+        <div class="card-header">
+            Quick Actions
+        </div>
+        <div class="card-body">
+            <p class="card-text">Use the sidebar to navigate to different sections of the app.</p>
+            <a href="{% url 'create_assessment' %}" class="btn btn-warning">Create Assessment</a>
+        </div>
+    </div>
+
+    <!-- Example cards for displaying statistics or summaries -->
+    <div class="row mt-4">
+        <div class="col-md-4">
+            <div class="card text-white bg-info mb-3">
+                <div class="card-header">Total Assessments</div>
+                <div class="card-body">
+                    <h5 class="card-title">24</h5>
+                    <p class="card-text">Total number of assessments created.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-header">Active Users</div>
+                <div class="card-body">
+                    <h5 class="card-title">15</h5>
+                    <p class="card-text">Number of active users.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-warning mb-3">
+                <div class="card-header">Pending Tasks</div>
+                <div class="card-body">
+                    <h5 class="card-title">5</h5>
+                    <p class="card-text">Tasks that require your attention.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

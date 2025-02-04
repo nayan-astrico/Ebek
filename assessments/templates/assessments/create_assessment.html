@@ -1,0 +1,569 @@
+{% extends "assessments/base.html" %}
+
+{% block title %}Upload Assessment{% endblock %}
+{% load custom_filters %}
+
+
+{% block content %}
+    <!-- Button to open modal -->
+    <button class="btn-create-assessment" id="createAssessmentBtn">+ Create Assessment</button>
+
+    <div>
+        <!-- Search Bar and Filter -->
+        <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+            <div>
+                <input type="text" id="searchInput" placeholder="Search Procedures" 
+                       value="{{ query }}" style="padding: 8px; width: 300px; border: 1px solid #ddd; border-radius: 5px;">
+                <button onclick="applyFilter()" style="background-color: #f7a82d; color: white; border: none; padding: 8px 16px; border-radius: 5px;">
+                    Search
+                </button>
+            </div>
+        </div>
+    
+        <!-- Procedures Table -->
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background-color: #f9f9f9; border-bottom: 2px solid #ddd;">
+                    <th style="padding: 10px;">Procedure</th>
+                    <th style="padding: 10px;">Questions</th>
+                    <th style="padding: 10px;">Mark as Active</th>
+                    <th style="padding: 10px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for procedure in page_obj %}
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 10px;">{{ procedure.name }}</td>
+                        <td style="padding: 10px;">{{ procedure.questions }}</td>
+                        <td style="padding: 10px; text-align: center;">
+                            <label class="switch">
+                                <input type="checkbox" 
+                                       {% if procedure.active %}checked{% endif %} 
+                                       onchange="toggleActive('{{ procedure.id }}', this)">
+                                <span class="slider round"></span>
+                            </label>
+                        </td>
+                        <td style="padding: 10px;">
+                            
+                            <button onclick="deleteProcedure('{{ procedure.id }}')" style="border: none; background: none; cursor: pointer;">
+                                <i class="fas fa-trash" style="color: #ff4d4d;"></i>
+                            </button>
+                            <button onclick="downloadProcedure('{{ procedure.id }}')" style="border: none; background: none; cursor: pointer;">
+                                <i class="fas fa-download" style="color: #666;"></i>
+                            </button>
+                            <button onclick="viewProcedure('{{ procedure.id }}')" style="border: none; background: none; cursor: pointer;">
+                                <i class="fas fa-eye" style="color: #666;"></i>
+                            </button>
+
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 20px; color: #999;">No procedures found.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    
+        <!-- Pagination -->
+        <div style="text-align: right; margin-top: 20px;">
+            {% if page_obj.paginator.num_pages > 1 %}
+                <span>
+                    <!-- Previous Button -->
+                    {% if page_obj.has_previous %}
+                        <a href="?page={{ page_obj.previous_page_number }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin-right: 10px;">Previous</a>
+                    {% endif %}
+        
+                    <!-- Page Links -->
+                    {% for page in page_obj.paginator.page_range %}
+                        {% if page <= 5 %}
+                            <a href="?page={{ page }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin: 0 5px;">{{ page }}</a>
+                        {% elif page >= page_obj.paginator.num_pages|subtract:1 %}
+                            <a href="?page={{ page }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin: 0 5px;">{{ page }}</a>
+                        {% elif page >= page_obj.number|subtract:2 %}
+                            {% if page <= page_obj.number|add:2 %}
+                                <a href="?page={{ page }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin: 0 5px;">{{ page }}</a>
+                            {% endif %}
+                        {% elif page == 6 %}
+                            <span style="margin: 0 5px;">...</span>
+                        {% endif %}
+                    {% endfor %}
+        
+                    <!-- Next Button -->
+                    {% if page_obj.has_next %}
+                        <a href="?page={{ page_obj.next_page_number }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin-left: 10px;">Next</a>
+                    {% endif %}
+                </span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Modal for Upload Assessment -->
+    <div class="modal fade" id="createAssessmentModal" tabindex="-1" role="dialog" aria-labelledby="createAssessmentLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content" style="border-radius: 10px; background-color: white; border: none; width: 450px;">
+                <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
+                    <h5 class="modal-title" id="createAssessmentLabel" style="font-weight: bold; color: #333;">Upload Assessment</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="outline: none;">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body" style="text-align: center; padding: 20px;">
+                    <!-- Drag-and-Drop File Upload Area -->
+                    <form id="uploadForm" method="post" enctype="multipart/form-data" onsubmit="submitForm(event)">
+                        {% csrf_token %}
+                        <div style="border: 2px dashed #ddd; border-radius: 10px; padding: 20px; background-color: #f9f9f9;" 
+                             id="dropArea">
+                            <input type="file" name="file" id="fileInput" accept=".xlsx" style="display: none;" required onchange="showExcelFilePreview(event)">
+                            <div onclick="triggerFileInput()" style="cursor: pointer;">
+                                <svg height="30px" width="30px" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#aaa">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm1 7h-4V9h4zm-4-2V5h.01L17 9zM7 14h10v2H7zm0 4h10v2H7zm0-8h4v2H7zm-2 2h12v1H5zm0 3h10v1H5z" />
+                                </svg>
+                                <p style="margin: 10px 0; color: #666;">Drag & drop file or click to upload</p>
+                                <p style="font-size: 12px; color: #999;">Max 10 MB files are allowed</p>
+                            </div>
+                        </div>
+                        
+                        <!-- File Preview Section -->
+                        <div id="filePreview" style="display: none; margin-top: 20px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; border: 1px solid #ddd; padding: 10px; border-radius: 8px;">
+                                <div style="display: flex; align-items: center;">
+                                    <?xml version="1.0" encoding="utf-8"?><!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
+                                        <svg width="40px" height="40px" viewBox="-4 0 64 64" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M5.112.006c-2.802 0-5.073 2.273-5.073 5.074v53.841c0 2.803 2.271 5.074 5.073 5.074h45.774c2.801 0 5.074-2.271 5.074-5.074v-38.605l-18.902-20.31h-31.946z" fill-rule="evenodd" clip-rule="evenodd" fill="#45B058"/>
+                                            <path d="M19.429 53.938c-.216 0-.415-.09-.54-.27l-3.728-4.97-3.745 4.97c-.126.18-.324.27-.54.27-.396 0-.72-.306-.72-.72 0-.144.035-.306.144-.432l3.89-5.131-3.619-4.826c-.09-.126-.145-.27-.145-.414 0-.342.288-.72.721-.72.216 0 .432.108.576.288l3.438 4.628 3.438-4.646c.127-.18.324-.27.541-.27.378 0 .738.306.738.72 0 .144-.036.288-.127.414l-3.619 4.808 3.891 5.149c.09.126.125.27.125.414 0 .396-.324.738-.719.738zm9.989-.126h-5.455c-.595 0-1.081-.486-1.081-1.08v-10.317c0-.396.324-.72.774-.72.396 0 .721.324.721.72v10.065h5.041c.359 0 .648.288.648.648 0 .396-.289.684-.648.684zm6.982.216c-1.782 0-3.188-.594-4.213-1.495-.162-.144-.234-.342-.234-.54 0-.36.27-.756.702-.756.144 0 .306.036.433.144.828.738 1.98 1.314 3.367 1.314 2.143 0 2.826-1.152 2.826-2.071 0-3.097-7.111-1.386-7.111-5.672 0-1.98 1.764-3.331 4.123-3.331 1.548 0 2.881.468 3.853 1.278.162.144.253.342.253.54 0 .36-.307.72-.703.72-.145 0-.307-.054-.432-.162-.883-.72-1.98-1.044-3.079-1.044-1.44 0-2.467.774-2.467 1.909 0 2.701 7.112 1.152 7.112 5.636 0 1.748-1.188 3.53-4.43 3.53z" fill="#ffffff"/><path d="M55.953 20.352v1h-12.801s-6.312-1.26-6.127-6.707c0 0 .207 5.707 6.002 5.707h12.926z" fill-rule="evenodd" clip-rule="evenodd" fill="#349C42"/>
+                                            <path d="M37.049 0v14.561c0 1.656 1.104 5.791 6.104 5.791h12.801l-18.905-20.352z" opacity=".5" fill-rule="evenodd" clip-rule="evenodd" fill="#ffffff"/>
+                                        </svg>
+                                    <span id="fileName" style="color: #333; font-size: 14px;padding-left: 10px;"></span>
+                                </div>
+                                <button type="button" onclick="removeFile()" style="border: none; background: none; color: #ff4d4d; cursor: pointer; font-size: 16px;">
+                                    <i class="fa fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-warning" style="margin-top: 20px; background-color: #f7a82d; color: white; width: 100%; border-radius: 5px;">
+                            Upload
+                        </button>
+                    </form>
+
+                    <!-- Loader -->
+                    <div id="loader" style="display: none; margin-top: 20px;">
+                        <p style="color: #666;">Processing your file, please wait...</p>
+                    </div>
+
+                    <!-- File Format Information -->
+                    <p style="margin-top: 20px; font-size: 12px; color: #666;">Only supports .xlsx file</p>
+                    <a href="/media/excel_templates/Assessment-Creation-Template.xlsx" style="font-size: 14px; font-weight: bold; color: #f7a82d;">Download Excel Template</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="procedureModal" style="display: none;">
+        <div style="text-align: right;">
+            <button class="close-modal-btn" onclick="document.getElementById('procedureModal').style.display='none'">&times;</button>
+        </div>
+        <h3 id="modalTitle"></h3>
+        <div id="modalBody"></div>
+        <button class="close-btn" onclick="document.getElementById('procedureModal').style.display='none'">Close</button>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const filePreview = document.getElementById('filePreview');
+        const fileNameDisplay = document.getElementById('fileName');
+        const dropArea = document.getElementById('dropArea');
+
+        $(document).ready(function() {
+            $('#createAssessmentBtn').click(function() {
+                $('#createAssessmentModal').modal('show');
+            });
+        });
+
+        dropArea.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            dropArea.style.borderColor = '#f7a82d';
+        });
+
+        dropArea.addEventListener('dragleave', () => {
+            dropArea.style.borderColor = '#ddd';
+        });
+
+        dropArea.addEventListener('drop', (event) => {
+            event.preventDefault();
+            dropArea.style.borderColor = '#ddd';
+            fileInput.files = event.dataTransfer.files;
+            showExcelFilePreview({ target: { files: event.dataTransfer.files } });
+        });
+
+        function triggerFileInput() {
+            fileInput.click();
+        }
+
+        function showExcelFilePreview(event) {
+            const file = event.target.files[0];
+            if (file) {
+                filePreview.style.display = 'block';
+                fileNameDisplay.textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+            }
+        }
+
+        function removeFile() {
+            fileInput.value = ''; // Reset file input
+            filePreview.style.display = 'none';
+        }
+
+        function submitForm(event) {
+            event.preventDefault();
+            document.getElementById('loader').style.display = 'block';
+
+            const form = document.getElementById('uploadForm');
+            const formData = new FormData(form);
+
+            fetch("{% url 'upload_excel' %}", {
+                method: "POST",
+                body: formData,
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loader').style.display = 'none';
+                if (data.error) {
+                    alert(`Error: ${data.error}`);
+                } else {
+                    alert("File uploaded and processed successfully!");
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                document.getElementById('loader').style.display = 'none';
+                alert(`Error: ${error}`);
+            });
+        }
+    </script>
+
+<script>
+    function applyFilter() {
+        const query = document.getElementById('searchInput').value;
+        window.location.href = `?query=${query}`;
+    }
+
+
+    function toggleActive(procedureId) {
+        fetch(`/procedures/${procedureId}/toggle/`, {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": '{{ csrf_token }}',
+                "Content-Type": "application/json"
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert("Status toggled successfully!");
+            } else {
+                alert(`Error: ${data.error}`);
+            }
+        });
+    }
+
+
+    function deleteProcedure(procedureId) {
+        if (confirm("Are you sure you want to delete this procedure?")) {
+            fetch(`/procedures/${procedureId}/delete/`, {
+                method: "POST",
+                headers: {
+                    "X-CSRFToken": '{{ csrf_token }}',
+                    "Content-Type": "application/json"
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Procedure deleted successfully!");
+                    location.reload();
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            });
+        }
+    }
+
+    function downloadProcedure(procedureId) {
+        window.location.href = `/procedures/${procedureId}/download/`;
+    }
+</script>
+
+<script>
+    function viewProcedure(procedureId) {
+        // Fetch the procedure details via AJAX
+        fetch(`/procedures/${procedureId}/view/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                // Populate the modal with the fetched data
+                populateModal(data);
+                // Show the modal
+                document.getElementById('procedureModal').style.display = 'block';
+            })
+            .catch(error => {
+                alert("An error occurred while fetching the procedure details.");
+                console.error(error);
+            });
+    }
+    
+    function populateModal(procedure) {
+        const modalTitle = document.getElementById('modalTitle');
+        const modalBody = document.getElementById('modalBody');
+
+        modalTitle.textContent = procedure.procedureName;
+        modalBody.innerHTML = '';
+
+        procedure.examMetaData.forEach((section, sectionIndex) => {
+            const sectionDiv = document.createElement('div');
+            sectionDiv.className = 'section';
+
+            const sectionHeader = document.createElement('h4');
+            if(section.section_name != ""){
+                sectionHeader.textContent = `Section ${sectionIndex + 1}: ${section.section_name || 'Unnamed Section'}`;
+            }else{
+                sectionHeader.textContent = ""
+            }
+            
+            sectionDiv.appendChild(sectionHeader);
+
+            section.section_questions.forEach((question, questionIndex) => {
+                const questionDiv = document.createElement('div');
+                questionDiv.className = 'question';
+
+                const questionText = document.createElement('p');
+                questionText.textContent = `${questionIndex + 1}. ${question.question}`;
+                questionDiv.appendChild(questionText);
+
+                const yesButton = createToggleButton('Yes', `yes-btn-${sectionIndex}-${questionIndex}`);
+                const noButton = createToggleButton('No', `no-btn-${sectionIndex}-${questionIndex}`);
+                questionDiv.appendChild(yesButton);
+                questionDiv.appendChild(noButton);
+
+                if (question.sub_section_questions_present) {
+                    question.sub_section_questions.forEach((subQuestion, subIndex) => {
+                        const subQuestionDiv = document.createElement('div');
+                        subQuestionDiv.className = 'sub-question';
+
+                        const subQuestionText = document.createElement('p');
+                        subQuestionText.textContent = `${String.fromCharCode(97 + subIndex)}. ${subQuestion.question}`;
+                        subQuestionDiv.appendChild(subQuestionText);
+
+                        const subYesButton = createToggleButton('Yes', `sub-yes-btn-${sectionIndex}-${questionIndex}-${subIndex}`);
+                        const subNoButton = createToggleButton('No', `sub-no-btn-${sectionIndex}-${questionIndex}-${subIndex}`);
+                        subQuestionDiv.appendChild(subYesButton);
+                        subQuestionDiv.appendChild(subNoButton);
+
+                        questionDiv.appendChild(subQuestionDiv);
+                    });
+                }
+
+                sectionDiv.appendChild(questionDiv);
+            });
+
+            modalBody.appendChild(sectionDiv);
+        });
+    }
+    
+    function createToggleButton(label, id = null) {
+        const button = document.createElement('button');
+        button.textContent = label;
+        button.className = 'toggle-btn'; // Add a class for styling
+        if (id) {
+            button.id = id; // Optionally set an ID if passed
+        }
+
+        // Add hover and click effects via CSS
+        button.addEventListener('click', () => {
+            const isSelected = button.classList.contains('selected');
+            if (isSelected) {
+                button.classList.remove('selected');
+            } else {
+                button.classList.add('selected');
+            }
+        });
+
+        return button;
+}
+
+</script>
+    
+
+<style>
+    .switch {
+        position: relative;
+        display: inline-block;
+        width: 34px;
+        height: 20px;
+    }
+
+    .switch input {
+        display: none;
+    }
+
+    .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: 0.4s;
+        border-radius: 20px;
+    }
+
+    .slider:before {
+        position: absolute;
+        content: "";
+        height: 14px;
+        width: 14px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: 0.4s;
+        border-radius: 50%;
+    }
+
+    input:checked + .slider {
+        background-color: #4caf50;
+    }
+
+    input:checked + .slider:before {
+        transform: translateX(14px);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    th, td {
+        padding: 10px;
+        text-align: center; /* Center horizontally */
+        vertical-align: middle; /* Center vertically */
+    }
+
+    th {
+        background-color: #f9f9f9;
+        border-bottom: 2px solid #ddd;
+        font-weight: bold;
+    }
+
+    td {
+        border-bottom: 1px solid #eee;
+    }
+
+    /* Optional: Adjust table column widths for better spacing */
+    th:nth-child(1), td:nth-child(1) {
+        width: 20%; /* Procedure column */
+    }
+
+    th:nth-child(2), td:nth-child(2) {
+        width: 20%; /* Questions column */
+    }
+
+    th:nth-child(3), td:nth-child(3) {
+        width: 20%; /* Mark as Active column */
+    }
+
+    th:nth-child(4), td:nth-child(4) {
+        width: 20%; /* Actions column */
+    }
+
+    /* Modal Styling */
+    #procedureModal {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        width: 90%;
+        max-width: 500px;
+        padding: 20px;
+        z-index: 1000;
+    }
+
+    #procedureModal h3 {
+        text-align: center;
+        margin-bottom: 20px;
+        font-size: 18px;
+        color: #333;
+        font-weight: bold;
+    }
+
+    #modalBody {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    /* Toggle Button Styling */
+    .toggle-btn {
+        margin-right: 10px;
+        border: 1px solid #ccc;
+        background-color: #fff;
+        color: #333;
+        border-radius: 10px;
+        padding: 10px 20px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease-in-out;
+        border-color: #f7a82d;
+        font-weight: bold;
+    }
+
+    .toggle-btn:hover {
+        background-color: #f5f5f5;
+    }
+
+    /* Selected State */
+    .toggle-btn.selected {
+        background-color: #f7a82d; /* Orange */
+        color: #fff;
+        border-color: #f7a82d;
+    }
+
+    /* Modal Close Button */
+    #procedureModal .close-modal-btn {
+        font-size: 20px;
+        font-weight: bold;
+        border: none;
+        background: none;
+        cursor: pointer;
+        color: #666;
+        float: right;
+    }
+
+    /* Footer Button (Close Modal) */
+    #procedureModal .close-btn {
+        display: block;
+        margin: 20px auto 0;
+        background-color: #f7a82d;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 14px;
+    }
+    .sub-question {
+        margin: 20px;
+    }
+    .question{
+        margin-top: 25px;
+        border-bottom: 1px solid #ddd;
+        padding-bottom: 10px;
+    }
+</style>
+{% endblock %}
