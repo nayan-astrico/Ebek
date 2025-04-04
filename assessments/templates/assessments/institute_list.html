@@ -1,0 +1,212 @@
+{% extends "assessments/base.html" %}
+
+{% block title %}Institutes{% endblock %}
+
+{% block content %}
+<div>
+    <!-- Button to open modal -->
+    <button class="btn-assign-assessment" id="createInstituteBtn">Create Institute</button>
+
+    <!-- Search Form -->
+    <div>
+        <!-- Search Bar and Filter -->
+        <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+            <div>
+                <input type="text" 
+                       id="searchInput" 
+                       placeholder="Search Institutes" 
+                       value="{{ query }}" 
+                       style="padding: 8px; width: 300px; border: 1px solid #ddd; border-radius: 5px;">
+                <button onclick="applyFilter()" style="background-color: #f7a82d; color: white; border: none; padding: 8px 16px; border-radius: 5px;">
+                    Search
+                </button>
+            </div>
+        </div>
+
+        <!-- Institutes Table -->
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background-color: #f9f9f9; border-bottom: 2px solid #ddd;">
+                    <th style="padding: 10px;">Institute Name</th>
+                    <th style="padding: 10px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for institute in page_obj %}
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 10px;">{{ institute.name }}</td>
+                        <td style="padding: 10px;">
+                            <button onclick="editInstitute('{{ institute.id }}', '{{ institute.name }}')" 
+                                    style="border: none; background: none; cursor: pointer;">
+                                <i class="fas fa-edit" style="color: #666;"></i>
+                            </button>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="2" style="text-align: center; padding: 20px; color: #999;">No institutes found</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Pagination -->
+        <div style="text-align: right; margin-top: 20px;">
+            {% if page_obj.paginator.num_pages > 1 %}
+                <span>
+                    {% if page_obj.has_previous %}
+                        <a href="?page={{ page_obj.previous_page_number }}&query={{ query }}" 
+                           style="color: #f7a82d; text-decoration: none; margin-right: 10px;">Previous</a>
+                    {% endif %}
+                    
+                    {% for page in page_obj.paginator.page_range %}
+                        <a href="?page={{ page }}&query={{ query }}" 
+                           style="color: #f7a82d; text-decoration: none; margin: 0 5px;">{{ page }}</a>
+                    {% endfor %}
+                    
+                    {% if page_obj.has_next %}
+                        <a href="?page={{ page_obj.next_page_number }}&query={{ query }}" 
+                           style="color: #f7a82d; text-decoration: none; margin-left: 10px;">Next</a>
+                    {% endif %}
+                </span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Modal for Create/Edit Institute -->
+    <div class="modal fade" id="createInstituteModal" tabindex="-1" role="dialog" aria-labelledby="createInstituteLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content" style="border-radius: 10px; background-color: white; border: none; width: 450px;">
+                <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
+                    <h5 class="modal-title" id="modalTitle" style="font-weight: bold; color: #333;">Create Institute</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="outline: none;">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body" style="padding: 20px;">
+                    <form id="createInstituteForm">
+                        <input type="hidden" id="instituteId" name="instituteId">
+                        <div class="form-group">
+                            <label for="instituteName" style="font-size: 14px; color: #666; font-weight: bold; margin-bottom: 5px;">Institute Name</label>
+                            <input type="text" 
+                                   id="instituteName" 
+                                   name="instituteName" 
+                                   required
+                                   style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                        </div>
+                        <button type="submit" style="background-color: #f7a82d; color: white; border: none; width: 100%; height: 45px; border-radius: 5px; font-weight: bold; margin-top: 20px;">
+                            <span id="submitButtonText">Create</span>
+                            <span class="spinner-border spinner-border-sm" style="display: none;" role="status" aria-hidden="true"></span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .btn-assign-assessment {
+        background-color: #f7a82d;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 5px;
+        cursor: pointer;
+        margin-bottom: 20px;
+    }
+
+    .btn-assign-assessment:hover {
+        background-color: #d68a25;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .modal-dialog {
+        max-width: 500px;
+    }
+
+    .spinner-border {
+        width: 1rem;
+        height: 1rem;
+        margin-left: 8px;
+    }
+
+    /* Add any additional styles from assign_assessment.html that you want to maintain */
+</style>
+
+<script>
+    // Keep existing JavaScript, just update the modal initialization to use Bootstrap's modal
+    $(document).ready(function() {
+        // Initialize Bootstrap modal
+        $('#createInstituteModal').modal({
+            show: false
+        });
+
+        // Update create button click handler
+        $('#createInstituteBtn').click(function() {
+            $('#modalTitle').text('Create Institute');
+            $('#submitButtonText').text('Create');
+            $('#createInstituteForm').trigger('reset');
+            $('#instituteId').val('');
+            $('#createInstituteModal').modal('show');
+        });
+
+        // Keep the rest of your existing JavaScript...
+        // Form submission code remains the same
+        $('#createInstituteForm').on('submit', function(e) {
+            e.preventDefault();
+            
+            const instituteName = $('#instituteName').val();
+            const instituteId = $('#instituteId').val();
+            const spinner = $('.spinner-border');
+            const submitBtn = $(this).find('button[type="submit"]');
+            
+            spinner.show();
+            submitBtn.prop('disabled', true);
+
+            fetch('/institutes/create/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    instituteName: instituteName,
+                    instituteId: instituteId || null
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    window.location.reload();
+                } else {
+                    alert(data.error || 'Failed to process institute');
+                }
+            })
+            .catch(error => {
+                alert('Error: ' + error);
+            })
+            .finally(() => {
+                spinner.hide();
+                submitBtn.prop('disabled', false);
+            });
+        });
+    });
+
+    function editInstitute(id, name) {
+        $('#modalTitle').text('Edit Institute');
+        $('#submitButtonText').text('Update');
+        $('#instituteId').val(id);
+        $('#instituteName').val(name);
+        $('#createInstituteModal').modal('show');
+    }
+
+    function applyFilter() {
+        const query = $('#searchInput').val();
+        window.location.href = `?query=${query}`;
+    }
+</script>
+{% endblock %} 

@@ -1,0 +1,455 @@
+{% extends "assessments/base.html" %}
+
+{% block title %}User Management{% endblock %}
+
+{% block content %}
+
+<div class="container mt-4" style="max-width: 100%;">
+    <!-- At the top of the content block, add both buttons -->
+    <div class="user-management-buttons" style="float: right;">
+        <button class="btn-user-action" id="createUserBtn">Create User</button>
+        <button class="btn-user-action" id="uploadExcelBtn">Upload Excel</button>
+    </div>
+
+    <!-- Search Form -->
+    <div>
+        <!-- Search Bar and Filter -->
+        <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+            <div>
+                <input type="text" id="searchInput" placeholder="Search Users" 
+                       value="{{ query }}" style="padding: 8px; width: 300px; border: 1px solid #ddd; border-radius: 5px;"
+                       onkeypress="handleKeyPress(event)">
+                <button onclick="applyFilter()" style="background-color: #f7a82d; color: white; border: none; padding: 8px 16px; border-radius: 5px;">
+                    Search
+                </button>
+            </div>
+        </div>
+
+        <!-- Users Table -->
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background-color: #f9f9f9; border-bottom: 2px solid #ddd;">
+                    <th style="padding: 10px;">Username</th>
+                    <th style="padding: 10px;">Email/Phone</th>
+                    <th style="padding: 10px;">Institute</th>
+                    <th style="padding: 10px;">Role</th>
+                    <th style="padding: 10px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in page_obj %}
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 10px;">{{ user.username }}</td>
+                        <td style="padding: 10px;">{{ user.emailID }}</td>
+                        <td style="padding: 10px;">{{ user.institute }}</td>
+                        <td style="padding: 10px;">{{ user.role }}</td>
+                        <td style="padding: 10px;">
+                            <button onclick="editUser('{{ user.id }}', '{{ user.username }}', '{{ user.emailID }}', '{{ user.institute }}', '{{ user.role }}')" style="border: none; background: none; cursor: pointer;">
+                                <i class="fas fa-pencil-alt" style="color: #666;"></i>
+                            </button>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 20px; color: #999;">No users found.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Pagination -->
+        <div style="text-align: right; margin-top: 20px;">
+            {% if page_obj.paginator.num_pages > 1 %}
+                <span>
+                    {% if page_obj.has_previous %}
+                        <a href="?page={{ page_obj.previous_page_number }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin-right: 10px;">Previous</a>
+                    {% endif %}
+
+                    {% for page in page_obj.paginator.page_range %}
+                        {% if page <= 5 %}
+                            <a href="?page={{ page }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin: 0 5px;">{{ page }}</a>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if page_obj.has_next %}
+                        <a href="?page={{ page_obj.next_page_number }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin-left: 10px;">Next</a>
+                    {% endif %}
+                </span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Create User Modal -->
+<div class="modal fade" id="createUserModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 10px; background-color: white; border: none; width: 450px;">
+            <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
+                <h5 class="modal-title" style="font-weight: bold; color: #333;">Create New User</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <form id="createUserForm">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="text" id="username" class="form-control" style="border-radius: 5px; height: 45px;" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="emailID" class="form-label">Email ID/Phone</label>
+                        <input type="text" id="emailID" class="form-control" style="border-radius: 5px; height: 45px;">
+                    </div>
+                    <div class="form-group">
+                        <label for="institute" class="form-label">Institute</label>
+                        <select id="institute" class="form-control" style="border-radius: 5px; height: 45px;" required>
+                            <option value="">Select Institute</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="role" class="form-label">Role</label>
+                        <select id="role" class="form-control" style="border-radius: 5px; height: 45px;" required>
+                            <option value="student">Student</option>
+                            <option value="supervisor">Supervisor</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-warning assign-btn">
+                        Create User
+                        <span class="spinner-border spinner-border-sm" style="display: none;" role="status" aria-hidden="true"></span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Excel Upload Modal -->
+<div class="modal fade" id="uploadExcelModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 10px; background-color: white; border: none; width: 450px;">
+            <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
+                <h5 class="modal-title" style="font-weight: bold; color: #333;">Upload Users Excel</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <form id="excelUploadForm" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label for="excelFile" class="form-label">Excel File</label>
+                        <input type="file" class="form-control" id="excelFile" name="file" accept=".xlsx,.xls" style="border-radius: 5px; height: 45px;">
+                        <a href="/media/excel_templates/User-Creation-Template.xlsx" style="font-size: 14px; font-weight: bold; color: #f7a82d;">Download Excel Template</a>
+                    <button type="submit" class="btn btn-warning assign-btn">
+                        Upload Excel
+                        <span class="spinner-border spinner-border-sm" style="display: none;" role="status" aria-hidden="true"></span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 10px; background-color: white; border: none; width: 450px;">
+            <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
+                <h5 class="modal-title" style="font-weight: bold; color: #333;">Edit User</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <form id="editUserForm">
+                    {% csrf_token %}
+                    <input type="hidden" id="editUserId">
+                    <div class="form-group">
+                        <label for="editUsername" class="form-label">Username</label>
+                        <input type="text" id="editUsername" class="form-control" style="border-radius: 5px; height: 45px;" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editEmailID" class="form-label">Email ID/Phone</label>
+                        <input type="text" id="editEmailID" class="form-control" style="border-radius: 5px; height: 45px;">
+                    </div>
+                    <div class="form-group">
+                        <label for="editInstitute" class="form-label">Institute</label>
+                        <select id="editInstitute" class="form-control" style="border-radius: 5px; height: 45px;" required>
+                            <option value="">Select Institute</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editRole" class="form-label">Role</label>
+                        <select id="editRole" class="form-control" style="border-radius: 5px; height: 45px;" required>
+                            <option value="student">Student</option>
+                            <option value="supervisor">Supervisor</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-warning assign-btn">
+                        Update User
+                        <span class="spinner-border spinner-border-sm" style="display: none;" role="status" aria-hidden="true"></span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .user-management-buttons {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .btn-user-action {
+        background-color: #f7a82d;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 5px;
+        cursor: pointer;
+        right: 20px;
+    }
+
+    .btn-user-action:hover {
+        background-color: #d68a25;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-label {
+        font-size: 14px;
+        color: #666;
+        font-weight: bold;
+        margin-bottom: 5px;
+        display: block;
+    }
+
+    .btn.assign-btn {
+        background-color: #f7a82d;
+        color: white;
+        border: none;
+        width: 100%;
+        height: 45px;
+        border-radius: 5px;
+        font-weight: bold;
+        margin-top: 20px;
+    }
+
+    .btn.assign-btn:hover {
+        background-color: #d68a25;
+    }
+</style>
+
+<script>
+// Initialize modals and handle button clicks
+$(document).ready(function() {
+    // Create User button click
+    $('#createUserBtn').click(function(e) {
+        e.preventDefault();
+        $('#createUserModal').modal('show');
+    });
+
+    // Upload Excel button click
+    $('#uploadExcelBtn').click(function(e) {
+        e.preventDefault();
+        $('#uploadExcelModal').modal('show');
+    });
+
+    // Handle create user form submission
+    $('#createUserForm').on('submit', function(e) {
+        e.preventDefault();
+        const button = $(this).find('.assign-btn');
+        const spinner = button.find('.spinner-border');
+
+        const userData = {
+            username: $('#username').val(),
+            emailID: $('#emailID').val(),
+            instituteId: $('#institute').val(),
+            role: $('#role').val()
+        };
+
+        if (!userData.username || !userData.instituteId) {
+            alert('Username and Institute are required.');
+            return;
+        }
+
+        button.prop('disabled', true);
+        spinner.show();
+
+        fetch('/users/create/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify(userData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+            } else {
+                alert(data.message);
+                location.reload();
+            }
+        })
+        .catch(error => {
+            alert('Error creating user: ' + error);
+        })
+        .finally(() => {
+            button.prop('disabled', false);
+            spinner.hide();
+        });
+    });
+
+    // Handle excel upload form submission
+    $('#excelUploadForm').on('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const button = $(this).find('.assign-btn');
+        const spinner = button.find('.spinner-border');
+
+        if (!$('#excelFile').val()) {
+            alert('Please select a file to upload.');
+            return;
+        }
+
+        button.prop('disabled', true);
+        spinner.show();
+
+        fetch('/users/upload-excel/', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                if (data.validation_errors) {
+                    alert('Validation Errors:\n' + data.validation_errors.join('\n'));
+                } else {
+                    alert(data.error);
+                }
+            } else {
+                alert(data.message);
+                location.reload();
+            }
+        })
+        .catch(error => {
+            alert('Error uploading file: ' + error);
+        })
+        .finally(() => {
+            button.prop('disabled', false);
+            spinner.hide();
+        });
+    });
+
+    // Load institutes for dropdown
+    loadInstitutes();
+});
+
+function applyFilter() {
+    const query = document.getElementById('searchInput').value.trim();
+    window.location.href = `?query=${query}`;
+}
+
+// Load institutes function
+function loadInstitutes() {
+    fetch('/fetch-institutes/')
+        .then(response => response.json())
+        .then(data => {
+            const select = $('#institute');
+            select.empty().append('<option value="">Select Institute</option>');
+            data.institutes.forEach(institute => {
+                select.append(`<option value="${institute.id}">${institute.instituteName}</option>`);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading institutes:', error);
+        });
+}
+
+function editUser(userId, username, email, institute, role) {
+    $('#editUserId').val(userId);
+    $('#editUsername').val(username);
+    $('#editEmailID').val(email);
+    $('#editRole').val(role);
+    
+    // Load institutes and set the selected one
+    fetch('/fetch-institutes/')
+        .then(response => response.json())
+        .then(data => {
+            const select = $('#editInstitute');
+            select.empty().append('<option value="">Select Institute</option>');
+            data.institutes.forEach(inst => {
+                const option = `<option value="${inst.id}">${inst.instituteName}</option>`;
+                select.append(option);
+                if (inst.instituteName === institute) {
+                    select.val(inst.id);
+                }
+            });
+        });
+    
+    $('#editUserModal').modal('show');
+}
+
+// Add this to your document.ready function
+$('#editUserForm').on('submit', function(e) {
+    e.preventDefault();
+    const button = $(this).find('.assign-btn');
+    const spinner = button.find('.spinner-border');
+
+    const userData = {
+        userId: $('#editUserId').val(),
+        username: $('#editUsername').val(),
+        emailID: $('#editEmailID').val(),
+        instituteId: $('#editInstitute').val(),
+        role: $('#editRole').val()
+    };
+
+    if (!userData.username || !userData.instituteId) {
+        alert('Username and Institute are required.');
+        return;
+    }
+
+    button.prop('disabled', true);
+    spinner.show();
+
+    fetch('/users/edit/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(userData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+        } else {
+            alert(data.message);
+            location.reload();
+        }
+    })
+    .catch(error => {
+        alert('Error updating user: ' + error);
+    })
+    .finally(() => {
+        button.prop('disabled', false);
+        spinner.hide();
+    });
+});
+
+function handleKeyPress(event) {
+    if (event.key === "Enter") {
+        event.preventDefault();
+        applyFilter();
+    }
+}
+</script>
+{% endblock %}

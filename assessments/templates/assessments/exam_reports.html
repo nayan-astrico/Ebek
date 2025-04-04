@@ -1,0 +1,288 @@
+{% extends "assessments/base.html" %}
+
+{% block title %}Exam Reports{% endblock %}
+
+{% block content %}
+
+<!-- Search Bar -->
+<div style="display: flex; gap: 10px; margin-bottom: 20px;">
+    <input type="text" id="searchInput" placeholder="Search Student" style="padding: 8px; width: 300px; border: 1px solid #ddd; border-radius: 5px;" onkeypress="if(event.key === 'Enter') fetch_particular_student()">
+    <button onclick="fetch_particular_student()" style="background-color: #f7a82d; color: white; border: none; padding: 8px 16px; border-radius: 5px;">Search</button>
+</div>
+
+<!-- Reports Table -->
+<table style="width: 100%; border-collapse: collapse;">
+    <thead>
+        <tr style="background-color: #f9f9f9; border-bottom: 2px solid #ddd;">
+            <th style="padding: 10px;">Student Name</th>
+            <th style="padding: 10px;">Total Score</th>
+            <th style="padding: 10px;">Grade</th>
+            <th style="padding: 10px;">Percentage</th>
+            <th style="padding: 10px;">Critical Steps Missed</th>
+            <th style="padding: 10px;">Procedure Name</th>
+            <th style="padding: 10px;">Actions</th>
+        </tr>
+    </thead>
+    <tbody id="examReportsBody">
+    </tbody>
+</table>
+
+<!-- Load More Button -->
+<div style="text-align: center; margin-top: 20px;">
+    <button id="loadMoreBtn" onclick="fetchExamReports()" style="display: none; background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">Load More</button>
+</div>
+
+<script>
+    let offset = 0;
+    const limit = 10;
+    let hasMoreData = true;
+    let loadedExamIds = new Set();
+
+    function fetchExamReports(reset = false) {
+        if (reset) {
+            offset = 0;
+            hasMoreData = true;
+            loadedExamIds.clear();
+            document.getElementById("examReportsBody").innerHTML = "";
+        }
+        
+        if (!hasMoreData) return;
+
+        fetch(`/fetch-exam-reports/?offset=${offset}&limit=${limit}`)
+            .then(response => response.json())
+            .then(data => {
+                if (!data.exam_reports.length) {
+                    hasMoreData = false;
+                    document.getElementById("loadMoreBtn").style.display = "none";
+                    return;
+                }
+                
+                let tableBody = document.getElementById("examReportsBody");
+                data.exam_reports.forEach(report => {
+                    if (loadedExamIds.has(report.exam_id)) return;
+                    loadedExamIds.add(report.exam_id);
+                    let grade = '';
+                    let color = '';
+                    if(report.percentage >= 90){
+                        grade = 'A';
+                        color = 'green';
+                    } else if(report.percentage >= 80){
+                        grade = 'B';
+                        color = '#FFA500';
+                    } else if(report.percentage >= 70){
+                        grade = 'C';
+                        color = '#FFD700';
+                    } else if(report.percentage >= 60){
+                        grade = 'D';
+                        color = '#FF6347';
+                    } else {
+                        grade = 'E';
+                        color = 'red';
+                    }
+                    let row = `<tr>
+                        <td>${report.student_name}</td>
+                        <td style="text-align: center;">${report.total_score}</td>
+                        <td style="text-align: center;color:${color}">${grade}</td>
+                        <td style="text-align: center;color:${color}">${report.percentage}%</td>
+                        <td style="text-align: center;">${report.critical_missed}</td>
+                        <td>${report.procedure_name}</td>
+                        <td style="text-align: center;">
+                            <button onclick="toggleDetails('${report.exam_id}')">
+                                <i class="fas fa-chevron-down" id="icon-${report.exam_id}"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    <tr id="details-${report.exam_id}" style="display: none;">
+                        <td colspan="6">
+                            <table style="width: 100%;">
+                                <thead>
+                                    <tr><th>Feedback</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td>${generateFeedback(report.critical_missed, report.critical_points)}</td></tr>
+                                </tbody>
+                            </table>
+                        </td>
+                    </tr>`;
+                    
+                    tableBody.insertAdjacentHTML('beforeend', row);
+                });
+
+                offset += limit;
+                document.getElementById("loadMoreBtn").style.display = "block";
+            })
+            .catch(error => console.error("Error fetching reports:", error));
+    }
+
+    function autoFetchNewReports() {
+        fetch(`/fetch-exam-reports/?auto_fetch=true`)
+            .then(response => response.json())
+            .then(data => {
+                let tableBody = document.getElementById("examReportsBody");
+                data.exam_reports.reverse().forEach(report => {
+                    if (loadedExamIds.has(report.exam_id)) return;
+                    loadedExamIds.add(report.exam_id);
+                    let grade = '';
+                    let color = '';
+                    if(report.percentage >= 90){
+                        grade = 'A';
+                        color = 'green';
+                    } else if(report.percentage >= 80){
+                        grade = 'B';
+                        color = '#FFA500';
+                    } else if(report.percentage >= 70){
+                        grade = 'C';
+                        color = '#FFD700';
+                    } else if(report.percentage >= 60){
+                        grade = 'D';
+                        color = '#FF6347';
+                    } else {
+                        grade = 'E';
+                        color = 'red';
+                    }
+                    let row = `<tr>
+                        <td>${report.student_name}</td>
+                        <td style="text-align: center;">${report.total_score}</td>
+                        <td style="text-align: center;color:${color}">${grade}</td>
+                        <td style="text-align: center;color:${color}">${report.percentage}%</td>
+                        <td style="text-align: center;">${report.critical_missed}</td>
+                        <td>${report.procedure_name}</td>
+                        <td style="text-align: center;">
+                            <button onclick="toggleDetails('${report.exam_id}')">
+                                <i class="fas fa-chevron-down" id="icon-${report.exam_id}"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    <tr id="details-${report.exam_id}" style="display: none;">
+                        <td colspan="6">
+                            <table style="width: 100%;">
+                                <thead>
+                                    <tr><th>Feedback</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td>${generateFeedback(report.critical_missed, report.critical_points)}</td></tr>
+                                </tbody>
+                            </table>
+                        </td>
+                    </tr>`;
+                    tableBody.insertAdjacentHTML('afterbegin', row);
+                    console.log(tableBody)
+                });
+            })
+            .catch(error => console.error("Error fetching new reports:", error));
+    }
+
+    function toggleDetails(exam_id) {
+        console.log(exam_id)
+        let row = document.getElementById("details-" + exam_id);
+        let icon = document.getElementById("icon-" + exam_id);
+        
+        if (row.style.display === "none") {
+            row.style.display = "table-row";
+            icon.classList.replace("fa-chevron-down", "fa-chevron-up");
+        } else {
+            row.style.display = "none";
+            icon.classList.replace("fa-chevron-up", "fa-chevron-down");
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        fetchExamReports();
+        setInterval(autoFetchNewReports, 10000);
+    });
+
+    // Function to generate feedback
+    function generateFeedback(criticalMissed, critical_points) {
+        let html_feedback = "";
+        if (criticalMissed === 0) {
+            html_feedback = "<span style='color: green;'>Excellent job! You have successfully completed this station. Continue practicing to maintain your skills.</span>";
+        } else if (criticalMissed === 1) {
+            html_feedback = "<span style='color: orange;'>Good effort, but you missed a critical step. Review the missed step and improve.</span>";
+        } else if (criticalMissed === 2) {
+            html_feedback = "<span style='color: red;'>You have demonstrated a basic understanding, but need to focus on multiple steps.</span>";
+        } else {
+            html_feedback = "<span style='color: red;'>Need significant improvement. Review the procedure and practice thoroughly.</span>";
+        }
+        
+        if (critical_points.length >= 1 && critical_points.length<=2) {
+            html_feedback += "<ul>";
+            critical_points.forEach(point => {
+                html_feedback += `<li>${point}</li>`;
+            });
+            html_feedback += "</ul>";
+        }
+
+        return html_feedback;
+    }
+
+
+    function fetch_particular_student() {
+        username = document.getElementById("searchInput").value.trim()
+        window.open(`/fetch-particular-student?username=${encodeURIComponent(username)}`);
+    }
+
+    
+
+</script>
+
+
+<style>
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+        font-family: Arial, sans-serif;
+    }
+
+    thead tr {
+        color: black;
+        text-align: left;
+    }
+
+    th, td {
+        padding: 12px;
+        border-bottom: 1px solid #ddd;
+        text-align: center;
+    }
+
+    tbody tr:nth-child(even) {
+        background-color: #f9f9f9;
+    }
+
+    tbody tr:hover {
+        background-color: #f1f1f1;
+        transition: background-color 0.3s ease-in-out;
+    }
+
+    th {
+        font-size: 16px;
+        font-weight: bold;
+    }
+
+    td {
+        font-size: 14px;
+    }
+
+    button {
+        background-color: #f7a82d;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        cursor: pointer;
+        font-size: 14px;
+        border-radius: 5px;
+        transition: 0.3s;
+    }
+
+    button:hover {
+        background-color: #218838;
+    }
+
+
+    #content {
+        height: fit-content;
+    }
+</style>
+{% endblock %}
