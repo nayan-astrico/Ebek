@@ -2,13 +2,29 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path('', views.create_assessment, name='create_assessment_first_page'),
     path('create_assessment/', views.create_assessment, name='create_assessment'),
     path('upload_excel/', views.upload_excel_view, name='upload_excel'),
     path('procedures/<str:procedure_id>/<str:action>/', views.ProcedureAPIView.as_view(), name='procedure_api'),
     path('assign_assessment/', views.assign_assessment, name='assign_assessment'),
-    path('fetch-institutes/', views.fetch_institutes, name='fetch-institutes'),
+    path('fetch-institutes/', views.fetch_institutes, name='fetch_institutes'),
     path('fetch-cohorts/', views.fetch_cohorts, name='fetch-cohorts'),
     path('fetch-assessors/', views.fetch_assessors, name='fetch-assessors'),
     path('fetch-procedures/', views.fetch_procedures, name='fetch-procedures'),
-    path('create-procedure-assignment-and-test/', views.create_procedure_assignment_and_test, name='create-procedure-assignment-and-test')
+    path('create-procedure-assignment-and-test/', views.create_procedure_assignment_and_test, name='create-procedure-assignment-and-test'),
+    path('exam-reports/', views.render_exam_reports_page, name='exam_reports_page'),
+    path('fetch-exam-reports/', views.fetch_exam_reports, name='fetch_exam_reports'),
+    path('fetch-particular-student/', views.fetch_particular_student, name='fetch_particular_student'),
+    path('institutes/', views.institute_list, name='institute_list'),
+    path('institutes/create/', views.create_institute, name='create_institute'),
+    path('users/upload-excel/', views.upload_users_excel_view, name='upload_users_excel'),
+    path('users/create/', views.create_user, name='create_user'),
+    path('users/', views.users_management, name='users_management'),
+    path('users/edit/', views.edit_user, name='edit_user'),
+    path('cohorts/', views.cohort_list, name='cohort_list'),
+    path('cohorts/create/', views.create_cohort, name='create_cohort'),
+    path('cohorts/fetch-institute-students/', views.fetch_institute_students, name='fetch_institute_students'),
+    path('cohorts/<str:cohort_id>/add-student/', views.add_student_to_cohort, name='add_student_to_cohort'),
+    path('cohorts/<str:cohort_id>/view-students/', views.view_cohort_students, name='view_cohort_students'),
+    path('cohorts/<str:cohort_id>/get-students/', views.get_cohort_students, name='get_cohort_students'),
 ]

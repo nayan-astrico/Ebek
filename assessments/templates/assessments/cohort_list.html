@@ -1,0 +1,520 @@
+{% extends "assessments/base.html" %}
+
+{% block title %}Cohort Management{% endblock %}
+
+{% block content %}
+<div class="container mt-4" style="max-width: 100%;">
+    <!-- Create Batch Button -->
+    <div class="cohort-management-buttons" style="float: right; margin-bottom: 20px;">
+        <button class="btn-cohort-action" id="createCohortBtn">Create Batch</button>
+    </div>
+
+    <!-- Search Bar -->
+    <div style="margin-bottom: 20px;">
+        <input type="text" id="searchInput" placeholder="Search Cohorts" 
+               value="{{ query }}" style="padding: 8px; width: 300px; border: 1px solid #ddd; border-radius: 5px;">
+        <button onclick="applyFilter()" style="background-color: #f7a82d; color: white; border: none; padding: 8px 16px; border-radius: 5px;">
+            Search
+        </button>
+    </div>
+
+    <!-- Cohorts Table -->
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="background-color: #f9f9f9; border-bottom: 2px solid #ddd;">
+                <th style="padding: 10px;">Cohort Name</th>
+                <th style="padding: 10px;">Institute(s)</th>
+                <th style="padding: 10px;">Number of Students</th>
+                <th style="padding: 10px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cohort in page_obj %}
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 10px;">{{ cohort.name }}</td>
+                    <td style="padding: 10px;">{{ cohort.institutes }}</td>
+                    <td style="padding: 10px;">{{ cohort.student_count }}</td>
+                    <td style="padding: 10px;">
+                        <button onclick="viewStudents('{{ cohort.id }}')" style="border: none; background: none; cursor: pointer;">
+                            <i class="fas fa-eye" style="color: #666;"></i>
+                        </button>
+                        <button onclick="addStudent('{{ cohort.id }}')" style="border: none; background: none; cursor: pointer;">
+                            <i class="fas fa-plus" style="color: #666;"></i>
+                        </button>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="4" style="text-align: center; padding: 20px; color: #999;">No cohorts found.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Pagination -->
+    <div style="text-align: right; margin-top: 20px;">
+        {% if page_obj.paginator.num_pages > 1 %}
+            <span>
+                {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin-right: 10px;">Previous</a>
+                {% endif %}
+
+                {% for page in page_obj.paginator.page_range %}
+                    {% if page <= 5 %}
+                        <a href="?page={{ page }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin: 0 5px;">{{ page }}</a>
+                    {% endif %}
+                {% endfor %}
+
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin-left: 10px;">Next</a>
+                {% endif %}
+            </span>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Create Cohort Modal -->
+<div class="modal fade" id="createCohortModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create New Batch</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="createCohortForm">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label for="cohortName">Batch Name</label>
+                        <input type="text" class="form-control" id="cohortName" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Select Institute and Students</label>
+                        <select id="instituteSelect" class="form-control mb-3">
+                            <option value="">Select Institute</option>
+                        </select>
+                        
+                        <div id="studentsContainer" style="max-height: 200px; overflow-y: auto;">
+                            <div style="margin-bottom: 10px;">
+                                <input type="checkbox" id="selectAllStudents">
+                                <label for="selectAllStudents">Select All Students</label>
+                            </div>
+                            <!-- Students will be loaded here -->
+                        </div>
+
+                        <!-- Add this new container for selected students -->
+                        <div class="mt-3">
+                            <label>Selected Students:</label>
+                            <div id="selectedStudentsContainer" class="selected-students-container">
+                                <!-- Selected students will be displayed here -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn-cohort-action">Create Batch</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add this modal after your existing modals -->
+<div class="modal fade" id="addStudentModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Students to Batch</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="addStudentForm">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label>Select Institute and Students</label>
+                        <select id="addStudentInstituteSelect" class="form-control mb-3">
+                            <option value="">Select Institute</option>
+                        </select>
+                        
+                        <div id="addStudentContainer" style="max-height: 300px; overflow-y: auto;">
+                            <!-- Students will be loaded here -->
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-warning">Add Selected Students</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.btn-cohort-action {
+    background-color: #f7a82d;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.btn-cohort-action:hover {
+    background-color: #d68a25;
+}
+
+.student-checkbox {
+    margin: 5px 0;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.student-checkbox:hover {
+    background-color: #f8f9fa;
+}
+
+.student-checkbox input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+.selected-students-container {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+    margin-top: 10px;
+    min-height: 50px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.selected-student-tag {
+    display: inline-block;
+    background-color: #f0f0f0;
+    border-radius: 15px;
+    padding: 5px 10px;
+    margin: 3px;
+}
+
+.remove-student {
+    color: #ff4444;
+    margin-left: 5px;
+    cursor: pointer;
+}
+</style>
+
+<script>
+$(document).ready(function() {
+    $('#createCohortBtn').click(function() {
+        loadInstitutes();
+        $('#createCohortModal').modal('show');
+    });
+
+    $('#instituteSelect').change(function() {
+        const instituteId = $(this).val();
+        if (instituteId) {
+            $('#selectedStudentsContainer').empty();
+            loadInstituteStudents(instituteId);
+        }
+    });
+
+    $('#createCohortForm').submit(function(e) {
+        e.preventDefault();
+        
+        const cohortName = $('#cohortName').val();
+        const selectedStudents = $('input[name="selected_students[]"]')
+            .map(function() { return $(this).val(); })
+            .get();
+
+        if (!cohortName || selectedStudents.length === 0) {
+            alert('Please enter cohort name and select at least one student');
+            return;
+        }
+
+        createCohort(cohortName, selectedStudents);
+    });
+
+    $('#addStudentInstituteSelect').change(function() {
+        const instituteId = $(this).val();
+        if (instituteId) {
+            loadInstituteStudentsForAdd(instituteId);
+        }
+    });
+
+    $('#addStudentForm').submit(function(e) {
+        e.preventDefault();
+        
+        const cohortId = $(this).data('cohortId');
+        const selectedStudents = [];
+        
+        $('input[name="add_students"]:checked').each(function() {
+            selectedStudents.push($(this).val());
+        });
+
+        if (selectedStudents.length === 0) {
+            alert('Please select at least one student');
+            return;
+        }
+
+        addStudentsToCohort(cohortId, selectedStudents);
+    });
+});
+
+function loadInstitutes() {
+    fetch('/fetch-institutes/')
+        .then(response => response.json())
+        .then(data => {
+            const select = $('#instituteSelect');
+            select.empty().append('<option value="">Select Institute</option>');
+            data.institutes.forEach(institute => {
+                select.append(`<option value="${institute.id}">${institute.instituteName}</option>`);
+            });
+        });
+}
+
+function loadInstituteStudents(instituteId) {
+    fetch(`/cohorts/fetch-institute-students/?institute_id=${instituteId}`)
+        .then(response => response.json())
+        .then(data => {
+            const container = $('#studentsContainer');
+            container.empty();
+            
+            // Add select all checkbox
+            container.append(`
+                <div style="margin-bottom: 10px;">
+                    <input type="checkbox" id="selectAllStudents">
+                    <label for="selectAllStudents">Select All Students</label>
+                </div>
+            `);
+            
+            // Get currently selected students
+            const selectedStudentIds = $('input[name="selected_students[]"]')
+                .map(function() { return $(this).val(); })
+                .get();
+            
+            data.students.forEach(student => {
+                const isSelected = selectedStudentIds.includes(student.id);
+                container.append(`
+                    <div class="student-checkbox">
+                        <input type="checkbox" name="students" value="${student.id}" 
+                            data-student-name="${student.username}" 
+                            data-institute-id="${instituteId}"
+                            id="student_${student.id}"
+                            ${isSelected ? 'checked' : ''}>
+                        <label for="student_${student.id}">${student.username}</label>
+                    </div>
+                `);
+                
+                // If student was already selected, add to selected container
+                if (isSelected) {
+                    addSelectedStudent(student.id, student.username, instituteId);
+                }
+            });
+
+            // Add select all functionality
+            $('#selectAllStudents').change(function() {
+                const isChecked = $(this).prop('checked');
+                $('input[name="students"]').each(function() {
+                    const checkbox = $(this);
+                    if (checkbox.prop('checked') !== isChecked) {
+                        checkbox.prop('checked', isChecked);
+                        if (isChecked) {
+                            addSelectedStudent(
+                                checkbox.val(),
+                                checkbox.data('student-name'),
+                                checkbox.data('institute-id')
+                            );
+                        } else {
+                            $(`#selected_student_${checkbox.val()}`).remove();
+                        }
+                    }
+                });
+            });
+
+            // Add change event listener for checkboxes
+            $('input[name="students"]').change(function() {
+                if (this.checked) {
+                    addSelectedStudent(
+                        $(this).val(),
+                        $(this).data('student-name'),
+                        $(this).data('institute-id')
+                    );
+                } else {
+                    $(`#selected_student_${$(this).val()}`).remove();
+                }
+            });
+        });
+}
+
+function addSelectedStudent(studentId, studentName, instituteId) {
+    const selectedContainer = $('#selectedStudentsContainer');
+    const studentTag = `
+        <div class="selected-student-tag" id="selected_student_${studentId}">
+            ${studentName}
+            <span class="remove-student" onclick="removeStudent('${studentId}', '${instituteId}')">&times;</span>
+            <input type="hidden" name="selected_students[]" value="${studentId}">
+        </div>
+    `;
+    selectedContainer.append(studentTag);
+}
+
+function removeStudent(studentId, instituteId) {
+    $(`#selected_student_${studentId}`).remove();
+    
+    // If the current institute is selected, refresh its student list
+    if ($('#instituteSelect').val() === instituteId) {
+        loadInstituteStudents(instituteId);
+    }
+}
+
+function createCohort(name, studentIds) {
+    const selectedStudents = $('input[name="selected_students[]"]')
+        .map(function() { return $(this).val(); })
+        .get();
+
+    fetch('/cohorts/create/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+            name: name,
+            studentIds: selectedStudents
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error);
+        }
+    });
+}
+
+function viewStudents(cohortId) {
+    window.location.href = `/cohorts/${cohortId}/view-students/`;
+}
+
+function addStudent(cohortId) {
+    // Load institutes and show modal
+    loadInstitutesForAdd();
+    // Store cohortId for form submission
+    $('#addStudentForm').data('cohortId', cohortId);
+    $('#addStudentModal').modal('show');
+}
+
+function loadInstitutesForAdd() {
+    fetch('/fetch-institutes/')
+        .then(response => response.json())
+        .then(data => {
+            const select = $('#addStudentInstituteSelect');
+            select.empty().append('<option value="">Select Institute</option>');
+            data.institutes.forEach(institute => {
+                select.append(`<option value="${institute.id}">${institute.instituteName}</option>`);
+            });
+        });
+}
+
+function loadInstituteStudentsForAdd(instituteId) {
+    const cohortId = $('#addStudentForm').data('cohortId');
+    
+    // First fetch existing cohort students
+    fetch(`/cohorts/${cohortId}/get-students/`)
+        .then(response => response.json())
+        .then(cohortData => {
+            const existingStudentIds = cohortData.students.map(student => student.id);
+            
+            // Then fetch institute students
+            return fetch(`/cohorts/fetch-institute-students/?institute_id=${instituteId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const container = $('#addStudentContainer');
+                    container.empty();
+                    
+                    // Add select all checkbox
+                    container.append(`
+                        <div style="margin-bottom: 10px;">
+                            <input type="checkbox" id="selectAllAddStudents">
+                            <label for="selectAllAddStudents">Select All Students</label>
+                        </div>
+                    `);
+                    
+                    data.students.forEach(student => {
+                        const isInCohort = existingStudentIds.includes(student.id);
+                        container.append(`
+                            <div class="student-checkbox">
+                                <input type="checkbox" 
+                                    name="add_students" 
+                                    value="${student.id}" 
+                                    id="add_student_${student.id}"
+                                    ${isInCohort ? 'checked disabled' : ''}>
+                                <label for="add_student_${student.id}">
+                                    ${student.username}
+                                    ${isInCohort ? ' (Already in batch)' : ''}
+                                </label>
+                            </div>
+                        `);
+                    });
+
+                    // Add select all functionality
+                    $('#selectAllAddStudents').change(function() {
+                        const isChecked = $(this).prop('checked');
+                        $('input[name="add_students"]:not(:disabled)').prop('checked', isChecked);
+                    });
+
+                    // Update select all checkbox state based on non-disabled checkboxes
+                    function updateSelectAllState() {
+                        const $checkboxes = $('input[name="add_students"]:not(:disabled)');
+                        const $checkedBoxes = $checkboxes.filter(':checked');
+                        $('#selectAllAddStudents').prop({
+                            checked: $checkboxes.length > 0 && $checkboxes.length === $checkedBoxes.length,
+                            indeterminate: $checkedBoxes.length > 0 && $checkboxes.length !== $checkedBoxes.length
+                        });
+                    }
+
+                    // Add change event listener for checkboxes
+                    $('input[name="add_students"]:not(:disabled)').change(updateSelectAllState);
+                    
+                    // Initial state of select all checkbox
+                    updateSelectAllState();
+                });
+        });
+}
+
+function addStudentsToCohort(cohortId, studentIds) {
+    fetch(`/cohorts/${cohortId}/add-student/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+            studentIds: studentIds
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            $('#addStudentModal').modal('hide');
+            location.reload();
+        } else {
+            alert(data.error || 'Error adding students to cohort');
+        }
+    })
+    .catch(error => {
+        alert('Error adding students to cohort');
+        console.error(error);
+    });
+}
+
+function applyFilter() {
+    const query = document.getElementById('searchInput').value;
+    window.location.href = `?query=${query}`;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "assessments/base.html" %}
+
+{% block title %}{{ cohort_name }} - Students{% endblock %}
+
+{% block content %}
+<div class="container mt-4" style="max-width: 100%;">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>{{ cohort_name }} - Students</h2>
+       
+    </div>
+
+    <!-- Students Table -->
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="background-color: #f9f9f9; border-bottom: 2px solid #ddd;">
+                <th style="padding: 10px;">Username</th>
+                <th style="padding: 10px;">Email/Phone</th>
+                <th style="padding: 10px;">Institute</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for student in page_obj %}
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 10px;">{{ student.username }}</td>
+                    <td style="padding: 10px;">{{ student.emailID }}</td>
+                    <td style="padding: 10px;">{{ student.institute }}</td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="3" style="text-align: center; padding: 20px; color: #999;">No students found in this cohort.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Pagination -->
+    <div style="text-align: right; margin-top: 20px;">
+        {% if page_obj.paginator.num_pages > 1 %}
+            <span>
+                {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}" style="color: #f7a82d; text-decoration: none; margin-right: 10px;">Previous</a>
+                {% endif %}
+
+                {% for page in page_obj.paginator.page_range %}
+                    {% if page <= 5 %}
+                        <a href="?page={{ page }}" style="color: #f7a82d; text-decoration: none; margin: 0 5px;">{{ page }}</a>
+                    {% endif %}
+                {% endfor %}
+
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}" style="color: #f7a82d; text-decoration: none; margin-left: 10px;">Next</a>
+                {% endif %}
+            </span>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.btn-cohort-action {
+    background-color: #f7a82d;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.btn-cohort-action:hover {
+    background-color: #d68a25;
+}
+</style>
+{% endblock %} 
