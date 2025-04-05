@@ -1259,26 +1259,40 @@ def add_student_to_cohort(request, cohort_id):
             if not cohort_doc.exists:
                 return JsonResponse({'error': 'Cohort not found'}, status=404)
             
-            # Create student references
-            student_refs = [db.collection('Users').document(sid) for sid in student_ids]
+            # Get existing students in cohort
+            cohort_data = cohort_doc.to_dict()
+            existing_student_refs = cohort_data.get('users', [])
+            existing_student_ids = [ref.id for ref in existing_student_refs]
+            
+            # Filter out students that are already in the cohort
+            new_student_ids = [sid for sid in student_ids if sid not in existing_student_ids]
+            
+            if not new_student_ids:
+                return JsonResponse({
+                    'success': True,
+                    'message': 'All students are already in this cohort'
+                })
+            
+            # Create student references for only new students
+            new_student_refs = [db.collection('Users').document(sid) for sid in new_student_ids]
             
             # Update cohort with new students
             cohort_ref.update({
-                'users': firestore.ArrayUnion(student_refs)
+                'users': firestore.ArrayUnion(new_student_refs)
             })
             
             # Update each student's cohort reference
-            for student_id in student_ids:
+            for student_id in new_student_ids:
                 db.collection('Users').document(student_id).update({
                     'cohort': cohort_ref
                 })
             
             # Add students to existing exams
-            add_students_to_existing_exams(cohort_ref, student_refs)
+            add_students_to_existing_exams(cohort_ref, new_student_refs)
             
             return JsonResponse({
                 'success': True,
-                'message': 'Students added to cohort successfully'
+                'message': f'Added {len(new_student_ids)} new students to cohort successfully'
             })
             
         except Exception as e:
