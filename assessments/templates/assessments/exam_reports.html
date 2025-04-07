@@ -10,11 +10,19 @@
     <button onclick="fetch_particular_student()" style="background-color: #f7a82d; color: white; border: none; padding: 8px 16px; border-radius: 5px;">Search</button>
 </div>
 
+<!-- Add this after the search bar div and before the table -->
+<div style="display: flex; gap: 10px; margin-bottom: 20px;">
+    <select id="instituteFilter" style="padding: 8px; width: 300px; border: 1px solid #ddd; border-radius: 5px;" onchange="handleInstituteChange()">
+        <option value="">All Institutes</option>
+    </select>
+</div>
+
 <!-- Reports Table -->
 <table style="width: 100%; border-collapse: collapse;">
     <thead>
         <tr style="background-color: #f9f9f9; border-bottom: 2px solid #ddd;">
             <th style="padding: 10px;">Student Name</th>
+            <th style="padding: 10px;">Institute</th>
             <th style="padding: 10px;">Total Score</th>
             <th style="padding: 10px;">Grade</th>
             <th style="padding: 10px;">Percentage</th>
@@ -37,6 +45,27 @@
     const limit = 10;
     let hasMoreData = true;
     let loadedExamIds = new Set();
+    let selectedInstitute = '';
+
+    function fetchInstitutes() {
+        fetch('/fetch-institutes/')
+            .then(response => response.json())
+            .then(data => {
+                const select = document.getElementById('instituteFilter');
+                data.institutes.forEach(institute => {
+                    const option = document.createElement('option');
+                    option.value = institute.id;
+                    option.textContent = institute.instituteName;
+                    select.appendChild(option);
+                });
+            })
+            .catch(error => console.error('Error fetching institutes:', error));
+    }
+
+    function handleInstituteChange() {
+        selectedInstitute = document.getElementById('instituteFilter').value;
+        fetchExamReports(true);
+    }
 
     function fetchExamReports(reset = false) {
         if (reset) {
@@ -48,7 +77,14 @@
         
         if (!hasMoreData) return;
 
-        fetch(`/fetch-exam-reports/?offset=${offset}&limit=${limit}`)
+        const url = new URL('/fetch-exam-reports/', window.location.origin);
+        url.searchParams.append('offset', offset);
+        url.searchParams.append('limit', limit);
+        if (selectedInstitute) {
+            url.searchParams.append('institute_id', selectedInstitute);
+        }
+
+        fetch(url)
             .then(response => response.json())
             .then(data => {
                 if (!data.exam_reports.length) {
@@ -81,6 +117,7 @@
                     }
                     let row = `<tr>
                         <td>${report.student_name}</td>
+                        <td>${report.institute_name}</td>
                         <td style="text-align: center;">${report.total_score}</td>
                         <td style="text-align: center;color:${color}">${grade}</td>
                         <td style="text-align: center;color:${color}">${report.percentage}%</td>
@@ -93,7 +130,7 @@
                         </td>
                     </tr>
                     <tr id="details-${report.exam_id}" style="display: none;">
-                        <td colspan="6">
+                        <td colspan="12">
                             <table style="width: 100%;">
                                 <thead>
                                     <tr><th>Feedback</th></tr>
@@ -115,7 +152,13 @@
     }
 
     function autoFetchNewReports() {
-        fetch(`/fetch-exam-reports/?auto_fetch=true`)
+        const url = new URL('/fetch-exam-reports/', window.location.origin);
+        url.searchParams.append('auto_fetch', 'true');
+        if (selectedInstitute) {
+            url.searchParams.append('institute_id', selectedInstitute);
+        }
+
+        fetch(url)
             .then(response => response.json())
             .then(data => {
                 let tableBody = document.getElementById("examReportsBody");
@@ -142,6 +185,7 @@
                     }
                     let row = `<tr>
                         <td>${report.student_name}</td>
+                        <td>${report.institute_name}</td>
                         <td style="text-align: center;">${report.total_score}</td>
                         <td style="text-align: center;color:${color}">${grade}</td>
                         <td style="text-align: center;color:${color}">${report.percentage}%</td>
@@ -187,6 +231,7 @@
     }
 
     document.addEventListener("DOMContentLoaded", () => {
+        fetchInstitutes();
         fetchExamReports();
         setInterval(autoFetchNewReports, 10000);
     });
