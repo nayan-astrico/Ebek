@@ -469,12 +469,19 @@ def create_procedure_assignment_and_test(request):
                             notes = procedure_data.get('notes', '')
                             procedure_name = procedure_data.get('procedureName', '')
 
+                            user_data = user_ref.get().to_dict()
+                            institute_ref = user_data.get('institute')
+
+                            print(institute_ref)
+                            print("HEREEEE")
+
                             exam_assignment_data = {
                                 'user': user_ref,
                                 'examMetaData': exam_meta_data,
                                 'status': 'Pending',
                                 'notes': notes,
-                                'procedure_name': procedure_name
+                                'procedure_name': procedure_name,
+                                'institute': institute_ref
                             }
                             exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
                             exam_assignment_refs.append(exam_assignment_ref)
@@ -544,23 +551,33 @@ def fetch_exam_reports(request):
         # Handle pagination
         offset = int(request.GET.get("offset", 0))
         limit = int(request.GET.get("limit", 10))
+        institute_id = request.GET.get("institute_id")
 
         # Handle auto-fetch for new data
         auto_fetch = request.GET.get("auto_fetch", "false").lower() == "true"
 
+        # Create base query
+        base_query = db.collection('ExamAssignment')
+
+        # Add institute filter if specified
+        if institute_id:
+            institute_ref = db.collection('InstituteNames').document(institute_id)
+            base_query = base_query.where("institute", "==", institute_ref)
+
         if auto_fetch:
             one_minute_ago = datetime.datetime.utcnow() - datetime.timedelta(minutes=1)
-            exam_assignments_ref = db.collection('ExamAssignment').where("completed_data", ">=", one_minute_ago)
+            exam_assignments_ref = base_query.where("completed_data", ">=", one_minute_ago)
             exam_assignments_ref = exam_assignments_ref.order_by("completed_data", direction=firestore.Query.DESCENDING)
             exam_assignments = exam_assignments_ref.stream()
         else:
-            exam_assignments_ref = db.collection('ExamAssignment').where("status", "==", "Completed")
+            exam_assignments_ref = base_query.where("status", "==", "Completed")
             exam_assignments_ref = exam_assignments_ref.order_by("completed_data", direction=firestore.Query.DESCENDING)
             exam_assignments = exam_assignments_ref.offset(offset).limit(limit).stream()
 
         for exam in exam_assignments:
             exam_doc = exam.to_dict()
             student_ref = exam_doc.get('user')
+            institute_ref = exam_doc.get('institute')
 
             if not student_ref:
                 continue
@@ -568,6 +585,13 @@ def fetch_exam_reports(request):
             student_id = student_ref.id
             student_data = student_ref.get().to_dict()
             student_name = student_data.get('username', 'Unknown')
+
+            # Get institute name
+            institute_name = "Unknown"
+            if institute_ref:
+                institute_doc = institute_ref.get()
+                if institute_doc.exists:
+                    institute_name = institute_doc.to_dict().get('instituteName', 'Unknown')
 
             total_score = exam_doc.get("marks", 0)
             max_marks = sum(
@@ -590,6 +614,7 @@ def fetch_exam_reports(request):
                 "exam_id": exam.id,
                 "student_id": student_id,
                 "student_name": student_name,
+                "institute_name": institute_name,
                 "total_score": total_score,
                 "percentage": percentage,
                 "critical_missed": critical_missed,
