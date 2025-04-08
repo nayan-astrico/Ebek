@@ -708,8 +708,6 @@ def institute_list(request):
         # Fetch all institutes from Firebase
         institutes_ref = db.collection('InstituteNames')
         institutes = []
-        print(institutes_ref)
-        print(institutes)
         
         # Get query parameter for search
         search_query = request.GET.get('query', '').lower()
@@ -1013,55 +1011,101 @@ def create_user(request):
 
 def users_management(request):
     try:
-        users_ref = db.collection('Users')
-        users = []
-
+        # Get query parameters
         query = request.GET.get("query", "")
-
-        # Fetch all users
-        for doc in users_ref.stream():
-            user_data = doc.to_dict()
-            institute_ref = user_data.get('institute')
+        offset = int(request.GET.get("offset", 0))
+        limit = int(request.GET.get("limit", 10))  # Use the limit from request
+        is_load_more = request.GET.get("load_more") == "true"
+        
+        # Create base query
+        users_ref = db.collection('Users')
+        
+        # Apply sorting (newest first)
+        users_ref = users_ref.order_by('createdAt', direction=firestore.Query.DESCENDING)
+        
+        # For query we still need to fetch all and filter manually
+        # since Firestore doesn't support complex text search
+        if query:
+            all_users = users_ref.stream()
+            filtered_users = []
             
-            institute_name = "Unknown"
-            if institute_ref:
-                institute_doc = institute_ref.get()
-                if institute_doc.exists:
-                    institute_name = institute_doc.to_dict().get('instituteName', 'Unknown')
-
-            user = {
-                'id': doc.id,
-                'username': user_data.get('username', 'N/A'),
-                'emailID': user_data.get('emailID', 'N/A'),
-                'institute': institute_name,
-                'role': user_data.get('role', 'student'),
-                'createdAt': user_data.get('createdAt')  # Get creation date
-            }
+            # Manually filter by username or institute
+            for doc in all_users:
+                user_data = doc.to_dict()
+                institute_ref = user_data.get('institute')
+                institute_name = "Unknown"
+                
+                if institute_ref:
+                    institute_doc = institute_ref.get()
+                    if institute_doc.exists:
+                        institute_name = institute_doc.to_dict().get('instituteName', 'Unknown')
+                
+                # Apply text search
+                if (query.lower() in user_data.get('username', '').lower() or 
+                    query.lower() in institute_name.lower()):
+                    filtered_users.append({
+                        'id': doc.id,
+                        'username': user_data.get('username', 'N/A'),
+                        'emailID': user_data.get('emailID', 'N/A'),
+                        'institute': institute_name,
+                        'role': user_data.get('role', 'student'),
+                        'createdAt': user_data.get('createdAt')
+                    })
             
-            if query:
-                if query.lower() in user['username'].lower() or query.lower() in institute_name.lower():
-                    users.append(user)
-            else:
-                users.append(user)
+            # Apply offset and limit manually to filtered results
+            total_count = len(filtered_users)
+            users = filtered_users[offset:offset+limit]
+            has_more = total_count > (offset + limit)
+            
+        else:
+            # If no query, use Firestore's native offset and limit
+            users_snapshot = users_ref.offset(offset).limit(limit).stream()
+            
+            # Count total for has_more calculation (can be optimized with a separate count query)
+            total_query = users_ref.stream()
+            total_count = sum(1 for _ in total_query)  # Count total documents
+            
+            # Process results
+            users = []
+            for doc in users_snapshot:
+                user_data = doc.to_dict()
+                institute_ref = user_data.get('institute')
+                institute_name = "Unknown"
+                
+                if institute_ref:
+                    institute_doc = institute_ref.get()
+                    if institute_doc.exists:
+                        institute_name = institute_doc.to_dict().get('instituteName', 'Unknown')
+                
+                users.append({
+                    'id': doc.id,
+                    'username': user_data.get('username', 'N/A'),
+                    'emailID': user_data.get('emailID', 'N/A'),
+                    'institute': institute_name,
+                    'role': user_data.get('role', 'student'),
+                    'createdAt': user_data.get('createdAt')
+                })
+            
+            has_more = total_count > (offset + limit)
 
-        # Sort users by creation date (newest first)
-        users.sort(key=lambda x: x.get('createdAt', datetime.datetime.min), reverse=True)
-
-        # Pagination
-        paginator = Paginator(users, 10)  # Show 10 users per page
-        page_number = request.GET.get("page")
-        page_obj = paginator.get_page(page_number)
+        if is_load_more:
+            return JsonResponse({
+                "users": users,
+                "has_more": has_more
+            })
 
         return render(request, 'assessments/users_management.html', {
-            "page_obj": page_obj,
+            "initial_users": users,
             "query": query,
         })
 
     except Exception as e:
         logger.error(f"Error fetching users: {str(e)}")
+        if is_load_more:
+            return JsonResponse({"error": str(e)}, status=500)
         return render(request, 'assessments/users_management.html', {
             "error": "Failed to fetch users",
-            "page_obj": [],
+            "initial_users": [],
             "query": query,
         })
 
