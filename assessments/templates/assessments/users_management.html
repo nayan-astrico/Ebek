@@ -36,8 +36,8 @@
                     <th style="padding: 10px;">Actions</th>
                 </tr>
             </thead>
-            <tbody>
-                {% for user in page_obj %}
+            <tbody id="usersTableBody">
+                {% for user in initial_users %}
                     <tr style="border-bottom: 1px solid #eee;">
                         <td style="padding: 10px;">{{ user.username }}</td>
                         <td style="padding: 10px;">{{ user.emailID }}</td>
@@ -51,31 +51,18 @@
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="4" style="text-align: center; padding: 20px; color: #999;">No users found.</td>
+                        <td colspan="5" style="text-align: center; padding: 20px; color: #999;">No users found.</td>
                     </tr>
                 {% endfor %}
             </tbody>
         </table>
 
-        <!-- Pagination -->
-        <div style="text-align: right; margin-top: 20px;">
-            {% if page_obj.paginator.num_pages > 1 %}
-                <span>
-                    {% if page_obj.has_previous %}
-                        <a href="?page={{ page_obj.previous_page_number }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin-right: 10px;">Previous</a>
-                    {% endif %}
-
-                    {% for page in page_obj.paginator.page_range %}
-                        {% if page <= 5 %}
-                            <a href="?page={{ page }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin: 0 5px;">{{ page }}</a>
-                        {% endif %}
-                    {% endfor %}
-
-                    {% if page_obj.has_next %}
-                        <a href="?page={{ page_obj.next_page_number }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin-left: 10px;">Next</a>
-                    {% endif %}
-                </span>
-            {% endif %}
+        <!-- Load More Container -->
+        <div id="loadMoreContainer" style="text-align: center; margin-top: 20px;">
+            <button id="loadMoreBtn" onclick="loadMoreUsers()" class="btn-user-action">
+                Load More
+                <span class="spinner-border spinner-border-sm" style="display: none;" role="status" aria-hidden="true"></span>
+            </button>
         </div>
     </div>
 </div>
@@ -246,6 +233,11 @@
 </style>
 
 <script>
+// Add these variables at the top of your script
+let currentOffset = {{ initial_users|length }};
+let hasMore = true;
+const limit = 10;
+
 // Initialize modals and handle button clicks
 $(document).ready(function() {
     // Create User button click
@@ -354,7 +346,92 @@ $(document).ready(function() {
 
 function applyFilter() {
     const query = document.getElementById('searchInput').value.trim();
-    window.location.href = `?query=${query}`;
+    currentOffset = 0;
+    hasMore = true;
+    
+    fetch(`/users/?query=${query}&offset=${currentOffset}&limit=${limit}&load_more=true`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+
+            const tbody = document.getElementById('usersTableBody');
+            tbody.innerHTML = '';
+            renderUsers(data.users);
+            currentOffset = data.users.length;
+            hasMore = data.has_more;
+            
+            document.getElementById('loadMoreContainer').style.display = hasMore ? 'block' : 'none';
+        })
+        .catch(error => {
+            console.error('Error applying filter:', error);
+            alert('Error applying filter');
+        });
+}
+
+function renderUsers(users) {
+    const tbody = document.getElementById('usersTableBody');
+    if (users && users.length > 0) {
+        users.forEach(user => {
+            tbody.innerHTML += `
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 10px;">${user.username}</td>
+                    <td style="padding: 10px;">${user.emailID}</td>
+                    <td style="padding: 10px;">${user.institute}</td>
+                    <td style="padding: 10px;">${user.role}</td>
+                    <td style="padding: 10px;">
+                        <button onclick="editUser('${user.id}', '${user.username}', '${user.emailID}', '${user.institute}', '${user.role}')" style="border: none; background: none; cursor: pointer;">
+                            <i class="fas fa-pencil-alt" style="color: #666;"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    } else {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align: center; padding: 20px; color: #999;">No users found.</td>
+            </tr>
+        `;
+    }
+}
+
+function loadMoreUsers() {
+    if (!hasMore) return;
+
+    const button = document.getElementById('loadMoreBtn');
+    const spinner = button.querySelector('.spinner-border');
+    button.disabled = true;
+    spinner.style.display = 'inline-block';
+
+    const query = document.getElementById('searchInput').value.trim();
+    
+    fetch(`/users/?query=${query}&offset=${currentOffset}&limit=${limit}&load_more=true`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+
+            renderUsers(data.users);
+            hasMore = data.has_more;
+            currentOffset += data.users.length;
+
+            if (!hasMore) {
+                document.getElementById('loadMoreContainer').style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading more users:', error);
+            alert('Error loading more users');
+        })
+        .finally(() => {
+            button.disabled = false;
+            spinner.style.display = 'none';
+        });
 }
 
 // Load institutes function
