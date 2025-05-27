@@ -1,0 +1,149 @@
+{% extends 'assessments/base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Groups</h2>
+        <a href="{% url 'group_create' %}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Add New Group
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Group Name</th>
+                            <th>Type</th>
+                            <th>No. of Units</th>
+                            <th>Group Head</th>
+                            <th>Email</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for group in groups %}
+                        <tr>
+                            <td>{{ group.name }}</td>
+                            <td>{{ group.get_type_display }}</td>
+                            <td>
+                                {% if group.type == 'institution' %}
+                                    {{ group.institution_set.count }}
+                                {% else %}
+                                    {{ group.hospital_set.count }}
+                                {% endif %}
+                            </td>
+                            <td>{{ group.group_head.get_full_name|default:"Not Assigned" }}</td>
+                            <td>{{ group.group_head.email|default:"-" }}</td>
+                            <td>
+                                <span class="badge {% if group.is_active %}badge-success{% else %}badge-danger{% endif %}">
+                                    {{ group.is_active|yesno:"Active,Inactive" }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    <a href="{% url 'group_edit' group.pk %}" class="btn btn-sm btn-info">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-danger" 
+                                            onclick="confirmDelete('{{ group.name }}', '{% url 'group_delete' group.pk %}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center">No groups found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if groups.has_other_pages %}
+            <nav aria-label="Page navigation" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if groups.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ groups.previous_page_number }}">Previous</a>
+                    </li>
+                    {% endif %}
+
+                    {% for num in groups.paginator.page_range %}
+                    <li class="page-item {% if groups.number == num %}active{% endif %}">
+                        <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                    </li>
+                    {% endfor %}
+
+                    {% if groups.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ groups.next_page_number }}">Next</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" role="dialog" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">Confirm Delete</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete <span id="deleteItemName"></span>?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function confirmDelete(name, url) {
+    document.getElementById('deleteItemName').textContent = name;
+    document.getElementById('deleteForm').action = url;
+    $('#deleteModal').modal('show');
+}
+</script>
+
+<style>
+.badge {
+    padding: 0.5em 0.75em;
+    font-size: 0.85em;
+}
+
+.btn-group .btn {
+    margin: 0 2px;
+}
+
+.table th {
+    background-color: #f8f9fa;
+    border-top: none;
+}
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.pagination {
+    margin-bottom: 0;
+}
+</style>
+{% endblock %} 

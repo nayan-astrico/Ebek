@@ -15,8 +15,15 @@ from rest_framework import status
 import datetime
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-
+from django.contrib.auth import authenticate, login, logout
+from django.contrib import messages
+from django.shortcuts import redirect
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.hashers import make_password
+from .models import *
+from .utils_ses import *
+from django.urls import reverse
+from assessments.onboarding_views import *
 
 
 logger = logging.getLogger(__name__)
@@ -1450,3 +1457,123 @@ def get_cohort_students(request, cohort_id):
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+def login_page(request):
+    if request.user.is_authenticated:
+        return redirect('create_assessment')
+    return render(request, 'assessments/login.html')
+
+def login_view(request):
+    logout(request)
+    email = request.POST.get('email')
+    password = request.POST.get('password')
+    user = authenticate(request, email=email, password=password)
+    if user is not None:
+        login(request, user)
+            # Update last login in Firebase
+        return redirect('create_assessment')
+    else:
+        messages.error(request, 'User not found')
+        return redirect('login_page')
+    
+    return redirect('login_page')
+
+def logout_view(request):
+    logout(request)
+    messages.success(request, 'You have been logged out successfully')
+    return redirect('login_page')
+
+def forgot_password(request):
+    if request.method == 'POST':
+        email = request.POST.get('email')
+        if not email or '@' not in email:
+            messages.error(request, 'Please enter a valid email address.')
+            return render(request, 'assessments/forgot_password.html')
+
+        try:
+            user = EbekUser.objects.get(email=email)
+        except EbekUser.DoesNotExist:
+            messages.error(request, 'No user found with this email.')
+            return render(request, 'assessments/forgot_password.html')
+
+        # Create a new token
+        token = PasswordResetToken.objects.create(user=user)
+        reset_link = request.build_absolute_uri(
+            reverse('reset_password', args=[str(token.token)])
+        )
+
+        # Send email
+        send_email(
+            'Password Reset Request',
+            f'Click the link to reset your password: {reset_link}\nThis link is valid for 5 minutes.',
+            [email],
+        )
+        messages.success(request, 'A password reset link has been sent to your email.')
+        return render(request, 'assessments/forgot_password.html')
+
+    return render(request, 'assessments/forgot_password.html')
+
+def reset_password(request, token):
+    try:
+        reset_token = PasswordResetToken.objects.get(token=token)
+    except PasswordResetToken.DoesNotExist:
+        messages.error(request, 'Invalid or expired reset link.')
+        return render(request, 'assessments/reset_password.html', {'invalid': True})
+
+    if not reset_token.is_valid():
+        messages.error(request, 'This reset link has expired.')
+        return render(request, 'assessments/reset_password.html', {'invalid': True})
+
+    if request.method == 'POST':
+        password1 = request.POST.get('password1')
+        password2 = request.POST.get('password2')
+        
+        # Password validation
+        if not password1 or not password2:
+            messages.error(request, 'Both password fields are required.')
+            return render(request, 'assessments/reset_password.html', {'token': token})
+            
+        if password1 != password2:
+            messages.error(request, 'Passwords do not match.')
+            return render(request, 'assessments/reset_password.html', {'token': token})
+            
+        # Check password length
+        if len(password1) < 8:
+            messages.error(request, 'Password must be at least 8 characters long.')
+            return render(request, 'assessments/reset_password.html', {'token': token})
+            
+        # Check for uppercase letter
+        if not any(char.isupper() for char in password1):
+            messages.error(request, 'Password must contain at least one uppercase letter.')
+            return render(request, 'assessments/reset_password.html', {'token': token})
+            
+        # Check for lowercase letter
+        if not any(char.islower() for char in password1):
+            messages.error(request, 'Password must contain at least one lowercase letter.')
+            return render(request, 'assessments/reset_password.html', {'token': token})
+            
+        # Check for number
+        if not any(char.isdigit() for char in password1):
+            messages.error(request, 'Password must contain at least one number.')
+            return render(request, 'assessments/reset_password.html', {'token': token})
+            
+        # Check for special character
+        special_chars = "!@#$%^&*()_+-=[]{}|;:,.<>?"
+        if not any(char in special_chars for char in password1):
+            messages.error(request, 'Password must contain at least one special character (!@#$%^&*()_+-=[]{}|;:,.<>?).')
+            return render(request, 'assessments/reset_password.html', {'token': token})
+
+        # If all validations pass, set new password
+        user = reset_token.user
+        user.password = make_password(password1)
+        user.save()
+        reset_token.is_used = True
+        reset_token.save()
+        messages.success(request, 'Your password has been reset. You can now log in.')
+        return redirect('login_page')
+
+    return render(request, 'assessments/reset_password.html', {'token': token})
+
+@login_required
+def onboarding_dashboard(request):
+    return render(request, 'assessments/onboarding/onboarding_dashboard.html')
