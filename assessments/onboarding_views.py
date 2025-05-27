@@ -656,7 +656,7 @@ def assessor_edit(request, pk):
             assessor_name = form.cleaned_data['assessor_name']
             assessor_email = form.cleaned_data['assessor_email']
             assessor_phone = form.cleaned_data['assessor_phone']
-            current_user = assessor.user
+            current_user = assessor.assessor_user
             
             if not current_user or current_user.email != assessor_email:
                 user, created = User.objects.get_or_create(
@@ -685,7 +685,7 @@ def assessor_edit(request, pk):
                         updated = True
                     if updated:
                         user.save()
-                assessor.user = user
+                assessor.assessor_user = user
             else:
                 updated = False
                 if current_user.full_name != assessor_name:

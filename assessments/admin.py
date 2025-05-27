@@ -61,5 +61,18 @@ class HospitalAdmin(admin.ModelAdmin):
 
 admin.site.register(Hospital, HospitalAdmin)
 
-admin.site.register(Assessor)
-admin.site.register(Learner)
+class LearnerAdmin(admin.ModelAdmin):
+    list_display = ('learner_user', 'learner_id', 'is_active', 'created_at')
+    list_filter = ('is_active',)
+    search_fields = ('learner_user', 'learner_id')
+    readonly_fields = ('learner_id', 'created_at', 'updated_at')
+
+admin.site.register(Learner, LearnerAdmin)
+
+class AssessorAdmin(admin.ModelAdmin):
+    list_display = ('assessor_user', 'assessor_id', 'is_active', 'created_at')
+    list_filter = ('is_active',)
+    search_fields = ('assessor_user', 'assessor_id')
+    readonly_fields = ('assessor_id', 'created_at', 'updated_at')
+
+admin.site.register(Assessor, AssessorAdmin)

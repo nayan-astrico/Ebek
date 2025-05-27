@@ -70,8 +70,7 @@
                             <th>Email</th>
                             <th>Mobile Number</th>
                             <th>Speciality</th>
-                            <th>State</th>
-                            <th>District</th>
+                            <th>Location</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
@@ -79,12 +78,11 @@
                     <tbody>
                         {% for assessor in assessors %}
                         <tr>
-                            <td>{{ assessor.full_name }}</td>
-                            <td>{{ assessor.email }}</td>
-                            <td>{{ assessor.mobile_number }}</td>
-                            <td>{{ assessor.speciality.name }}</td>
-                            <td>{{ assessor.state.name }}</td>
-                            <td>{{ assessor.district.name }}</td>
+                            <td>{{ assessor.assessor_user.full_name }}</td>
+                            <td>{{ assessor.assessor_user.email }}</td>
+                            <td>{{ assessor.assessor_user.phone_number }}</td>
+                            <td>{{ assessor.specialization }}</td>
+                            <td>{{ assessor.location }}</td>
                             <td>
                                 {% if assessor.is_active %}
                                 <span class="badge badge-success">Active</span>
