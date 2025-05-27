@@ -11,3 +11,9 @@ expo-env.d.ts
 /media/*
 *.pyc
 /__pycache__/*
+/migrations/*
+/assessments/migrations/*
+__pycache__/*
+*.pyc
+/assessments/migrations
+.env

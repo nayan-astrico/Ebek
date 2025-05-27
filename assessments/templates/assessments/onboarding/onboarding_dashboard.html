@@ -1,0 +1,130 @@
+{% extends 'assessments/base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4">Onboarding and Management</h2>
+    
+    <div class="row">
+        <!-- Institutions Card -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-university text-primary mr-2"></i>
+                        Institutions
+                    </h5>
+                    <p class="card-text">Manage educational institutions, their details, and unit heads.</p>
+                    <a href="{% url 'institution_list' %}" class="btn btn-primary">Manage Institutions</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hospitals Card -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-hospital text-primary mr-2"></i>
+                        Hospitals
+                    </h5>
+                    <p class="card-text">Manage hospitals, their details, and unit heads.</p>
+                    <a href="{% url 'hospital_list' %}" class="btn btn-primary">Manage Hospitals</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Groups Card -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-layer-group text-primary mr-2"></i>
+                        Groups
+                    </h5>
+                    <p class="card-text">Manage groups for institutions and hospitals.</p>
+                    <a href="{% url 'group_list' %}" class="btn btn-primary">Manage Groups</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Learners Card -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-user-graduate text-primary mr-2"></i>
+                        Learners
+                    </h5>
+                    <p class="card-text">Manage students and nurses, including bulk uploads.</p>
+                    <div class="btn-group">
+                        <a href="{% url 'learner_list' %}" class="btn btn-primary">Manage Learners</a>
+                        <a href="{% url 'learner_bulk_upload' %}" class="btn btn-outline-primary">Bulk Upload</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assessors Card -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-user-tie text-primary mr-2"></i>
+                        Assessors
+                    </h5>
+                    <p class="card-text">Manage assessors and their specialities.</p>
+                    <a href="{% url 'assessor_list' %}" class="btn btn-primary">Manage Assessors</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.card {
+    transition: transform 0.2s;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.card-title {
+    color: #333;
+    font-weight: 600;
+}
+
+.card-text {
+    color: #666;
+    margin-bottom: 1.5rem;
+}
+
+.btn-group {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-outline-primary {
+    border-color: #f7a82d;
+    color: #f7a82d;
+}
+
+.btn-outline-primary:hover {
+    background-color: #f7a82d;
+    border-color: #f7a82d;
+    color: white;
+}
+
+.btn-primary {
+    background-color: #f7a82d;
+    border-color: #f7a82d;
+}
+
+.btn-primary:hover {
+    background-color: #e69a28;
+    border-color: #e69a28;
+}
+</style>
+{% endblock %} 

@@ -1,0 +1,323 @@
+{% extends 'assessments/base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title mb-0">
+                        {% if form.instance.id %}
+                        Edit Assessor
+                        {% else %}
+                        Add Assessor
+                        {% endif %}
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {% for error in form.non_field_errors %}
+                            {{ error }}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.full_name.id_for_label }}">Full Name</label>
+                                    {{ form.full_name }}
+                                    {% if form.full_name.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {% for error in form.full_name.errors %}
+                                        {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.email.id_for_label }}">Email</label>
+                                    {{ form.email }}
+                                    {% if form.email.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {% for error in form.email.errors %}
+                                        {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.mobile_number.id_for_label }}">Mobile Number</label>
+                                    {{ form.mobile_number }}
+                                    {% if form.mobile_number.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {% for error in form.mobile_number.errors %}
+                                        {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.assessor_type.id_for_label }}">Type</label>
+                                    {{ form.assessor_type }}
+                                    {% if form.assessor_type.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {% for error in form.assessor_type.errors %}
+                                        {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="external-unit-fields" style="display: none;">
+                            <div class="form-group">
+                                <label>Unit Type</label><br>
+                                {{ form.unit_type }}
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6" id="institution-field" style="display: none;">
+                                    <div class="form-group">
+                                        <label for="{{ form.institution.id_for_label }}">Institution</label>
+                                        {{ form.institution }}
+                                        {% if form.institution.errors %}
+                                        <div class="invalid-feedback d-block">
+                                            {% for error in form.institution.errors %}
+                                            {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-md-6" id="hospital-field" style="display: none;">
+                                    <div class="form-group">
+                                        <label for="{{ form.hospital.id_for_label }}">Hospital</label>
+                                        {{ form.hospital }}
+                                        {% if form.hospital.errors %}
+                                        <div class="invalid-feedback d-block">
+                                            {% for error in form.hospital.errors %}
+                                            {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="internal-fields" style="display: none;">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="{{ form.staff_id.id_for_label }}">Staff ID</label>
+                                        {{ form.staff_id }}
+                                        {% if form.staff_id.errors %}
+                                        <div class="invalid-feedback d-block">
+                                            {% for error in form.staff_id.errors %}
+                                            {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="{{ form.branch.id_for_label }}">Branch</label>
+                                        {{ form.branch }}
+                                        {% if form.branch.errors %}
+                                        <div class="invalid-feedback d-block">
+                                            {% for error in form.branch.errors %}
+                                            {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="external-fields" style="display: none;">
+                            <div class="row">
+                                
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="{{ form.location.id_for_label }}">Location</label>
+                                        {{ form.location }}
+                                        {% if form.location.errors %}
+                                        <div class="invalid-feedback d-block">
+                                            {% for error in form.location.errors %}
+                                            {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.qualification.id_for_label }}">Qualification</label>
+                                    {{ form.qualification }}
+                                    {% if form.qualification.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {% for error in form.qualification.errors %}
+                                        {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.designation.id_for_label }}">Designation</label>
+                                    {{ form.designation }}
+                                    {% if form.designation.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {% for error in form.designation.errors %}
+                                        {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.specialization.id_for_label }}">Assessment Specialization</label>
+                                    {{ form.specialization }}
+                                    {% if form.specialization.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {% for error in form.specialization.errors %}
+                                        {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <div class="custom-control custom-switch">
+                                        <input type="checkbox" class="custom-control-input" id="is_verifier" name="is_verifier"
+                                               {% if form.instance.is_verifier %}checked{% endif %}>
+                                        <label class="custom-control-label" for="is_verifier">Is Verifier</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="custom-control custom-switch">
+                                <input type="checkbox" class="custom-control-input" id="is_active" name="is_active"
+                                       {% if form.instance.is_active %}checked{% endif %}>
+                                <label class="custom-control-label" for="is_active">Active</label>
+                            </div>
+                        </div>
+
+                        <div class="form-group text-right">
+                            <a href="{% url 'assessor_list' %}" class="btn btn-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-primary">Save</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.invalid-feedback {
+    display: block;
+}
+
+.btn {
+    padding: 0.5rem 1.5rem;
+}
+
+.custom-control {
+    padding-left: 1.75rem;
+}
+
+.custom-control-label {
+    padding-top: 0.25rem;
+}
+</style>
+
+<script>
+function toggleAssessorFields(value) {
+    if (value === 'internal') {
+        document.getElementById('internal-fields').style.display = 'block';
+        document.getElementById('external-fields').style.display = 'none';
+        document.getElementById('external-unit-fields').style.display = 'none';
+    } else if (value === 'external') {
+        document.getElementById('internal-fields').style.display = 'none';
+        document.getElementById('external-fields').style.display = 'block';
+        document.getElementById('external-unit-fields').style.display = 'block';
+    } else {
+        document.getElementById('internal-fields').style.display = 'none';
+        document.getElementById('external-fields').style.display = 'none';
+        document.getElementById('external-unit-fields').style.display = 'none';
+    }
+}
+function toggleUnitTypeFields() {
+    var unitType = document.querySelector('input[name="unit_type"]:checked');
+    if (unitType) {
+        if (unitType.value === 'institution') {
+            document.getElementById('institution-field').style.display = 'block';
+            document.getElementById('hospital-field').style.display = 'none';
+        } else if (unitType.value === 'hospital') {
+            document.getElementById('institution-field').style.display = 'none';
+            document.getElementById('hospital-field').style.display = 'block';
+        }
+    } else {
+        document.getElementById('institution-field').style.display = 'none';
+        document.getElementById('hospital-field').style.display = 'none';
+    }
+}
+document.addEventListener('DOMContentLoaded', function() {
+    var assessorTypeField = document.getElementById('{{ form.assessor_type.id_for_label }}');
+    if (assessorTypeField) {
+        toggleAssessorFields(assessorTypeField.value);
+        assessorTypeField.addEventListener('change', function() {
+            toggleAssessorFields(this.value);
+        });
+    }
+    // Unit type toggle
+    var unitTypeRadios = document.querySelectorAll('input[name="unit_type"]');
+    unitTypeRadios.forEach(function(radio) {
+        radio.addEventListener('change', toggleUnitTypeFields);
+    });
+    toggleUnitTypeFields();
+});
+</script>
+{% endblock %} 

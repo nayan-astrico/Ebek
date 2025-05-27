@@ -1,0 +1,239 @@
+{% extends 'assessments/base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Learners</h2>
+        <div>
+            <a href="{% url 'learner_bulk_upload' %}" class="btn btn-success mr-2">
+                <i class="fas fa-file-upload"></i> Bulk Upload
+            </a>
+            <a href="{% url 'learner_create' %}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Add New Learner
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row">
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="institution">Institution</label>
+                        <select name="institution" id="institution" class="form-control">
+                            <option value="">All Institutions</option>
+                            {% for institution in institutions %}
+                            <option value="{{ institution.name }}" {% if request.GET.institution == institution.name %}selected{% endif %}>
+                                {{ institution.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="hospital">Hospital</label>
+                        <select name="hospital" id="hospital" class="form-control">
+                            <option value="">All Hospitals</option>
+                            {% for hospital in hospitals %}
+                            <option value="{{ hospital.name }}" {% if request.GET.hospital == hospital.name %}selected{% endif %}>
+                                {{ hospital.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="learner_type">Learner Type</label>
+                        <select name="learner_type" id="learner_type" class="form-control">
+                            <option value="">All Types</option>
+                            <option value="student" {% if request.GET.learner_type == 'student' %}selected{% endif %}>Student</option>
+                            <option value="nurse" {% if request.GET.learner_type == 'nurse' %}selected{% endif %}>Working Nurse</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label>&nbsp;</label>
+                        <button type="submit" class="btn btn-primary btn-block">Apply Filters</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Full Name</th>
+                            <th>Email</th>
+                            <th>Mobile</th>
+                            <th>Type</th>
+                            <th>Institution/Hospital</th>
+                            <th>Course/Designation</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for learner in learners %}
+                        <tr>
+                            <td>{{ learner.learner_user.full_name }}</td>
+                            <td>{{ learner.learner_user.email }}</td>
+                            <td>{{ learner.learner_user.phone_number }}</td>
+                            <td>{{ learner.get_learner_type_display }}</td>
+                            <td>
+                                {% if learner.learner_type == 'student' %}
+                                    {{ learner.college.name|default:"-" }}
+                                {% else %}
+                                    {{ learner.hospital.name|default:"-" }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if learner.learner_type == 'student' %}
+                                    {{ learner.course|default:"-" }}
+                                {% else %}
+                                    {{ learner.designation|default:"-" }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge {% if learner.is_active %}badge-success{% else %}badge-danger{% endif %}">
+                                    {{ learner.is_active|yesno:"Active,Inactive" }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    <a href="{% url 'learner_edit' learner.pk %}" class="btn btn-sm btn-info">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-danger" 
+                                            onclick="confirmDelete('{{ learner.full_name }}', '{% url 'learner_delete' learner.pk %}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center">No learners found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if learners.has_other_pages %}
+            <nav aria-label="Page navigation" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if learners.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ learners.previous_page_number }}">Previous</a>
+                    </li>
+                    {% endif %}
+
+                    {% for num in learners.paginator.page_range %}
+                    <li class="page-item {% if learners.number == num %}active{% endif %}">
+                        <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                    </li>
+                    {% endfor %}
+
+                    {% if learners.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ learners.next_page_number }}">Next</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" role="dialog" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">Confirm Delete</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete <span id="deleteItemName"></span>?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function confirmDelete(name, url) {
+    document.getElementById('deleteItemName').textContent = name;
+    document.getElementById('deleteForm').action = url;
+    $('#deleteModal').modal('show');
+}
+
+// Add any additional JavaScript for dynamic behavior here
+document.addEventListener('DOMContentLoaded', function() {
+    const learnerTypeSelect = document.getElementById('learner_type');
+    const institutionSelect = document.getElementById('institution');
+    const hospitalSelect = document.getElementById('hospital');
+
+    function toggleInstitutionHospitalFields() {
+        if (learnerTypeSelect.value === 'student') {
+            institutionSelect.parentElement.style.display = 'block';
+            hospitalSelect.parentElement.style.display = 'none';
+        } else if (learnerTypeSelect.value === 'nurse') {
+            institutionSelect.parentElement.style.display = 'none';
+            hospitalSelect.parentElement.style.display = 'block';
+        } else {
+            institutionSelect.parentElement.style.display = 'block';
+            hospitalSelect.parentElement.style.display = 'block';
+        }
+    }
+
+    learnerTypeSelect.addEventListener('change', toggleInstitutionHospitalFields);
+    toggleInstitutionHospitalFields(); // Initial state
+});
+</script>
+
+<style>
+.badge {
+    padding: 0.5em 0.75em;
+    font-size: 0.85em;
+}
+
+.btn-group .btn {
+    margin: 0 2px;
+}
+
+.table th {
+    background-color: #f8f9fa;
+    border-top: none;
+}
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.pagination {
+    margin-bottom: 0;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+</style>
+{% endblock %} 
