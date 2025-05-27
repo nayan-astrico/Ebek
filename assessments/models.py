@@ -197,11 +197,14 @@ class Learner(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     learner_user = models.ForeignKey('EbekUser', on_delete=models.SET_NULL, null=True, blank=True)
+    learner_id = models.CharField(max_length=50, unique=True, editable=False)
 
     def __str__(self):
         return self.learner_user.full_name
     
     def save(self, *args, **kwargs):
+        if not self.learner_id:
+            self.learner_id = str(uuid.uuid4())
         self.learner_user.user_role = 'learner'
         super().save(*args, **kwargs)
 
@@ -228,7 +231,6 @@ class Assessor(models.Model):
     qualification = models.CharField(max_length=255)
     designation = models.CharField(max_length=100)
     specialization = models.CharField(max_length=20, choices=SPECIALIZATION_CHOICES)
-    assessor_id = models.CharField(max_length=50, unique=True)
     is_verifier = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -237,10 +239,13 @@ class Assessor(models.Model):
     institution = models.ForeignKey('Institution', null=True, blank=True, on_delete=models.SET_NULL)
     hospital = models.ForeignKey('Hospital', null=True, blank=True, on_delete=models.SET_NULL)
     assessor_user = models.ForeignKey('EbekUser', on_delete=models.SET_NULL, null=True, blank=True)
+    assessor_id = models.CharField(max_length=50, unique=True, editable=False)
     def __str__(self):
         return self.assessor_user.full_name
     
     def save(self, *args, **kwargs):
+        if not self.assessor_id:
+            self.assessor_id = str(uuid.uuid4())
         self.assessor_user.user_role = 'supervisor'
         super().save(*args, **kwargs)
 
