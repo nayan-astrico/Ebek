@@ -17,3 +17,6 @@ __pycache__/*
 *.pyc
 /assessments/migrations
 .env
+venv/
+db.sqlite3
+

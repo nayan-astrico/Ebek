@@ -8,129 +8,674 @@
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+    <link rel="icon" type="image/png" href="https://i.ibb.co/VW9y368B/4021762-Ebekmed-Favicon.png">
+    <link href="https://fonts.googleapis.com/css?family=PT+Sans:400,700&display=swap" rel="stylesheet">
 
     <script>
         $(document).ready(function(){
             $('[data-bs-toggle="tooltip"]').tooltip();
+            
+            // Add active class to current page link
+            const currentPath = window.location.pathname;
+            $('#sidebar a').each(function() {
+                if ($(this).attr('href') === currentPath) {
+                    $(this).addClass('active');
+                    // If submenu item, also highlight parent
+                    const submenu = $(this).closest('#onboardingSubmenu');
+                    if (submenu.length) {
+                        submenu.prev('.nav-link').addClass('active-parent');
+                    }
+                }
+            });
+
+            // Handle submenu in collapsed state
+            $('#sidebar.collapsed .nav-link[data-toggle="collapse"]').hover(
+                function() {
+                    if ($('#sidebar').hasClass('collapsed')) {
+                        $(this).attr('aria-expanded', 'true');
+                        $(this).next('#onboardingSubmenu').show();
+                    }
+                },
+                function() {
+                    if ($('#sidebar').hasClass('collapsed')) {
+                        $(this).attr('aria-expanded', 'false');
+                        $(this).next('#onboardingSubmenu').hide();
+                    }
+                }
+            );
         });
     </script>
 
     <style>
-        /* Custom styles */
+        :root {
+            --primary-color: #1AA09A;
+            --primary-gradient: linear-gradient(135deg, #1AA09A 0%, #4fd1c5 100%);
+            --sidebar-width: 250px;
+            --sidebar-collapsed-width: 70px;
+            --header-height: 60px;
+            --text-color: #1a3a38;
+            --hover-color: #e6f7f6;
+            --active-color: #e0f7f5;
+            --accent-color: #4fd1c5;
+            --divider-color: #b2e5e2;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            background-color: #e1e1e1;
+            font-family: 'PT Sans', sans-serif;
+            background-color: #f8f9fa;
+            color: var(--text-color);
         }
+
+        /* Apply PT Sans to common form elements and buttons */
+        input, button, select, textarea, a, p, h1, h2, h3, h4, h5, h6, span, div {
+            font-family: 'PT Sans', sans-serif;
+        }
+
+        /* Navbar Styles */
         #navbar {
-            background-color: #ffffff;
-            height: 60px;
-            border-bottom: 1px solid #e1e1e1;
+            background-color: #fff;
+            height: var(--header-height);
+            border-bottom: 1.5px solid var(--divider-color);
+            box-shadow: 0 2px 8px 0 rgba(0,0,0,0.04);
+            position: fixed;
+            top: 0;
+            right: 0;
+            left: 0;
+            z-index: 1100;
+            transition: left 0.4s cubic-bezier(.4,2,.6,1);
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
         }
+
         #navbar .user-info {
-            font-weight: bold;
+            font-weight: 500;
+            color: var(--text-color);
         }
+
+        /* Sidebar Styles */
         #sidebar {
-            width: 70px;
-            background-color: #ffffff;
-            border-right: 1px solid #e1e1e1;
+            width: var(--sidebar-width);
+            background: var(--primary-gradient), var(--primary-color);
+            background-blend-mode: multiply;
+            opacity: 0.97;
+            border-right: none;
             height: 100vh;
             position: fixed;
             top: 0;
             left: 0;
-            padding-top: 10px;
+            z-index: 1001;
+            transition: all 0.4s cubic-bezier(.4,2,.6,1), box-shadow 0.3s;
+            box-shadow: 4px 0 18px 0 rgba(0,0,0,0.10), 0 1.5px 0 0 #f7c97a inset;
+            border-top-right-radius: 22px;
+            border-bottom-right-radius: 22px;
+            overflow: hidden;
+            /* Light pattern */
+            background-image: var(--primary-gradient), repeating-linear-gradient(135deg, rgba(255,255,255,0.04) 0px, rgba(255,255,255,0.04) 2px, transparent 2px, transparent 8px);
+            font-family: 'PT Sans', sans-serif;
             display: flex;
             flex-direction: column;
+        }
+
+        #sidebar.collapsed {
+            width: var(--sidebar-collapsed-width);
+            border-top-right-radius: 22px;
+            border-bottom-right-radius: 22px;
+        }
+
+        #sidebar.collapsed + #navbar {
+            left: var(--sidebar-collapsed-width);
+        }
+
+        #sidebar.collapsed + #navbar + #content {
+            margin-left: var(--sidebar-collapsed-width);
+        }
+
+        #sidebar .sidebar-header {
+            height: var(--header-height);
+            display: flex;
             align-items: center;
-            
+            padding: 0 20px;
+            border-bottom: none;
         }
-        #sidebar a {
-            color: #f7a82d;
-            margin: 15px 0;
-            font-size: 24px;
-            text-align: center;
+
+        #sidebar .sidebar-header img {
+            height: 35px;
+            margin-right: 10px;
         }
+
+        #sidebar .sidebar-header, #sidebar .brand-text {
+            color: #fff;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        #sidebar .nav-item {
+            padding: 0 15px;
+            margin: 5px 0;
+        }
+
+        #sidebar .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 12px 15px;
+            color: #fff;
+            border-radius: 8px;
+            transition: background 0.25s, color 0.25s, box-shadow 0.25s;
+            text-decoration: none;
+            font-size: 1rem;
+            font-family: 'PT Sans', sans-serif;
+        }
+
+        #sidebar .nav-link:hover {
+            background-color: #FFFFFF33;
+            color: #fff;
+        }
+
+        #sidebar .nav-link.active, #sidebar .nav-link.active-parent {
+            background-color: #FFFFFF33;
+            color: #fff;
+            font-weight: 600;
+        }
+
+        #sidebar .nav-link.active i, #sidebar .nav-link.active-parent i {
+            color: var(--primary-color) !important;
+        }
+
+        #sidebar .nav-link i {
+            width: 20px;
+            margin-right: 10px;
+            font-size: 1.1rem;
+        }
+
+        #sidebar .nav-link span {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        #sidebar .nav-divider {
+            height: 1px;
+            background-color: #e1e1e1;
+            margin: 10px 15px;
+        }
+
+        #sidebar .sidebar-footer {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            padding: 15px;
+            border-top: 1.5px solid var(--divider-color);
+        }
+
+        /* Content Area */
         #content {
-            margin-left: 70px;
-            padding: 20px;
-            height: fit-content;
-            background-color: #ffffff;
+            margin-left: var(--sidebar-width);
+            padding: 32px 32px 24px 32px;
+            margin-top: var(--header-height);
+            min-height: calc(100vh - var(--header-height));
+            transition: margin-left 0.4s cubic-bezier(.4,2,.6,1), padding 0.3s;
+            background: #fcfcfc;
+            border-top-left-radius: 18px;
+            border-bottom-left-radius: 18px;
+            box-shadow: 0 0 0 0 #fff;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            #sidebar {
+                transform: translateX(-100%);
+            }
+            
+            #sidebar.show {
+                transform: translateX(0);
+            }
+            
+            #navbar, #content {
+                left: 0;
+                margin-left: 0;
+            }
+            #content {
+                border-radius: 0;
+                padding: 16px 4px 8px 4px;
+            }
+        }
+
+        /* Button Styles */
+        .btn-create-assessment, .btn-assign-assessment {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            font-size: 0.9rem;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-create-assessment:hover, .btn-assign-assessment:hover {
+            background-color: #e69a1f;
+            color: white;
+            transform: translateY(-1px);
+        }
+
+        /* Submenu Styles */
+        #onboardingSubmenu {
+            background-color: rgba(0, 0, 0, 0.02);
+            border-radius: 0 0 8px 8px;
+            margin: 0 15px;
+        }
+
+        #onboardingSubmenu .nav-link {
+            padding: 10px 15px;
+            font-size: 0.85rem;
+        }
+
+        #onboardingSubmenu .nav-link i {
+            font-size: 0.9rem;
+        }
+
+        .nav-link[data-toggle="collapse"] .fa-chevron-down {
+            transition: transform 0.3s ease;
+        }
+
+        .nav-link[data-toggle="collapse"][aria-expanded="true"] .fa-chevron-down {
+            transform: rotate(180deg);
+        }
+
+        /* Collapsed Sidebar: Only show icons, hide text */
+        #sidebar.collapsed .nav-link span,
+        #sidebar.collapsed .brand-text {
+            display: none !important;
+        }
+        #sidebar.collapsed .sidebar-header {
+            justify-content: center;
+        }
+        #sidebar.collapsed .nav-link {
+            justify-content: center;
+            padding-left: 0;
+            padding-right: 0;
+        }
+        #sidebar.collapsed .nav-item {
+            padding-left: 0;
+            padding-right: 0;
+        }
+
+        /* Floating submenu on hover when collapsed */
+        #sidebar.collapsed .nav-item {
             position: relative;
         }
-        .btn-create-assessment {
-            background-color:#f7a82d;
-            color: white;
-            border: none;
-            font-size: 16px;
-            padding: 8px 16px;
-            border-radius: 5px;
-            position: absolute;
-            top: 20px;
-            right: 20px;
+        #sidebar.collapsed .nav-link[data-toggle="collapse"]:hover + #onboardingSubmenu,
+        #sidebar.collapsed #onboardingSubmenu:hover {
+            display: block !important;
         }
-        .btn-assign-assessment {
-            background-color:#f7a82d;
-            color: white;
-            border: none;
-            font-size: 16px;
-            padding: 8px 16px;
-            border-radius: 5px;
+        #sidebar.collapsed #onboardingSubmenu {
+            display: none;
             position: absolute;
-            top: 20px;
-            right: 20px;
+            left: 100%;
+            top: 0;
+            min-width: 180px;
+            background: #fff;
+            box-shadow: 2px 2px 8px rgba(0,0,0,0.12);
+            border-radius: 6px;
+            z-index: 2000;
+            padding: 8px 0;
+        }
+        #sidebar.collapsed #onboardingSubmenu .nav-link {
+            justify-content: flex-start;
+            padding: 8px 16px;
+        }
+        #sidebar.collapsed #onboardingSubmenu .nav-link span {
+            display: inline !important;
+            margin-left: 8px;
+        }
+
+        /* Hide chevron when collapsed */
+        #sidebar.collapsed .nav-link[data-toggle="collapse"] .fa-chevron-down {
+            display: none;
+        }
+
+        /* Highlight active sidebar item */
+        #sidebar #onboardingSubmenu .nav-link.active {
+            background: #fff;
+            color: var(--primary-color) !important;
+            font-weight: 700;
+        }
+        #sidebar #onboardingSubmenu .nav-link.active i {
+            color: var(--primary-color) !important;
+        }
+        #sidebar #onboardingSubmenu .nav-link {
+            color: #fff;
+            background: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-family: 'PT Sans', sans-serif;
+            font-weight: 500;
+            padding: 12px 15px;
+            margin-bottom: 4px;
+            transition: background 0.25s, color 0.25s, box-shadow 0.25s;
+            display: flex;
+            align-items: center;
+        }
+        #sidebar #onboardingSubmenu .nav-link i {
+            color: #fff;
+        }
+        #sidebar #onboardingSubmenu .nav-link:hover, #sidebar #onboardingSubmenu .nav-link:focus {
+            background-color: #FFFFFF33;
+            color: #fff;
+        }
+        #sidebar #onboardingSubmenu .nav-link:hover i, #sidebar #onboardingSubmenu .nav-link:focus i {
+            color: var(--primary-color);
+        }
+        #sidebar #onboardingSubmenu .nav-link.active {
+            background: #fff;
+            color: var(--primary-color) !important;
+            font-weight: 700;
+            box-shadow: 0 2px 12px 0 rgba(26,160,154,0.10);
+        }
+        #sidebar #onboardingSubmenu .nav-link.active i {
+            color: var(--primary-color) !important;
+        }
+
+        /* Improved collapse button */
+        .sidebar-footer {
+            border: none !important;
+            background: transparent;
+            box-shadow: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 18px 0 12px 0;
+            margin-top: 0;
+        }
+        #toggleSidebar {
+            background: none !important;
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+            color: #fff;
+            font-size: 1.7rem;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+            border-radius: 50%;
+            transition: background 0.2s;
+        }
+        #toggleSidebar:hover {
+            background-color: #FFFFFF33;
+            color: #fff;
+        }
+
+        .sidebar-bottom-area {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: flex-end;
+            gap: 0;
+            padding: 0;
+        }
+        .sidebar-user-info {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+            padding: 0 15px;
+        }
+        .sidebar-user-initial .user-initial-circle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #fff;
+            color: var(--primary-color);
+            font-weight: 700;
+            font-size: 1.2rem;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            box-shadow: 0 1px 4px 0 rgba(0,0,0,0.07);
+            margin-right: 10px;
+        }
+        .sidebar-user-email {
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 500;
+            line-height: 1.5;
+            word-break: break-all;
+            font-family: 'PT Sans', sans-serif;
+        }
+
+        /* Make sidebar nav area scrollable and fix user section at bottom */
+        .nav-items {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            min-height: 0;
+        }
+        .fixed-bottom-sidebar {
+            position: sticky;
+            bottom: 0;
+            background: transparent;
+            z-index: 2;
+        }
+        /* Hide sidebar scrollbar */
+        .nav-items {
+            scrollbar-width: thin;
+            scrollbar-color: transparent transparent;
+        }
+        .nav-items::-webkit-scrollbar {
+            width: 0.01em;
+            background: transparent;
+        }
+        .nav-items::-webkit-scrollbar-thumb {
+            background: transparent;
+        }
+
+        /* Submenu items: remove icons, indent text */
+        .submenu-item {
+            padding-left: 0 !important;
+        }
+        .submenu-link {
+            padding-left: 32px !important;
+            width: 100%;
+            box-sizing: border-box;
+            font-size: 1rem;
+            font-family: 'PT Sans', sans-serif;
+            font-weight: 500;
+        }
+        #sidebar #onboardingSubmenu .nav-link,
+        #sidebar #onboardingSubmenu .submenu-link {
+            border-radius: 8px;
+            margin-bottom: 2px;
+            width: 100%;
+            margin-left: 0;
+        }
+        #sidebar #onboardingSubmenu .nav-link:hover,
+        #sidebar #onboardingSubmenu .nav-link:focus,
+        #sidebar #onboardingSubmenu .submenu-link:hover,
+        #sidebar #onboardingSubmenu .submenu-link:focus {
+            background-color: #FFFFFF33;
+            color: #fff;
+        }
+        #sidebar #onboardingSubmenu .nav-link.active,
+        #sidebar #onboardingSubmenu .submenu-link.active {
+            background-color: #FFFFFF33;
+            color: #fff;
+            font-weight: 600;
+        }
+        #sidebar #onboardingSubmenu .nav-link.active i,
+        #sidebar #onboardingSubmenu .submenu-link.active i {
+            color: var(--primary-color) !important;
+        }
+
+        .sidebar-logout-link {
+            width: calc(100% - 30px);
+            padding: 12px 15px;
+            border-radius: 8px;
+            background: none;
+            box-shadow: none;
+            color: #fff;
+            font-weight: 500;
+            font-size: 1rem;
+            transition: background 0.25s, color 0.25s;
+            display: flex;
+            align-items: center;
+            margin: 0 15px 5px 15px;
+            font-family: 'PT Sans', sans-serif;
+        }
+
+        .sidebar-logout-link:hover {
+            background-color: #FFFFFF33;
+            color: #fff;
         }
     </style>
 </head>
 <body>
-    <!-- Navbar -->
-    <nav id="navbar" class="d-flex align-items-center justify-content-end pr-4">
-        {% if request.user.is_authenticated %}
-        <div class="d-flex align-items-center">
-            <span class="user-info mr-3">{{ request.user.email }}</span>
-            <a href="{% url 'logout' %}" class="btn btn-link text-danger" style="text-decoration: none;">
-                <i class="fas fa-sign-out-alt"></i> Logout
-            </a>
-            <div class="ml-3">
-                <i class="fas fa-user-circle" style="font-size: 24px; color: #f7a82d;"></i>
-            </div>
-        </div>
-        {% endif %}
-    </nav>
     <!-- Sidebar -->
     {% if request.user.is_authenticated %}
     <div id="sidebar">
-        <a href="{% url 'create_assessment' %}" title="Create New Assessment" data-bs-toggle="tooltip" data-bs-placement="right">
+        <div class="sidebar-header">
+            <img src="https://i.ibb.co/VW9y368B/4021762-Ebekmed-Favicon.png" alt="Ebek Logo" style="height: 38px; width: 38px; object-fit: contain;">
+            <span class="brand-text">EBEK MED</span>
+        </div>
+        
+        <div class="nav-items mt-3" style="flex: 1 1 auto; overflow-y: auto; min-height: 0;">
+            <div class="nav-item">
+                <a href="{% url 'create_assessment' %}" class="nav-link" title="Create New Assessment">
             <i class="fas fa-file-medical"></i>
+                    <span>Create Assessment</span>
         </a>
+            </div>
+
         {% if request.user.user_role == 'ebek_admin' or request.user.user_role == 'super_admin' %}
-        <a href="{% url 'onboarding_dashboard' %}" title="Onboarding and Management" data-bs-toggle="tooltip" data-bs-placement="right">
+            <div class="nav-item">
+                <a href="#onboardingSubmenu" class="nav-link" data-toggle="collapse" aria-expanded="false" title="Onboarding and Management">
             <i class="fas fa-university"></i>
-        </a>
+                    <span>Onboarding</span>
+                    <i class="fas fa-chevron-down ml-auto"></i>
+                </a>
+                <div class="collapse" id="onboardingSubmenu">
+                    <div class="nav-item submenu-item">
+                        <a href="{% url 'institution_list' %}" class="nav-link submenu-link" title="Manage Institutions">
+                            Institutions
+                        </a>
+                    </div>
+                    <div class="nav-item submenu-item">
+                        <a href="{% url 'hospital_list' %}" class="nav-link submenu-link" title="Manage Hospitals">
+                            Hospitals
+                        </a>
+                    </div>
+                    <div class="nav-item submenu-item">
+                        <a href="{% url 'group_list' %}" class="nav-link submenu-link" title="Manage Groups">
+                            Groups
+                        </a>
+                    </div>
+                    <div class="nav-item submenu-item">
+                        <a href="{% url 'learner_list' %}" class="nav-link submenu-link" title="Manage Learners">
+                            Learners
+                        </a>
+                    </div>
+                    <div class="nav-item submenu-item">
+                        <a href="{% url 'assessor_list' %}" class="nav-link submenu-link" title="Manage Assessors">
+                            Assessors
+                        </a>
+                    </div>
+                </div>
+            </div>
         {% endif %}
         
-        <a href="{% url 'users_management' %}" title="Manage Supervisors & Students" data-bs-toggle="tooltip" data-bs-placement="right">
+            <div class="nav-item">
+                <a href="{% url 'users_management' %}" class="nav-link" title="Manage Supervisors & Students">
             <i class="fas fa-users"></i>
+                    <span>User Management</span>
         </a>
-        <a href="{% url 'cohort_list' %}" title="Manage Student Batches" data-bs-toggle="tooltip" data-bs-placement="right">
+            </div>
+
+            <div class="nav-item">
+                <a href="{% url 'cohort_list' %}" class="nav-link" title="Manage Student Batches">
             <i class="fas fa-user-friends"></i>
+                    <span>Cohorts</span>
         </a>
-        <a href="{% url 'assign_assessment' %}" title="View & Assign Assessments" data-bs-toggle="tooltip" data-bs-placement="right">
+            </div>
+
+            <div class="nav-item">
+                <a href="{% url 'assign_assessment' %}" class="nav-link" title="View & Assign Assessments">
             <i class="fas fa-tasks"></i>
+                    <span>Assignments</span>
         </a>
-        <a href="{% url 'exam_reports_page' %}" title="View Assessment Reports" data-bs-toggle="tooltip" data-bs-placement="right">
+            </div>
+
+            <div class="nav-item">
+                <a href="{% url 'exam_reports_page' %}" class="nav-link" title="View Assessment Reports">
             <i class="fas fa-chart-bar"></i>
-        </a>
-        
-        
-        <a href="#" style="margin-top: 500%;" title="Toggle Sidebar" data-bs-toggle="tooltip" data-bs-placement="right">
-            <i class="fas fa-angle-double-left"></i>
-        </a>
+                    <span>Reports</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="sidebar-bottom-area">
+            {% if request.user.is_authenticated %}
+            <div class="nav-item">
+                <div class="sidebar-user-info d-flex align-items-center">
+                    <div class="sidebar-user-initial mr-2">
+                        <span class="user-initial-circle">{{ request.user.email|first|upper }}</span>
+                    </div>
+                    <span class="sidebar-user-email">{{ request.user.email }}</span>
+                </div>
+            </div>
+            <div class="nav-item">
+                <a href="{% url 'logout' %}" class="nav-link d-flex align-items-center sidebar-logout-link">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span class="sidebar-logout-text ml-2">Logout</span>
+                </a>
+            </div>
+            {% endif %}
+            <div class="nav-item">
+                <div class="sidebar-footer">
+                    <button class="btn p-0 d-flex justify-content-center align-items-center" id="toggleSidebar" style="font-size: 1.5rem; color: #fff; background: none; border: none; width: 40px; height: 40px; margin: 0 auto; display: flex;">
+                        <i class="fas fa-angle-double-left" id="sidebarToggleIcon"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
     {% endif %}
+
     <!-- Main Content -->
     <div id="content">
         {% block content %}{% endblock %}
     </div>
 
-    
+    <script>
+        // Sidebar toggle functionality
+        document.getElementById('toggleSidebar').addEventListener('click', function() {
+            const sidebar = document.getElementById('sidebar');
+            const button = this;
+            const icon = document.getElementById('sidebarToggleIcon');
+            sidebar.classList.toggle('collapsed');
+            if (sidebar.classList.contains('collapsed')) {
+                icon.classList.remove('fa-angle-double-left');
+                icon.classList.add('fa-angle-double-right');
+            } else {
+                icon.classList.remove('fa-angle-double-right');
+                icon.classList.add('fa-angle-double-left');
+            }
+        });
+
+        // Mobile menu toggle
+        function toggleMobileMenu() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('show');
+        }
+
+        // Keep onboarding expanded if a suboption is active
+        document.addEventListener('DOMContentLoaded', function() {
+            var onboardingSubmenu = document.getElementById('onboardingSubmenu');
+            var onboardingParent = document.querySelector('a[data-toggle="collapse"][href="#onboardingSubmenu"]');
+            if (onboardingSubmenu && onboardingSubmenu.querySelector('.active')) {
+                onboardingSubmenu.classList.add('show');
+                onboardingParent.setAttribute('aria-expanded', 'true');
+            }
+        });
+    </script>
 </body>
 </html>

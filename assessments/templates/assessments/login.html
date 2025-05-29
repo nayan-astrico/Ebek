@@ -4,105 +4,261 @@
 {% load static %}
 <style>
     body {
-        background: #fff !important;
+        background: #ffffff !important;
+        min-height: 100vh;
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
     }
-    .login-row {
-        min-height: 80vh;
+
+    .login-container {
+        width: 100%;
+        max-width: 1440px;
+        margin: 0 auto;
+        min-height: 100vh;
+        display: flex;
+    }
+
+    /* Left Panel - Decorative */
+    .decorative-panel {
+        flex: 1;
+        background: #ffffff;
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
+        padding: 60px;
     }
-    .logo-col {
+
+    .decorative-panel::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-image: radial-gradient(circle, rgba(241, 101, 100, 0.1) 2px, transparent 2px);
+        background-size: 30px 30px;
+        opacity: 0.5;
+    }
+
+    .logo-wrapper {
+        position: relative;
+        z-index: 1;
+        text-align: center;
+        max-width: 480px;
+    }
+
+    .logo-wrapper img {
+        width: 100%;
+        max-width: 360px;
+        margin-bottom: 32px;
+    }
+
+    .logo-wrapper h2 {
+        color: #1a202c;
+        font-size: 28px;
+        font-weight: 300;
+        margin: 0 0 16px;
+    }
+
+    .logo-wrapper p {
+        color: #4a5568;
+        font-size: 14px;
+        line-height: 1.6;
+        margin: 0;
+    }
+
+    /* Right Panel - Login Form */
+    .login-panel {
+        width: 480px;
+        background: white;
         display: flex;
         align-items: center;
-        justify-content: center;
-        background: #fff;
-        border-radius: 10px 0 0 10px;
-        padding: 40px;
+        padding: 60px 40px;
     }
-    .login-card {
-        border-radius: 0 10px 10px 0;
-        min-width: 350px;
-        box-shadow: 0 0 20px rgba(0,0,0,0.08);
+
+    .login-form-wrapper {
+        width: 100%;
+        max-width: 360px;
+        margin: 0 auto;
     }
-    @media (max-width: 768px) {
-        .logo-col { display: none; }
-        .login-card { border-radius: 10px; }
+
+    .login-header {
+        margin-bottom: 32px;
     }
-    .login-btn{
-        background-color: #f7a82d;
-        color: white;
+
+    .login-header h1 {
+        font-size: 28px;
+        font-weight: 600;
+        color: #1a202c;
+        margin: 0 0 8px;
+    }
+
+    .login-header p {
+        font-size: 14px;
+        color: #64748b;
+        margin: 0;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 14px;
+        font-weight: 500;
+        color: #4a5568;
+        margin-bottom: 6px;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 12px 16px;
+        font-size: 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #f8fafc;
+        transition: all 0.3s ease;
+        box-sizing: border-box;
+    }
+
+    .form-control:focus {
+        border-color: #F16564;
+        background: white;
+        box-shadow: 0 0 0 3px rgba(241, 101, 100, 0.1);
+        outline: none;
+    }
+
+    .form-control::placeholder {
+        color: #a0aec0;
+    }
+
+    .login-btn {
+        width: 100%;
+        padding: 12px;
+        margin-top: 8px;
+        background: #F16564;
         border: none;
-        font-size: 16px;
-        padding: 8px 16px;
-        border-radius: 5px;
+        border-radius: 8px;
+        color: white;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
     }
-    .forgot-password{
-        color: #f7a82d;
+
+    .login-btn:hover {
+        background: #e45857;
     }
-    .custom-toast-container {
-        position: fixed;
-        top: 1rem;
-        right: 1rem;
-        z-index: 1080;
+
+    .forgot-password {
+        display: block;
+        text-align: center;
+        margin-top: 16px;
+        color: #64748b;
+        font-size: 14px;
+        text-decoration: none;
+        transition: color 0.3s ease;
+    }
+
+    .forgot-password:hover {
+        color: #F16564;
+    }
+
+    .messages {
+        margin-bottom: 24px;
+    }
+
+    .alert {
+        padding: 12px 16px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+    }
+
+    .alert-error {
+        background-color: #FEE2E2;
+        color: #991B1B;
+    }
+
+    .alert-success {
+        background-color: #DCFCE7;
+        color: #166534;
+    }
+
+    .alert-warning {
+        background-color: #FEF3C7;
+        color: #92400E;
+    }
+
+    @media (max-width: 992px) {
+        .login-container {
+            flex-direction: column;
+        }
+
+        .decorative-panel {
+            display: none;
+        }
+
+        .login-panel {
+            width: 100%;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .login-form-wrapper {
+            padding: 20px 0;
+        }
     }
 </style>
-<div class="container-fluid">
-    <div class="row login-row">
-        <div class="col-md-6 logo-col">
-            <img src="{% static 'assessments/img/Shine_Pro.png' %}" alt="Shine OSCE Logo" style="max-width: 350px; width: 100%;">
+
+<div class="login-container">
+    <!-- Left Panel -->
+    <div class="decorative-panel">
+        <div class="logo-wrapper">
+            <img src="{% static 'assessments/img/Shine_Pro.png' %}" alt="Shine OSCE Logo">
+            <h2>Welcome to Shine OSCE</h2>
+            <p>Empowering healthcare education through innovative assessment solutions</p>
         </div>
-        <div class="col-md-4">
-            <div class="card login-card">
-                <div class="card-header text-center">
-                    <h3>Login</h3>
-                </div>
-                <div class="card-body">
-                    {% if messages %}
-                    <div class="toast-container custom-toast-container">
-                        {% for message in messages %}
-                            <div class="toast shadow-lg border-0 {% if message.tags == 'error' %}bg-danger text-white{% elif message.tags == 'success' %}bg-success text-white{% elif message.tags == 'warning' %}bg-warning text-dark{% else %}bg-info text-white{% endif %}" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="3000">
-                                <div class="d-flex align-items-center">
-                                    <div class="toast-body w-100">
-                                        {{ message }}
-                                    </div>
-                                </div>
-                            </div>
-                        {% endfor %}
-                    </div>
-                        <script>
-                            document.addEventListener('DOMContentLoaded', function() {
-                                var toastElList = [].slice.call(document.querySelectorAll('.toast'));
-                                var toastList = toastElList.map(function(toastEl) {
-                                    return new bootstrap.Toast(toastEl, {
-                                        autohide: true,
-                                        delay: 3000
-                                    });
-                                });
-                                toastList.forEach(toast => toast.show());
-                            });
-                        </script>
-                    {% endif %}
-                    <form method="post" action="{% url 'login' %}">
-                        {% csrf_token %}
-                        <div class="form-group mb-3">
-                            <label for="email">Email ID</label>
-                            <input type="email" class="form-control" id="email" name="email" required autofocus>
-                        </div>
-                        <div class="form-group mb-3">
-                            <label for="password">Password</label>
-                            <input type="password" class="form-control" id="password" name="password" required>
-                        </div>
-                        <div class="d-grid mb-2">
-                            <button type="submit" class="btn btn-primary login-btn">Login</button>
-                        </div>
-                        <div class="text-center">
-                            <a href="{% url 'forgot_password' %}" class="btn btn-link forgot-password">Forgot Password?</a>
-                        </div>
-                    </form>
-                </div>
+    </div>
+
+    <!-- Right Panel -->
+    <div class="login-panel">
+        <div class="login-form-wrapper">
+            <div class="login-header">
+                <h1>Welcome back</h1>
+                <p>Please enter your details to sign in</p>
             </div>
+
+            {% if messages %}
+            <div class="messages">
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">
+                    {{ message }}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <form method="post" action="{% url 'login' %}">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="email">Email address</label>
+                    <input type="email" class="form-control" id="email" name="email" 
+                           placeholder="Enter your email" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" class="form-control" id="password" name="password" 
+                           placeholder="Enter your password" required>
+                </div>
+                <button type="submit" class="login-btn">Sign in</button>
+                <a href="{% url 'forgot_password' %}" class="forgot-password">
+                    Forgot your password?
+                </a>
+            </form>
         </div>
     </div>
 </div>
-{% endblock %} 
+{% endblock %}

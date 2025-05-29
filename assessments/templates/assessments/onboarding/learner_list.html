@@ -1,175 +1,250 @@
 {% extends 'assessments/base.html' %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Learners</h2>
-        <div>
-            <a href="{% url 'learner_bulk_upload' %}" class="btn btn-success mr-2">
-                <i class="fas fa-file-upload"></i> Bulk Upload
-            </a>
-            <a href="{% url 'learner_create' %}" class="btn btn-primary">
-                <i class="fas fa-plus"></i> Add New Learner
-            </a>
-        </div>
+<!-- Header -->
+<div class="header">
+    <div class="header-left">
+        <h1>Learners</h1>
+        <p class="text-muted">Manage your learners</p>
     </div>
-
-    <!-- Filters -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <form method="get" class="row">
-                <div class="col-md-3">
-                    <div class="form-group">
-                        <label for="institution">Institution</label>
-                        <select name="institution" id="institution" class="form-control">
-                            <option value="">All Institutions</option>
-                            {% for institution in institutions %}
-                            <option value="{{ institution.name }}" {% if request.GET.institution == institution.name %}selected{% endif %}>
-                                {{ institution.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="form-group">
-                        <label for="hospital">Hospital</label>
-                        <select name="hospital" id="hospital" class="form-control">
-                            <option value="">All Hospitals</option>
-                            {% for hospital in hospitals %}
-                            <option value="{{ hospital.name }}" {% if request.GET.hospital == hospital.name %}selected{% endif %}>
-                                {{ hospital.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="form-group">
-                        <label for="learner_type">Learner Type</label>
-                        <select name="learner_type" id="learner_type" class="form-control">
-                            <option value="">All Types</option>
-                            <option value="student" {% if request.GET.learner_type == 'student' %}selected{% endif %}>Student</option>
-                            <option value="nurse" {% if request.GET.learner_type == 'nurse' %}selected{% endif %}>Working Nurse</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="form-group">
-                        <label>&nbsp;</label>
-                        <button type="submit" class="btn btn-primary btn-block">Apply Filters</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div class="card">
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Full Name</th>
-                            <th>Email</th>
-                            <th>Mobile</th>
-                            <th>Type</th>
-                            <th>Institution/Hospital</th>
-                            <th>Course/Designation</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for learner in learners %}
-                        <tr>
-                            <td>{{ learner.learner_user.full_name }}</td>
-                            <td>{{ learner.learner_user.email }}</td>
-                            <td>{{ learner.learner_user.phone_number }}</td>
-                            <td>{{ learner.get_learner_type_display }}</td>
-                            <td>
-                                {% if learner.learner_type == 'student' %}
-                                    {{ learner.college.name|default:"-" }}
-                                {% else %}
-                                    {{ learner.hospital.name|default:"-" }}
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if learner.learner_type == 'student' %}
-                                    {{ learner.course|default:"-" }}
-                                {% else %}
-                                    {{ learner.designation|default:"-" }}
-                                {% endif %}
-                            </td>
-                            <td>
-                                <span class="badge {% if learner.is_active %}badge-success{% else %}badge-danger{% endif %}">
-                                    {{ learner.is_active|yesno:"Active,Inactive" }}
-                                </span>
-                            </td>
-                            <td>
-                                <div class="btn-group">
-                                    <a href="{% url 'learner_edit' learner.pk %}" class="btn btn-sm btn-info">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                                    <button type="button" class="btn btn-sm btn-danger" 
-                                            onclick="confirmDelete('{{ learner.full_name }}', '{% url 'learner_delete' learner.pk %}')">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="8" class="text-center">No learners found.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            {% if learners.has_other_pages %}
-            <nav aria-label="Page navigation" class="mt-4">
-                <ul class="pagination justify-content-center">
-                    {% if learners.has_previous %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ learners.previous_page_number }}">Previous</a>
-                    </li>
-                    {% endif %}
-
-                    {% for num in learners.paginator.page_range %}
-                    <li class="page-item {% if learners.number == num %}active{% endif %}">
-                        <a class="page-link" href="?page={{ num }}">{{ num }}</a>
-                    </li>
-                    {% endfor %}
-
-                    {% if learners.has_next %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ learners.next_page_number }}">Next</a>
-                    </li>
-                    {% endif %}
-                </ul>
-            </nav>
-            {% endif %}
-        </div>
+    <div class="header-right">
+        <button class="btn btn-outline-upload" onclick="toggleUploadPanel()">
+            <i class="fas fa-upload"></i>
+            Bulk Upload
+        </button>
+        <a href="{% url 'learner_create' %}" class="btn btn-add">
+            <i class="fas fa-plus"></i>
+            Add Learner
+        </a>
     </div>
 </div>
 
-<!-- Delete Confirmation Modal -->
-<div class="modal fade" id="deleteModal" tabindex="-1" role="dialog" aria-labelledby="deleteModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
+<!-- Search and Filter Bar -->
+<div class="search-filter-bar">
+    <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" placeholder="Search learners...">
+    </div>
+    <button class="btn-filter" onclick="toggleFilterPanel()">
+        <i class="fas fa-filter"></i>
+        Filters
+    </button>
+</div>
+
+<!-- Filter Side Panel -->
+<div class="filter-panel" id="filterPanel">
+    <div class="filter-header">
+        <h3>Filter Learners</h3>
+    </div>
+    
+    <form method="get" class="filter-form">
+        <div class="filter-layout">
+            <!-- Main Filter Types (30%) -->
+            <div class="filter-types">
+                <div class="filter-type {% if active_filter == 'institution' %}active{% endif %}" 
+                     data-filter="institution" 
+                     onclick="switchFilter('institution')">
+                    <span>Institution</span>
+                </div>
+                <div class="filter-type {% if active_filter == 'hospital' %}active{% endif %}" 
+                     data-filter="hospital" 
+                     onclick="switchFilter('hospital')">
+                    <span>Hospital</span>
+                </div>
+                <div class="filter-type {% if active_filter == 'learner-type' %}active{% endif %}" 
+                     data-filter="learner-type" 
+                     onclick="switchFilter('learner-type')">
+                    <span>Learner Type</span>
+                </div>
+            </div>
+
+            <!-- Filter Content (70%) -->
+            <div class="filter-content-wrapper">
+                <!-- Institution Content -->
+                <div class="filter-content" id="institution-content">
+                    <div class="filter-search">
+                        <input type="text" placeholder="Search institutions" onkeyup="filterOptions('institution')">
+                        <div class="selection-count">0 Institution selected</div>
+                    </div>
+                    <div class="options-list" id="institution-options">
+                        {% for institution in institutions %}
+                        <label class="option-item">
+                            <input type="checkbox" name="institution" value="{{ institution.id }}"
+                                   {% if institution.id in selected_institutions %}checked{% endif %}
+                                   onchange="updateSelectionCount('institution')">
+                            <span>{{ institution.name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Hospital Content -->
+                <div class="filter-content" id="hospital-content">
+                    <div class="filter-search">
+                        <input type="text" placeholder="Search hospitals" onkeyup="filterOptions('hospital')">
+                        <div class="selection-count">0 Hospital selected</div>
+                    </div>
+                    <div class="options-list" id="hospital-options">
+                        {% for hospital in hospitals %}
+                        <label class="option-item">
+                            <input type="checkbox" name="hospital" value="{{ hospital.id }}"
+                                   {% if hospital.id in selected_hospitals %}checked{% endif %}
+                                   onchange="updateSelectionCount('hospital')">
+                            <span>{{ hospital.name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Learner Type Content -->
+                <div class="filter-content" id="learner-type-content">
+                    <div class="filter-search">
+                        <input type="text" placeholder="Search learner types" onkeyup="filterOptions('learner-type')">
+                        <div class="selection-count">0 Type selected</div>
+                    </div>
+                    <div class="options-list" id="learner-type-options">
+                        <label class="option-item">
+                            <input type="checkbox" name="learner_type" value="student"
+                                   {% if 'student' in selected_learner_types %}checked{% endif %}
+                                   onchange="updateSelectionCount('learner-type')">
+                            <span>Student</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="learner_type" value="nurse"
+                                   {% if 'nurse' in selected_learner_types %}checked{% endif %}
+                                   onchange="updateSelectionCount('learner-type')">
+                            <span>Working Nurse</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Actions -->
+        <div class="filter-actions">
+            <button type="button" class="btn btn-light" onclick="toggleFilterPanel()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Apply filter</button>
+        </div>
+    </form>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Full Name</th>
+                <th>Email</th>
+                <th>Mobile</th>
+                <th>Type</th>
+                <th>Institution/Hospital</th>
+                <th>Course/Designation</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for learner in learners %}
+            <tr>
+                <td>
+                    <div class="institution">
+                        <span>{{ learner.learner_user.full_name }}</span>
+                    </div>
+                </td>
+                <td>{{ learner.learner_user.email }}</td>
+                <td>{{ learner.learner_user.phone_number }}</td>
+                <td>{{ learner.get_learner_type_display }}</td>
+                <td>
+                    {% if learner.learner_type == 'student' %}
+                        {{ learner.college.name|default:"-" }}
+                    {% else %}
+                        {{ learner.hospital.name|default:"-" }}
+                    {% endif %}
+                </td>
+                <td>
+                    {% if learner.learner_type == 'student' %}
+                        {{ learner.course|default:"-" }}
+                    {% else %}
+                        {{ learner.designation|default:"-" }}
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="badge {% if learner.is_active %}active{% else %}inactive{% endif %}">
+                        {{ learner.is_active|yesno:"Active,Inactive" }}
+                    </span>
+                </td>
+                <td>
+                    <div class="actions">
+                        <a href="{% url 'learner_edit' learner.pk %}" class="btn-icon">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        <button type="button" 
+                                class="btn-icon btn-danger" 
+                                data-name="{{ learner.full_name }}"
+                                data-url="{% url 'learner_delete' learner.pk %}"
+                                onclick="confirmDelete(this)"
+                                title="Delete">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="8" class="empty">
+                    <i class="fas fa-user-graduate"></i>
+                    <p>No learners found</p>
+                    <a href="{% url 'learner_create' %}" class="btn btn-add">
+                        <i class="fas fa-plus"></i>
+                        Add Learner
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if learners.has_other_pages %}
+<div class="pagination">
+    {% if learners.has_previous %}
+    <a href="?page={{ learners.previous_page_number }}" class="btn-page">
+        <i class="fas fa-chevron-left"></i>
+    </a>
+    {% endif %}
+
+    {% for num in learners.paginator.page_range %}
+    <a href="?page={{ num }}" class="btn-page {% if learners.number == num %}active{% endif %}">
+        {{ num }}
+    </a>
+    {% endfor %}
+
+    {% if learners.has_next %}
+    <a href="?page={{ learners.next_page_number }}" class="btn-page">
+        <i class="fas fa-chevron-right"></i>
+    </a>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Delete Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="deleteModalLabel">Confirm Delete</h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
+                <h5>Delete Learner</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
                 </button>
             </div>
             <div class="modal-body">
-                Are you sure you want to delete <span id="deleteItemName"></span>?
+                <p>Are you sure you want to delete <strong><span id="deleteItemName"></span></strong>?</p>
+                <p class="text-muted">This action cannot be undone.</p>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <form id="deleteForm" method="POST" style="display: inline;">
+                <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="POST">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-danger">Delete</button>
                 </form>
@@ -178,14 +253,1070 @@
     </div>
 </div>
 
+<!-- Bulk Upload Panel -->
+<div class="upload-panel" id="uploadPanel">
+    <div class="upload-header">
+        <h3>Bulk Upload Learners</h3>
+        <button type="button" class="btn-close" onclick="toggleUploadPanel()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <div class="upload-content">
+        <!-- Templates Section -->
+        <div class="upload-section">
+            <div class="section-header">
+                <i class="fas fa-file-download"></i>
+                <h4>Download Templates</h4>
+            </div>
+            <div class="template-buttons">
+                <a href="/media/excel_templates/learner_student_template.csv" class="template-card" download>
+                    <div class="template-icon">
+                        <i class="fas fa-graduation-cap"></i>
+                    </div>
+                    <div class="template-info">
+                        <h5>Student Template</h5>
+                        <p>For college students</p>
+                    </div>
+                    <i class="fas fa-download"></i>
+                </a>
+                <a href="/media/excel_templates/learner_nurse_template.csv" class="template-card" download>
+                    <div class="template-icon">
+                        <i class="fas fa-user-nurse"></i>
+                    </div>
+                    <div class="template-info">
+                        <h5>Nurse Template</h5>
+                        <p>For working nurses</p>
+                    </div>
+                    <i class="fas fa-download"></i>
+                </a>
+            </div>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <div class="section-header">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <h4>Upload CSV File</h4>
+            </div>
+            <form id="uploadForm" method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-placeholder">
+                        <div class="upload-icon">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                        </div>
+                        <h5>Drag and drop your CSV file here</h5>
+                        <p>or</p>
+                        <label class="btn btn-outline">
+                            Choose File
+                            <input type="file" id="fileInput" accept=".csv" hidden>
+                        </label>
+                        <p class="upload-hint">Supported format: CSV</p>
+                    </div>
+                    <div class="upload-preview" style="display: none;">
+                        <div class="file-info">
+                            <i class="fas fa-file-csv"></i>
+                            <span class="filename">No file selected</span>
+                        </div>
+                        <button type="button" class="btn-icon" onclick="removeFile()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Preview Section -->
+        <div class="upload-section">
+            <div class="section-header">
+                <i class="fas fa-table"></i>
+                <h4>Data Preview</h4>
+            </div>
+            <div class="preview-container">
+                <div class="preview-table">
+                    <div class="table-wrapper">
+                        <!-- Table will be dynamically populated -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Validation Section -->
+        <div class="upload-section">
+            <div class="section-header">
+                <i class="fas fa-check-circle"></i>
+                <h4>Validation Results</h4>
+            </div>
+            <div class="validation-results">
+                <!-- Results will be dynamically populated -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="upload-actions">
+        <button type="button" class="btn btn-light" onclick="toggleUploadPanel()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="submitUpload()">
+            <i class="fas fa-upload"></i>
+            Upload
+        </button>
+    </div>
+</div>
+
+<style>
+/* Basic Layout */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.header-left h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.header-left p {
+    margin: 4px 0 0;
+    color: #666;
+}
+
+.btn-primary {
+    background: #F16564;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+    text-decoration: none;
+}
+
+.btn-primary:hover,
+.btn-primary:active,
+.btn-primary:focus,
+.btn-primary:visited {
+    background: #e45857;
+    text-decoration: none;
+    color: white;
+    outline: none;
+    box-shadow: none;
+}
+
+.btn-success {
+    background: #48BB78;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+    text-decoration: none;
+}
+
+.btn-success:hover {
+    background: #38A169;
+    text-decoration: none;
+    color: white;
+}
+
+/* Filters */
+.filters {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 24px;
+}
+
+.filters .form-group {
+    margin-bottom: 0;
+}
+
+.filters label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5568;
+    margin-bottom: 4px;
+}
+
+.filters .form-control {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.filters .btn-block {
+    margin-top: 24px;
+}
+
+/* Table */
+.card {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table th {
+    background: #f8fafc;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5568;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.table td {
+    padding: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+/* Institution */
+.institution {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Status Badge */
+.badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.badge.active {
+    background: #c6f6d5;
+    color: #2f855a;
+}
+
+.badge.inactive {
+    background: #fed7d7;
+    color: #c53030;
+}
+
+/* Actions */
+.actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    background: #edf2f7;
+    color: #4a5568;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.btn-icon:hover {
+    background: #e2e8f0;
+    text-decoration: none;
+    color: #4a5568;
+}
+
+.btn-icon.btn-danger {
+    color: #c53030;
+    background: #fff5f5;
+}
+
+.btn-icon.btn-danger:hover {
+    background: #fed7d7;
+}
+
+/* Empty State */
+.empty {
+    text-align: center;
+    padding: 48px !important;
+}
+
+.empty i.fa-user-graduate {
+    font-size: 48px;
+    color: #a0aec0;
+    margin-bottom: 16px;
+}
+
+.empty p {
+    margin: 0 0 16px;
+    color: #4a5568;
+    font-size: 14px;
+}
+
+.empty .btn-add {
+    display: inline-flex;
+    margin: 0 auto;
+    padding: 8px 16px;
+    font-size: 14px;
+    width: fit-content;
+}
+
+/* Pagination */
+.pagination {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 24px;
+}
+
+.btn-page {
+    min-width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: #edf2f7;
+    color: #4a5568;
+    text-decoration: none;
+}
+
+.btn-page:hover {
+    background: #e2e8f0;
+    text-decoration: none;
+}
+
+.btn-page.active {
+    background: #1AA09A;
+    color: white;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .header-right {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .header-right .btn {
+        width: 100%;
+    }
+
+    .filters .row {
+        margin: 0;
+    }
+
+    .filters [class*="col-"] {
+        padding: 0;
+        margin-bottom: 16px;
+    }
+
+    .filters .btn-block {
+        margin-top: 0;
+    }
+
+    .card {
+        overflow-x: auto;
+    }
+
+    .table {
+        min-width: 800px;
+    }
+}
+
+/* Search and Filter Bar */
+.search-filter-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.search-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 16px;
+}
+
+.search-box input {
+    border: none;
+    outline: none;
+    width: 100%;
+    font-size: 14px;
+}
+
+.btn-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #4a5568;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-filter:hover {
+    background: #f7fafc;
+}
+
+/* Updated Filter Panel Styles */
+.filter-panel {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+}
+
+.filter-panel.active {
+    right: 0;
+}
+
+.filter-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.filter-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: #1a202c;
+}
+
+.filter-form {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 64px); /* Header height */
+}
+
+.filter-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Filter Types (30%) */
+.filter-types {
+    width: 30%;
+    background: #f8fafc;
+    border-right: 1px solid #e2e8f0;
+}
+
+.filter-type {
+    padding: 16px 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    color: #4a5568;
+}
+
+.filter-type:hover {
+    background: #f1f5f9;
+}
+
+.filter-type.active {
+    background: white;
+    color: #F16564;
+}
+
+.filter-type.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: #F16564;
+}
+
+/* Filter Content (70%) */
+.filter-content-wrapper {
+    width: 70%;
+    display: flex;
+    flex-direction: column;
+    background: white;
+}
+
+.filter-content {
+    display: none;
+    height: 100%;
+    flex-direction: column;
+}
+
+.filter-content.active {
+    display: flex;
+}
+
+.filter-search {
+    padding: 20px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.filter-search input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+    margin-bottom: 12px;
+}
+
+.filter-search input:focus {
+    outline: none;
+    border-color: #F16564;
+    box-shadow: 0 0 0 2px rgba(241, 101, 100, 0.1);
+}
+
+.selection-count {
+    font-size: 14px;
+    color: #4a5568;
+}
+
+.options-list {
+    padding: 16px 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    cursor: pointer;
+}
+
+.option-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #cbd5e0;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.option-item input[type="checkbox"]:checked {
+    background-color: #F16564;
+    border-color: #F16564;
+}
+
+.option-item span {
+    font-size: 14px;
+    color: #4a5568;
+}
+
+.filter-actions {
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    background: white;
+    margin-top: auto;
+}
+
+.btn-primary {
+    background: #F16564;
+    border: none;
+    padding: 8px 24px;
+    border-radius: 6px;
+    color: white;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.btn-primary:hover {
+    background: #e45857;
+}
+
+.btn-light {
+    background: #f1f5f9;
+    border: none;
+    padding: 8px 24px;
+    border-radius: 6px;
+    color: #4a5568;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.btn-light:hover {
+    background: #e2e8f0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .filter-panel {
+        width: 100%;
+        right: -100%;
+    }
+}
+
+/* Upload Panel */
+.upload-panel {
+    position: fixed;
+    top: 0;
+    right: -800px;
+    width: 800px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
+
+.upload-panel.active {
+    right: 0;
+}
+
+.upload-header {
+    padding: 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8fafc;
+}
+
+.upload-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: #1a202c;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.btn-close {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: none;
+    color: #64748b;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.btn-close:hover {
+    background: #e2e8f0;
+    color: #1a202c;
+}
+
+.upload-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+}
+
+.upload-section {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.section-header i {
+    font-size: 20px;
+    color: #F16564;
+}
+
+.section-header h4 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a202c;
+}
+
+.template-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+.template-card {
+    display: flex;
+    align-items: center;
+    padding: 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    text-decoration: none;
+    color: #1a202c;
+    transition: all 0.2s;
+}
+
+.template-card:hover {
+    border-color: #F16564;
+    background: #fff5f5;
+}
+
+.template-icon {
+    width: 40px;
+    height: 40px;
+    background: #F16564;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 20px;
+}
+
+.template-info {
+    flex: 1;
+    margin-left: 16px;
+}
+
+.template-info h5 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.template-info p {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: #64748b;
+}
+
+.template-card i.fa-download {
+    color: #64748b;
+    font-size: 16px;
+}
+
+.upload-zone {
+    border: 2px dashed #e2e8f0;
+    border-radius: 12px;
+    padding: 32px;
+    transition: all 0.2s;
+    background: #f8fafc;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.upload-zone.dragover {
+    border-color: #F16564;
+    background: #fff5f5;
+}
+
+.upload-placeholder {
+    color: #4a5568;
+    width: 100%;
+    text-align: center;
+}
+
+.upload-icon {
+    width: 64px;
+    height: 64px;
+    background: #F16564;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+}
+
+.upload-icon i {
+    font-size: 32px;
+    color: white;
+}
+
+.upload-placeholder h5 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a202c;
+}
+
+.upload-placeholder p {
+    margin: 8px 0;
+    color: #64748b;
+}
+
+.upload-hint {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 16px;
+}
+
+.btn-outline {
+    padding: 8px 24px;
+    border: 2px solid #F16564;
+    border-radius: 6px;
+    background: none;
+    color: #F16564;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: fit-content;
+    margin: 0 auto;
+    display: inline-block;
+}
+
+.btn-outline:hover {
+    background: #F16564;
+    color: white;
+}
+
+.upload-preview {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.file-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.file-info i {
+    font-size: 24px;
+    color: #F16564;
+}
+
+.filename {
+    font-size: 14px;
+    color: #1a202c;
+}
+
+.preview-container {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.table-wrapper {
+    overflow-x: auto;
+    max-height: 300px;
+}
+
+.table-wrapper table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table-wrapper th {
+    background: #f8fafc;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5568;
+    position: sticky;
+    top: 0;
+}
+
+.table-wrapper td {
+    padding: 12px 16px;
+    border-top: 1px solid #e2e8f0;
+    font-size: 14px;
+}
+
+.validation-results {
+    padding: 16px;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.alert {
+    padding: 16px;
+    border-radius: 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.alert-danger {
+    background: #fff5f5;
+    color: #c53030;
+}
+
+.alert-success {
+    background: #f0fff4;
+    color: #2f855a;
+}
+
+.alert i {
+    font-size: 20px;
+}
+
+.alert ul {
+    margin: 8px 0 0;
+    padding-left: 20px;
+}
+
+.upload-actions {
+    padding: 20px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    background: white;
+}
+
+.btn {
+    padding: 8px 24px;
+    border-radius: 6px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    background: #F16564;
+    border: none;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #e45857;
+}
+
+.btn-light {
+    background: #f1f5f9;
+    border: none;
+    color: #4a5568;
+}
+
+.btn-light:hover {
+    background: #e2e8f0;
+}
+
+@media (max-width: 992px) {
+    .upload-panel {
+        width: 100%;
+        right: -100%;
+    }
+    
+    .template-buttons {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Header Buttons */
+.header-right {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.btn-outline-upload {
+    padding: 8px 16px;
+    border: 1px solid #E2E8F0;
+    background: white;
+    color: #4A5568;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-outline-upload:hover {
+    border-color: #CBD5E0;
+    background: #F7FAFC;
+}
+
+.btn-outline-upload i {
+    color: #4A5568;
+}
+
+.btn-add {
+    padding: 8px 16px;
+    background: #F16564;
+    border: none;
+    color: white;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    text-decoration: none;
+}
+
+.btn-add:hover {
+    background: #e45857;
+    color: white;
+    text-decoration: none;
+}
+</style>
+
 <script>
-function confirmDelete(name, url) {
+function confirmDelete(button) {
+    const name = button.dataset.name;
+    const url = button.dataset.url;
     document.getElementById('deleteItemName').textContent = name;
     document.getElementById('deleteForm').action = url;
     $('#deleteModal').modal('show');
 }
 
-// Add any additional JavaScript for dynamic behavior here
 document.addEventListener('DOMContentLoaded', function() {
     const learnerTypeSelect = document.getElementById('learner_type');
     const institutionSelect = document.getElementById('institution');
@@ -205,35 +1336,271 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     learnerTypeSelect.addEventListener('change', toggleInstitutionHospitalFields);
-    toggleInstitutionHospitalFields(); // Initial state
+    toggleInstitutionHospitalFields();
 });
+
+function toggleFilterPanel() {
+    const panel = document.getElementById('filterPanel');
+    const overlay = document.querySelector('.overlay');
+    panel.classList.toggle('active');
+    
+    if (panel.classList.contains('active')) {
+        document.body.style.overflow = 'hidden';
+        if (!overlay) {
+            const newOverlay = document.createElement('div');
+            newOverlay.className = 'overlay';
+            newOverlay.onclick = toggleFilterPanel;
+            document.body.appendChild(newOverlay);
+        }
+        setTimeout(() => {
+            document.querySelector('.overlay').classList.add('active');
+        }, 10);
+    } else {
+        document.body.style.overflow = '';
+        const overlay = document.querySelector('.overlay');
+        if (overlay) {
+            overlay.classList.remove('active');
+            setTimeout(() => {
+                overlay.remove();
+            }, 300);
+        }
+    }
+}
+
+function clearFilters() {
+    const form = document.querySelector('.filter-form');
+    form.reset();
+    document.querySelectorAll('.selection-count').forEach(counter => {
+        counter.textContent = '0 selected';
+    });
+    toggleFilterPanel();
+}
+
+function switchFilter(filterType) {
+    // Remove active class from all filter types and contents
+    document.querySelectorAll('.filter-type').forEach(type => type.classList.remove('active'));
+    document.querySelectorAll('.filter-content').forEach(content => content.classList.remove('active'));
+    
+    // Add active class to selected filter type and content
+    document.querySelector(`[data-filter="${filterType}"]`).classList.add('active');
+    document.getElementById(`${filterType}-content`).classList.add('active');
+}
+
+// Initialize the first filter as active
+document.addEventListener('DOMContentLoaded', function() {
+    switchFilter('institution');
+    
+    // Initialize selection counts
+    ['institution', 'hospital', 'learner-type'].forEach(category => {
+        updateSelectionCount(category);
+    });
+});
+
+function filterOptions(category) {
+    const searchInput = document.querySelector(`#${category}-content .filter-search input`);
+    const searchTerm = searchInput.value.toLowerCase();
+    const options = document.querySelectorAll(`#${category}-options .option-item`);
+    
+    options.forEach(option => {
+        const text = option.querySelector('span').textContent.toLowerCase();
+        option.style.display = text.includes(searchTerm) ? '' : 'none';
+    });
+}
+
+function updateSelectionCount(category) {
+    const checkboxes = document.querySelectorAll(`#${category}-options input[type="checkbox"]:checked`);
+    const countElement = document.querySelector(`#${category}-content .selection-count`);
+    const count = checkboxes.length;
+    const label = category === 'learner-type' ? 'Type' : category.charAt(0).toUpperCase() + category.slice(1);
+    countElement.textContent = `${count} ${label} selected`;
+}
+
+function toggleUploadPanel() {
+    const panel = document.getElementById('uploadPanel');
+    const overlay = document.querySelector('.overlay');
+    panel.classList.toggle('active');
+    
+    if (panel.classList.contains('active')) {
+        document.body.style.overflow = 'hidden';
+        if (!overlay) {
+            const newOverlay = document.createElement('div');
+            newOverlay.className = 'overlay';
+            newOverlay.onclick = toggleUploadPanel;
+            document.body.appendChild(newOverlay);
+        }
+        setTimeout(() => {
+            document.querySelector('.overlay').classList.add('active');
+        }, 10);
+    } else {
+        document.body.style.overflow = '';
+        const overlay = document.querySelector('.overlay');
+        if (overlay) {
+            overlay.classList.remove('active');
+            setTimeout(() => {
+                overlay.remove();
+            }, 300);
+        }
+    }
+}
+
+// File Upload Handling
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+
+uploadZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadZone.classList.add('dragover');
+});
+
+uploadZone.addEventListener('dragleave', () => {
+    uploadZone.classList.remove('dragover');
+});
+
+uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadZone.classList.remove('dragover');
+    handleFiles(e.dataTransfer.files);
+});
+
+fileInput.addEventListener('change', (e) => {
+    handleFiles(e.target.files);
+});
+
+function handleFiles(files) {
+    if (files.length > 0) {
+        const file = files[0];
+        if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
+            showFilePreview(file);
+            validateAndPreviewCSV(file);
+        } else {
+            alert('Please upload a CSV file');
+        }
+    }
+}
+
+function showFilePreview(file) {
+    const placeholder = uploadZone.querySelector('.upload-placeholder');
+    const preview = uploadZone.querySelector('.upload-preview');
+    const filename = preview.querySelector('.filename');
+    
+    placeholder.style.display = 'none';
+    preview.style.display = 'flex';
+    filename.textContent = file.name;
+}
+
+function removeFile() {
+    const placeholder = uploadZone.querySelector('.upload-placeholder');
+    const preview = uploadZone.querySelector('.upload-preview');
+    fileInput.value = '';
+    
+    placeholder.style.display = 'block';
+    preview.style.display = 'none';
+    
+    // Clear preview and validation
+    document.querySelector('.table-wrapper').innerHTML = '';
+    document.querySelector('.validation-results').innerHTML = '';
+}
+
+function validateAndPreviewCSV(file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text = e.target.result;
+        const lines = text.split('\n');
+        if (lines.length > 0) {
+            const headers = lines[0].split(',');
+            createPreviewTable(headers, lines.slice(1, 6)); // Show first 5 rows
+            validateHeaders(headers);
+        }
+    };
+    reader.readAsText(file);
+}
+
+function createPreviewTable(headers, rows) {
+    const tableWrapper = document.querySelector('.table-wrapper');
+    let html = '<table class="table"><thead><tr>';
+    
+    // Add headers
+    headers.forEach(header => {
+        html += `<th>${header.trim()}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+    
+    // Add rows
+    rows.forEach(row => {
+        const cells = row.split(',');
+        html += '<tr>';
+        cells.forEach(cell => {
+            html += `<td>${cell.trim()}</td>`;
+        });
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table>';
+    tableWrapper.innerHTML = html;
+}
+
+function validateHeaders(headers) {
+    const requiredHeaders = [
+        'Onboarding Type', 'Full Name', 'Email', 'Mobile Number',
+        'Learner Type', 'College/Hospital', 'Course/Designation'
+    ];
+    
+    const validationResults = document.querySelector('.validation-results');
+    const missing = requiredHeaders.filter(h => !headers.includes(h));
+    
+    if (missing.length > 0) {
+        validationResults.innerHTML = `
+            <div class="alert alert-danger">
+                <strong>Missing required columns:</strong>
+                <ul>
+                    ${missing.map(h => `<li>${h}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    } else {
+        validationResults.innerHTML = `
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i>
+                File structure validated successfully
+            </div>
+        `;
+    }
+}
+
+function submitUpload() {
+    const form = document.getElementById('uploadForm');
+    const formData = new FormData(form);
+    
+    // Add loading state
+    const uploadButton = document.querySelector('.upload-actions .btn-primary');
+    const originalText = uploadButton.innerHTML;
+    uploadButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+    uploadButton.disabled = true;
+    
+    fetch('/upload-learners/', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Upload successful!');
+            toggleUploadPanel();
+            location.reload(); // Refresh the page to show new data
+        } else {
+            alert('Upload failed: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Upload failed: ' + error);
+    })
+    .finally(() => {
+        uploadButton.innerHTML = originalText;
+        uploadButton.disabled = false;
+    });
+}
 </script>
-
-<style>
-.badge {
-    padding: 0.5em 0.75em;
-    font-size: 0.85em;
-}
-
-.btn-group .btn {
-    margin: 0 2px;
-}
-
-.table th {
-    background-color: #f8f9fa;
-    border-top: none;
-}
-
-.card {
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-}
-
-.pagination {
-    margin-bottom: 0;
-}
-
-.form-group {
-    margin-bottom: 1rem;
-}
-</style>
 {% endblock %} 

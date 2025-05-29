@@ -21,10 +21,35 @@ from django.urls import reverse
 @login_required
 def group_list(request):
     groups = Group.objects.all().order_by('-created_at')
+    
+    # Get filter values as lists
+    selected_groups = request.GET.getlist('group')
+    selected_types = request.GET.getlist('type')
+    selected_statuses = request.GET.getlist('status')
+    
+    # Apply filters
+    if selected_groups:
+        groups = groups.filter(id__in=selected_groups)
+    if selected_types:
+        groups = groups.filter(type__in=selected_types)
+    if selected_statuses:
+        active_status = [status.lower() == 'active' for status in selected_statuses]
+        groups = groups.filter(is_active__in=active_status)
+    
+    # Convert selected IDs to integers for template comparison
+    selected_groups = [int(x) for x in selected_groups] if selected_groups else []
+    
     paginator = Paginator(groups, 10)
     page = request.GET.get('page')
     groups = paginator.get_page(page)
-    return render(request, 'assessments/onboarding/group_list.html', {'groups': groups})
+    
+    return render(request, 'assessments/onboarding/group_list.html', {
+        'groups': groups,
+        'all_groups': Group.objects.all(),
+        'selected_groups': selected_groups,
+        'selected_types': selected_types,
+        'selected_statuses': selected_statuses,
+    })
 
 @login_required
 def group_create(request):
@@ -158,10 +183,45 @@ def group_delete(request, pk):
 @login_required
 def institution_list(request):
     institutions = Institution.objects.all().order_by('-created_at')
+    
+    # Get filter values as lists
+    selected_groups = request.GET.getlist('group')
+    selected_institutions = request.GET.getlist('institution')
+    selected_states = request.GET.getlist('state')
+    selected_statuses = request.GET.getlist('status')
+    
+    # Apply filters
+    if selected_groups:
+        institutions = institutions.filter(group_id__in=selected_groups)
+    if selected_institutions:
+        institutions = institutions.filter(id__in=selected_institutions)
+    if selected_states:
+        institutions = institutions.filter(state__in=selected_states)
+    if selected_statuses:
+        active_status = [status.lower() == 'active' for status in selected_statuses]
+        institutions = institutions.filter(is_active__in=active_status)
+    
+    # Convert selected IDs to integers for template comparison
+    selected_groups = [int(x) for x in selected_groups] if selected_groups else []
+    selected_institutions = [int(x) for x in selected_institutions] if selected_institutions else []
+    
     paginator = Paginator(institutions, 10)
     page = request.GET.get('page')
     institutions = paginator.get_page(page)
-    return render(request, 'assessments/onboarding/institution_list.html', {'institutions': institutions})
+    
+    # Get unique states for filter
+    all_states = Institution.objects.values_list('state', flat=True).distinct()
+    
+    return render(request, 'assessments/onboarding/institution_list.html', {
+        'institutions': institutions,
+        'groups': Group.objects.all(),
+        'all_institutions': Institution.objects.all(),
+        'all_states': all_states,
+        'selected_groups': selected_groups,
+        'selected_institutions': selected_institutions,
+        'selected_states': selected_states,
+        'selected_statuses': selected_statuses,
+    })
 
 @login_required
 def institution_create(request):
@@ -286,10 +346,45 @@ def institution_delete(request, pk):
 @login_required
 def hospital_list(request):
     hospitals = Hospital.objects.all().order_by('-created_at')
+    
+    # Get filter values as lists
+    selected_groups = request.GET.getlist('group')
+    selected_hospitals = request.GET.getlist('hospital')
+    selected_states = request.GET.getlist('state')
+    selected_statuses = request.GET.getlist('status')
+    
+    # Apply filters
+    if selected_groups:
+        hospitals = hospitals.filter(group_id__in=selected_groups)
+    if selected_hospitals:
+        hospitals = hospitals.filter(id__in=selected_hospitals)
+    if selected_states:
+        hospitals = hospitals.filter(state__in=selected_states)
+    if selected_statuses:
+        active_status = [status.lower() == 'active' for status in selected_statuses]
+        hospitals = hospitals.filter(is_active__in=active_status)
+    
+    # Convert selected IDs to integers for template comparison
+    selected_groups = [int(x) for x in selected_groups] if selected_groups else []
+    selected_hospitals = [int(x) for x in selected_hospitals] if selected_hospitals else []
+    
     paginator = Paginator(hospitals, 10)
     page = request.GET.get('page')
     hospitals = paginator.get_page(page)
-    return render(request, 'assessments/onboarding/hospital_list.html', {'hospitals': hospitals})
+    
+    # Get unique states for filter
+    all_states = Hospital.objects.values_list('state', flat=True).distinct()
+    
+    return render(request, 'assessments/onboarding/hospital_list.html', {
+        'hospitals': hospitals,
+        'groups': Group.objects.all(),
+        'all_hospitals': Hospital.objects.all(),
+        'all_states': all_states,
+        'selected_groups': selected_groups,
+        'selected_hospitals': selected_hospitals,
+        'selected_states': selected_states,
+        'selected_statuses': selected_statuses,
+    })
 
 @login_required
 def hospital_create(request):
@@ -414,17 +509,22 @@ def hospital_delete(request, pk):
 def learner_list(request):
     learners = Learner.objects.all().order_by('-created_at')
     
-    # Filtering
-    institution = request.GET.get('institution')
-    hospital = request.GET.get('hospital')
-    learner_type = request.GET.get('learner_type')
+    # Get filter values as lists
+    selected_institutions = request.GET.getlist('institution')
+    selected_hospitals = request.GET.getlist('hospital')
+    selected_learner_types = request.GET.getlist('learner_type')
     
-    if institution:
-        learners = learners.filter(college__name=institution)
-    if hospital:
-        learners = learners.filter(hospital__name=hospital)
-    if learner_type:
-        learners = learners.filter(learner_type=learner_type)
+    # Apply filters
+    if selected_institutions:
+        learners = learners.filter(college_id__in=selected_institutions)
+    if selected_hospitals:
+        learners = learners.filter(hospital_id__in=selected_hospitals)
+    if selected_learner_types:
+        learners = learners.filter(learner_type__in=selected_learner_types)
+    
+    # Convert selected IDs to integers for template comparison
+    selected_institutions = [int(x) for x in selected_institutions] if selected_institutions else []
+    selected_hospitals = [int(x) for x in selected_hospitals] if selected_hospitals else []
     
     paginator = Paginator(learners, 10)
     page = request.GET.get('page')
@@ -434,6 +534,9 @@ def learner_list(request):
         'learners': learners,
         'institutions': Institution.objects.all(),
         'hospitals': Hospital.objects.all(),
+        'selected_institutions': selected_institutions,
+        'selected_hospitals': selected_hospitals,
+        'selected_learner_types': selected_learner_types,
     })
 
 @login_required
@@ -594,10 +697,31 @@ def learner_delete(request, pk):
 @login_required
 def assessor_list(request):
     assessors = Assessor.objects.all().order_by('-created_at')
+    
+    # Get filter values as lists
+    selected_specialities = request.GET.getlist('speciality')
+    selected_statuses = request.GET.getlist('status')
+    
+    # Apply filters
+    if selected_specialities:
+        assessors = assessors.filter(specialization__in=selected_specialities)
+    if selected_statuses:
+        active_status = [status.lower() == 'active' for status in selected_statuses]
+        assessors = assessors.filter(is_active__in=active_status)
+    
     paginator = Paginator(assessors, 10)
     page = request.GET.get('page')
     assessors = paginator.get_page(page)
-    return render(request, 'assessments/onboarding/assessor_list.html', {'assessors': assessors})
+    
+    # Get unique specialities for filter
+    all_specialities = Assessor.objects.values_list('specialization', flat=True).distinct()
+    
+    return render(request, 'assessments/onboarding/assessor_list.html', {
+        'assessors': assessors,
+        'all_specialities': all_specialities,
+        'selected_specialities': selected_specialities,
+        'selected_statuses': selected_statuses,
+    })
 
 @login_required
 def assessor_create(request):
