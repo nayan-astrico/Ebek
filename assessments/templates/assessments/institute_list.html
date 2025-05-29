@@ -3,150 +3,494 @@
 {% block title %}Institutes{% endblock %}
 
 {% block content %}
-<div>
-    <!-- Button to open modal -->
-    <button class="btn-assign-assessment" id="createInstituteBtn">Create Institute</button>
+<div class="page-container">
+    <div class="content-header">
+        <div class="header-title">
+            <h1>Institutes</h1>
+            <p class="text-muted">Manage your educational institutes</p>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-primary" id="createInstituteBtn">
+                <i class="fas fa-plus"></i>
+                <span>Add Institute</span>
+            </button>
+        </div>
+    </div>
 
-    <!-- Search Form -->
-    <div>
-        <!-- Search Bar and Filter -->
-        <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
-            <div>
+    <div class="content-body">
+        <!-- Search Bar -->
+        <div class="search-container">
+            <div class="search-box">
+                <i class="fas fa-search search-icon"></i>
                 <input type="text" 
                        id="searchInput" 
-                       placeholder="Search Institutes" 
-                       value="{{ query }}" 
-                       style="padding: 8px; width: 300px; border: 1px solid #ddd; border-radius: 5px;">
-                <button onclick="applyFilter()" style="background-color: #f7a82d; color: white; border: none; padding: 8px 16px; border-radius: 5px;">
+                       class="search-input"
+                       placeholder="Search institutes..." 
+                       value="{{ query }}">
+                <button onclick="applyFilter()" class="btn btn-search">
                     Search
                 </button>
             </div>
         </div>
 
         <!-- Institutes Table -->
-        <table style="width: 100%; border-collapse: collapse;">
+        <div class="table-container">
+            <table class="table">
             <thead>
-                <tr style="background-color: #f9f9f9; border-bottom: 2px solid #ddd;">
-                    <th style="padding: 10px;">Institute Name</th>
-                    <th style="padding: 10px;">Actions</th>
+                    <tr>
+                        <th>Institute Name</th>
+                        <th>Status</th>
+                        <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for institute in page_obj %}
-                    <tr style="border-bottom: 1px solid #eee;">
-                        <td style="padding: 10px;">{{ institute.name }}</td>
-                        <td style="padding: 10px;">
+                        <tr>
+                            <td>
+                                <div class="institute-info">
+                                    <div class="institute-icon">
+                                        {{ institute.name|first|upper }}
+                                    </div>
+                                    <div class="institute-details">
+                                        <span class="institute-name">{{ institute.name }}</span>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="status-badge {% if institute.is_active %}active{% else %}inactive{% endif %}">
+                                    {% if institute.is_active %}Active{% else %}Inactive{% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="action-buttons">
                             <button onclick="editInstitute('{{ institute.id }}', '{{ institute.name }}')" 
-                                    style="border: none; background: none; cursor: pointer;">
-                                <i class="fas fa-edit" style="color: #666;"></i>
+                                            class="btn btn-icon" 
+                                            title="Edit">
+                                        <i class="fas fa-edit"></i>
                             </button>
+                                </div>
                         </td>
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="2" style="text-align: center; padding: 20px; color: #999;">No institutes found</td>
+                            <td colspan="3" class="empty-state">
+                                <div class="empty-state-content">
+                                    <i class="fas fa-school"></i>
+                                    <p>No institutes found</p>
+                                    <button class="btn btn-primary btn-sm" id="createInstituteEmptyBtn">
+                                        Add Institute
+                                    </button>
+                                </div>
+                            </td>
                     </tr>
                 {% endfor %}
             </tbody>
         </table>
+        </div>
 
         <!-- Pagination -->
-        <div style="text-align: right; margin-top: 20px;">
             {% if page_obj.paginator.num_pages > 1 %}
-                <span>
+        <div class="pagination-container">
+            <div class="pagination">
                     {% if page_obj.has_previous %}
                         <a href="?page={{ page_obj.previous_page_number }}&query={{ query }}" 
-                           style="color: #f7a82d; text-decoration: none; margin-right: 10px;">Previous</a>
+                       class="pagination-btn">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
                     {% endif %}
                     
                     {% for page in page_obj.paginator.page_range %}
                         <a href="?page={{ page }}&query={{ query }}" 
-                           style="color: #f7a82d; text-decoration: none; margin: 0 5px;">{{ page }}</a>
+                       class="pagination-btn {% if page == page_obj.number %}active{% endif %}">
+                        {{ page }}
+                    </a>
                     {% endfor %}
                     
                     {% if page_obj.has_next %}
                         <a href="?page={{ page_obj.next_page_number }}&query={{ query }}" 
-                           style="color: #f7a82d; text-decoration: none; margin-left: 10px;">Next</a>
+                       class="pagination-btn">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
                     {% endif %}
-                </span>
+            </div>
+        </div>
             {% endif %}
         </div>
     </div>
 
-    <!-- Modal for Create/Edit Institute -->
-    <div class="modal fade" id="createInstituteModal" tabindex="-1" role="dialog" aria-labelledby="createInstituteLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered" role="document">
-            <div class="modal-content" style="border-radius: 10px; background-color: white; border: none; width: 450px;">
-                <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
-                    <h5 class="modal-title" id="modalTitle" style="font-weight: bold; color: #333;">Create Institute</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="outline: none;">
+<!-- Modal -->
+<div class="modal fade" id="createInstituteModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Create Institute</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
-                <div class="modal-body" style="padding: 20px;">
+            <div class="modal-body">
                     <form id="createInstituteForm">
                         <input type="hidden" id="instituteId" name="instituteId">
                         <div class="form-group">
-                            <label for="instituteName" style="font-size: 14px; color: #666; font-weight: bold; margin-bottom: 5px;">Institute Name</label>
+                        <label for="instituteName">Institute Name</label>
                             <input type="text" 
                                    id="instituteName" 
                                    name="instituteName" 
-                                   required
-                                   style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                               class="form-control"
+                               required>
                         </div>
-                        <button type="submit" style="background-color: #f7a82d; color: white; border: none; width: 100%; height: 45px; border-radius: 5px; font-weight: bold; margin-top: 20px;">
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary btn-block">
                             <span id="submitButtonText">Create</span>
-                            <span class="spinner-border spinner-border-sm" style="display: none;" role="status" aria-hidden="true"></span>
+                            <span class="spinner-border spinner-border-sm" role="status"></span>
                         </button>
+                    </div>
                     </form>
-                </div>
             </div>
         </div>
     </div>
 </div>
 
 <style>
-    .btn-assign-assessment {
-        background-color: #f7a82d;
+/* Page Layout */
+.page-container {
+    padding: 24px;
+    transition: all 0.3s ease;
+}
+
+/* Header Section */
+.content-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.header-title h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #2D3748;
+    margin: 0;
+}
+
+.header-title p {
+    font-size: 0.875rem;
+    margin: 4px 0 0 0;
+}
+
+/* Search Box */
+.search-container {
+    margin-bottom: 24px;
+}
+
+.search-box {
+    display: flex;
+    align-items: center;
+    max-width: 600px;
+    background: #fff;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 8px 16px;
+}
+
+.search-icon {
+    color: #A0AEC0;
+    margin-right: 12px;
+}
+
+.search-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 0.875rem;
+    padding: 8px 0;
+}
+
+.btn-search {
+    background: #1AA09A;
         color: white;
         border: none;
         padding: 8px 16px;
-        border-radius: 5px;
-        cursor: pointer;
-        margin-bottom: 20px;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+/* Table Styles */
+.table-container {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+.table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.table th {
+    background: #F7FAFC;
+    color: #4A5568;
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-align: left;
+    padding: 16px;
+    border-bottom: 1px solid #E2E8F0;
+}
+
+.table td {
+    padding: 16px;
+    font-size: 0.875rem;
+    color: #2D3748;
+    border-bottom: 1px solid #E2E8F0;
     }
 
-    .btn-assign-assessment:hover {
-        background-color: #d68a25;
+.table tr:last-child td {
+    border-bottom: none;
+}
+
+/* Institute Info */
+.institute-info {
+    display: flex;
+    align-items: center;
+}
+
+.institute-icon {
+    width: 40px;
+    height: 40px;
+    background: #1AA09A;
+    color: white;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    margin-right: 12px;
+}
+
+.institute-name {
+    font-weight: 500;
+}
+
+/* Status Badge */
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.status-badge.active {
+    background: #C6F6D5;
+    color: #2F855A;
+}
+
+.status-badge.inactive {
+    background: #FED7D7;
+    color: #C53030;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    color: #4A5568;
+    background: #EDF2F7;
+    border: none;
+    transition: all 0.2s;
     }
 
-    .form-group {
-        margin-bottom: 20px;
+.btn-icon:hover {
+    background: #E2E8F0;
+    color: #2D3748;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 48px !important;
+}
+
+.empty-state-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
     }
 
-    .modal-dialog {
-        max-width: 500px;
+.empty-state-content i {
+    font-size: 2rem;
+    color: #A0AEC0;
+}
+
+.empty-state-content p {
+    color: #4A5568;
+    margin: 0;
+}
+
+/* Pagination */
+.pagination-container {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 24px;
+}
+
+.pagination {
+    display: flex;
+    gap: 4px;
+}
+
+.pagination-btn {
+    min-width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    color: #4A5568;
+    background: #EDF2F7;
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: all 0.2s;
     }
 
-    .spinner-border {
-        width: 1rem;
-        height: 1rem;
-        margin-left: 8px;
+.pagination-btn:hover {
+    background: #E2E8F0;
+    color: #2D3748;
+    text-decoration: none;
+}
+
+.pagination-btn.active {
+    background: #1AA09A;
+    color: white;
+}
+
+/* Modal Styles */
+.modal-content {
+    border: none;
+    border-radius: 12px;
+}
+
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #E2E8F0;
+}
+
+.modal-title {
+    font-weight: 600;
+    color: #2D3748;
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+.form-group label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #4A5568;
+    margin-bottom: 8px;
+}
+
+.form-control {
+    border: 1px solid #E2E8F0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.875rem;
+}
+
+.form-control:focus {
+    border-color: #1AA09A;
+    box-shadow: 0 0 0 2px rgba(26,160,154,0.1);
+}
+
+.form-actions {
+    margin-top: 24px;
     }
 
-    /* Add any additional styles from assign_assessment.html that you want to maintain */
+/* Buttons */
+.btn {
+    font-weight: 500;
+    font-size: 0.875rem;
+    padding: 8px 16px;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    background: #1AA09A;
+    border-color: #1AA09A;
+}
+
+.btn-primary:hover {
+    background: #158F89;
+    border-color: #158F89;
+}
+
+/* Spinner */
+.spinner-border {
+    display: none;
+    margin-left: 8px;
+    width: 1rem;
+    height: 1rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .page-container {
+        padding: 16px;
+    }
+
+    .content-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .search-box {
+        flex-direction: column;
+        gap: 12px;
+        padding: 12px;
+    }
+
+    .btn-search {
+        width: 100%;
+    }
+
+    .table th:not(:first-child),
+    .table td:not(:first-child) {
+        display: none;
+    }
+
+    .institute-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+}
 </style>
 
 <script>
-    // Keep existing JavaScript, just update the modal initialization to use Bootstrap's modal
     $(document).ready(function() {
-        // Initialize Bootstrap modal
+    // Initialize modal
         $('#createInstituteModal').modal({
             show: false
         });
 
-        // Update create button click handler
-        $('#createInstituteBtn').click(function() {
+    // Create button click handler
+    $('#createInstituteBtn, #createInstituteEmptyBtn').click(function() {
             $('#modalTitle').text('Create Institute');
             $('#submitButtonText').text('Create');
             $('#createInstituteForm').trigger('reset');
@@ -154,8 +498,7 @@
             $('#createInstituteModal').modal('show');
         });
 
-        // Keep the rest of your existing JavaScript...
-        // Form submission code remains the same
+    // Form submission
         $('#createInstituteForm').on('submit', function(e) {
             e.preventDefault();
             
@@ -180,7 +523,7 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    alert(data.message);
+                $('#createInstituteModal').modal('hide');
                     window.location.reload();
                 } else {
                     alert(data.error || 'Failed to process institute');
@@ -205,8 +548,15 @@
     }
 
     function applyFilter() {
-        const query = $('#searchInput').val();
-        window.location.href = `?query=${query}`;
+    const query = $('#searchInput').val().trim();
+    window.location.href = `?query=${encodeURIComponent(query)}`;
     }
+
+// Handle search on enter key
+$('#searchInput').on('keypress', function(e) {
+    if (e.which === 13) {
+        applyFilter();
+    }
+});
 </script>
 {% endblock %} 

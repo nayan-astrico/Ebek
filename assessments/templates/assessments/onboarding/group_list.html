@@ -1,18 +1,136 @@
 {% extends 'assessments/base.html' %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Groups</h2>
+<!-- Header -->
+<div class="header">
+    <div class="header-left">
+        <h1>Groups</h1>
+        <p class="text-muted">Manage your institution and hospital groups</p>
+    </div>
+    <div class="header-right">
         <a href="{% url 'group_create' %}" class="btn btn-primary">
-            <i class="fas fa-plus"></i> Add New Group
+            <i class="fas fa-plus"></i>
+            Add Group
         </a>
     </div>
+</div>
 
+<!-- Search and Filter Bar -->
+<div class="search-filter-bar">
+    <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" placeholder="Search groups...">
+    </div>
+    <button class="btn-filter" onclick="toggleFilterPanel()">
+        <i class="fas fa-filter"></i>
+        Filters
+    </button>
+</div>
+
+<!-- Filter Side Panel -->
+<div class="filter-panel" id="filterPanel">
+    <div class="filter-header">
+        <h3>Filter Groups</h3>
+    </div>
+    
+    <form method="get" class="filter-form">
+        <div class="filter-layout">
+            <!-- Main Filter Types (30%) -->
+            <div class="filter-types">
+                <div class="filter-type {% if active_filter == 'group' %}active{% endif %}" 
+                     data-filter="group" 
+                     onclick="switchFilter('group')">
+                    <span>Group</span>
+                </div>
+                <div class="filter-type {% if active_filter == 'type' %}active{% endif %}" 
+                     data-filter="type" 
+                     onclick="switchFilter('type')">
+                    <span>Type</span>
+                </div>
+                <div class="filter-type {% if active_filter == 'status' %}active{% endif %}" 
+                     data-filter="status" 
+                     onclick="switchFilter('status')">
+                    <span>Status</span>
+                </div>
+            </div>
+
+            <!-- Filter Content (70%) -->
+            <div class="filter-content-wrapper">
+                <!-- Group Content -->
+                <div class="filter-content" id="group-content">
+                    <div class="filter-search">
+                        <input type="text" placeholder="Search groups" onkeyup="filterOptions('group')">
+                        <div class="selection-count">0 Group selected</div>
+                    </div>
+                    <div class="options-list" id="group-options">
+                        {% for group in all_groups %}
+                        <label class="option-item">
+                            <input type="checkbox" name="group" value="{{ group.id }}"
+                                   {% if group.id in selected_groups %}checked{% endif %}
+                                   onchange="updateSelectionCount('group')">
+                            <span>{{ group.name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Type Content -->
+                <div class="filter-content" id="type-content">
+                    <div class="filter-search">
+                        <input type="text" placeholder="Search types" onkeyup="filterOptions('type')">
+                        <div class="selection-count">0 Type selected</div>
+                    </div>
+                    <div class="options-list" id="type-options">
+                        <label class="option-item">
+                            <input type="checkbox" name="type" value="institution"
+                                   {% if 'institution' in selected_types %}checked{% endif %}
+                                   onchange="updateSelectionCount('type')">
+                            <span>Institution</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="type" value="hospital"
+                                   {% if 'hospital' in selected_types %}checked{% endif %}
+                                   onchange="updateSelectionCount('type')">
+                            <span>Hospital</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Status Content -->
+                <div class="filter-content" id="status-content">
+                    <div class="filter-search">
+                        <input type="text" placeholder="Search status" onkeyup="filterOptions('status')">
+                        <div class="selection-count">0 Status selected</div>
+                    </div>
+                    <div class="options-list" id="status-options">
+                        <label class="option-item">
+                            <input type="checkbox" name="status" value="active"
+                                   {% if 'active' in selected_statuses %}checked{% endif %}
+                                   onchange="updateSelectionCount('status')">
+                            <span>Active</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="status" value="inactive"
+                                   {% if 'inactive' in selected_statuses %}checked{% endif %}
+                                   onchange="updateSelectionCount('status')">
+                            <span>Inactive</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Actions -->
+        <div class="filter-actions">
+            <button type="button" class="btn btn-light" onclick="toggleFilterPanel()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Apply filter</button>
+        </div>
+    </form>
+</div>
+
+<!-- Table -->
     <div class="card">
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
+    <table class="table">
                     <thead>
                         <tr>
                             <th>Group Name</th>
@@ -27,7 +145,11 @@
                     <tbody>
                         {% for group in groups %}
                         <tr>
-                            <td>{{ group.name }}</td>
+                <td>
+                    <div class="institution">
+                        <span>{{ group.name }}</span>
+                    </div>
+                </td>
                             <td>{{ group.get_type_display }}</td>
                             <td>
                                 {% if group.type == 'institution' %}
@@ -36,20 +158,31 @@
                                     {{ group.hospital_set.count }}
                                 {% endif %}
                             </td>
-                            <td>{{ group.group_head.get_full_name|default:"Not Assigned" }}</td>
+                <td>
+                    <div class="unit-head">
+                        <span>{{ group.group_head.get_full_name|default:"Not Assigned" }}</span>
+                        {% if group.group_head %}
+                        <small>{{ group.group_head.email }}</small>
+                        {% endif %}
+                    </div>
+                </td>
                             <td>{{ group.group_head.email|default:"-" }}</td>
                             <td>
-                                <span class="badge {% if group.is_active %}badge-success{% else %}badge-danger{% endif %}">
+                    <span class="badge {% if group.is_active %}active{% else %}inactive{% endif %}">
                                     {{ group.is_active|yesno:"Active,Inactive" }}
                                 </span>
                             </td>
                             <td>
-                                <div class="btn-group">
-                                    <a href="{% url 'group_edit' group.pk %}" class="btn btn-sm btn-info">
+                    <div class="actions">
+                        <a href="{% url 'group_edit' group.pk %}" class="btn-icon">
                                         <i class="fas fa-edit"></i>
                                     </a>
-                                    <button type="button" class="btn btn-sm btn-danger" 
-                                            onclick="confirmDelete('{{ group.name }}', '{% url 'group_delete' group.pk %}')">
+                        <button type="button" 
+                                class="btn-icon btn-danger" 
+                                data-name="{{ group.name }}"
+                                data-url="{% url 'group_delete' group.pk %}"
+                                onclick="confirmDelete(this)"
+                                title="Delete">
                                         <i class="fas fa-trash"></i>
                                     </button>
                                 </div>
@@ -57,56 +190,57 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="7" class="text-center">No groups found.</td>
+                <td colspan="7" class="empty">
+                    <i class="fas fa-users"></i>
+                    <p>No groups found</p>
+                    <a href="{% url 'group_create' %}" class="btn btn-primary">Add Group</a>
+                </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
 
+<!-- Pagination -->
             {% if groups.has_other_pages %}
-            <nav aria-label="Page navigation" class="mt-4">
-                <ul class="pagination justify-content-center">
+<div class="pagination">
                     {% if groups.has_previous %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ groups.previous_page_number }}">Previous</a>
-                    </li>
+    <a href="?page={{ groups.previous_page_number }}" class="btn-page">
+        <i class="fas fa-chevron-left"></i>
+    </a>
                     {% endif %}
 
                     {% for num in groups.paginator.page_range %}
-                    <li class="page-item {% if groups.number == num %}active{% endif %}">
-                        <a class="page-link" href="?page={{ num }}">{{ num }}</a>
-                    </li>
+    <a href="?page={{ num }}" class="btn-page {% if groups.number == num %}active{% endif %}">
+        {{ num }}
+    </a>
                     {% endfor %}
 
                     {% if groups.has_next %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ groups.next_page_number }}">Next</a>
-                    </li>
-                    {% endif %}
-                </ul>
-            </nav>
+    <a href="?page={{ groups.next_page_number }}" class="btn-page">
+        <i class="fas fa-chevron-right"></i>
+    </a>
             {% endif %}
-        </div>
-    </div>
 </div>
+{% endif %}
 
-<!-- Delete Confirmation Modal -->
-<div class="modal fade" id="deleteModal" tabindex="-1" role="dialog" aria-labelledby="deleteModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
+<!-- Delete Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="deleteModalLabel">Confirm Delete</h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
+                <h5>Delete Group</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
                 </button>
             </div>
             <div class="modal-body">
-                Are you sure you want to delete <span id="deleteItemName"></span>?
+                <p>Are you sure you want to delete <strong><span id="deleteItemName"></span></strong>?</p>
+                <p class="text-muted">This action cannot be undone.</p>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <form id="deleteForm" method="POST" style="display: inline;">
+                <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="POST">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-danger">Delete</button>
                 </form>
@@ -115,35 +249,527 @@
     </div>
 </div>
 
+<style>
+/* Basic Layout */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.header-left h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.header-left p {
+    margin: 4px 0 0;
+    color: #666;
+}
+
+.btn-primary {
+    background: #F16564;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+    text-decoration: none;
+}
+
+.btn-primary:hover,
+.btn-primary:active,
+.btn-primary:focus,
+.btn-primary:visited {
+    background: #e45857;
+    text-decoration: none;
+    color: white;
+    outline: none;
+    box-shadow: none;
+}
+
+/* Search and Filter Bar */
+.search-filter-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.search-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 16px;
+}
+
+.search-box input {
+    border: none;
+    outline: none;
+    width: 100%;
+    font-size: 14px;
+}
+
+.btn-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #4a5568;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-filter:hover {
+    background: #f7fafc;
+}
+
+/* Table */
+.card {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table th {
+    background: #f8fafc;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5568;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.table td {
+    padding: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+/* Institution */
+.institution {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Unit Head */
+.unit-head {
+    display: flex;
+    flex-direction: column;
+}
+
+.unit-head small {
+    color: #666;
+}
+
+/* Status Badge */
+.badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.badge.active {
+    background: #c6f6d5;
+    color: #2f855a;
+}
+
+.badge.inactive {
+    background: #fed7d7;
+    color: #c53030;
+}
+
+/* Actions */
+.actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    background: #edf2f7;
+    color: #4a5568;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.btn-icon:hover {
+    background: #e2e8f0;
+    text-decoration: none;
+    color: #4a5568;
+}
+
+.btn-icon.btn-danger {
+    color: #c53030;
+    background: #fff5f5;
+}
+
+.btn-icon.btn-danger:hover {
+    background: #fed7d7;
+}
+
+/* Empty State */
+.empty {
+    text-align: center;
+    padding: 48px !important;
+}
+
+.empty i {
+    font-size: 48px;
+    color: #a0aec0;
+    margin-bottom: 16px;
+}
+
+.empty p {
+    margin: 0 0 16px;
+    color: #4a5568;
+}
+
+/* Pagination */
+.pagination {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 24px;
+}
+
+.btn-page {
+    min-width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: #edf2f7;
+    color: #4a5568;
+    text-decoration: none;
+}
+
+.btn-page:hover {
+    background: #e2e8f0;
+    text-decoration: none;
+}
+
+.btn-page.active {
+    background: #1AA09A;
+    color: white;
+}
+
+/* Filter Panel */
+.filter-panel {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+}
+
+.filter-panel.active {
+    right: 0;
+}
+
+.filter-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.filter-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: #1a202c;
+}
+
+.filter-form {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 64px);
+}
+
+.filter-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Filter Types (30%) */
+.filter-types {
+    width: 30%;
+    background: #f8fafc;
+    border-right: 1px solid #e2e8f0;
+}
+
+.filter-type {
+    padding: 16px 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    color: #4a5568;
+}
+
+.filter-type:hover {
+    background: #f1f5f9;
+}
+
+.filter-type.active {
+    background: white;
+    color: #F16564;
+}
+
+.filter-type.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: #F16564;
+}
+
+/* Filter Content (70%) */
+.filter-content-wrapper {
+    width: 70%;
+    display: flex;
+    flex-direction: column;
+    background: white;
+}
+
+.filter-content {
+    display: none;
+    height: 100%;
+    flex-direction: column;
+}
+
+.filter-content.active {
+    display: flex;
+}
+
+.filter-search {
+    padding: 20px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.filter-search input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+    margin-bottom: 12px;
+}
+
+.filter-search input:focus {
+    outline: none;
+    border-color: #F16564;
+    box-shadow: 0 0 0 2px rgba(241, 101, 100, 0.1);
+}
+
+.selection-count {
+    font-size: 14px;
+    color: #4a5568;
+}
+
+.options-list {
+    padding: 16px 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    cursor: pointer;
+}
+
+.option-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #cbd5e0;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.option-item input[type="checkbox"]:checked {
+    background-color: #F16564;
+    border-color: #F16564;
+}
+
+.option-item span {
+    font-size: 14px;
+    color: #4a5568;
+}
+
+.filter-actions {
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    background: white;
+    margin-top: auto;
+}
+
+/* Overlay */
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: 999;
+}
+
+.overlay.active {
+    opacity: 1;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .header-right {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .header-right .btn {
+        width: 100%;
+    }
+
+    .card {
+        overflow-x: auto;
+    }
+
+    .table {
+        min-width: 800px;
+    }
+
+    .filter-panel {
+        width: 100%;
+        right: -100%;
+    }
+}
+</style>
+
 <script>
-function confirmDelete(name, url) {
+function confirmDelete(button) {
+    const name = button.dataset.name;
+    const url = button.dataset.url;
     document.getElementById('deleteItemName').textContent = name;
     document.getElementById('deleteForm').action = url;
     $('#deleteModal').modal('show');
 }
+
+function toggleFilterPanel() {
+    const panel = document.getElementById('filterPanel');
+    const overlay = document.querySelector('.overlay');
+    panel.classList.toggle('active');
+    
+    if (panel.classList.contains('active')) {
+        document.body.style.overflow = 'hidden';
+        if (!overlay) {
+            const newOverlay = document.createElement('div');
+            newOverlay.className = 'overlay';
+            newOverlay.onclick = toggleFilterPanel;
+            document.body.appendChild(newOverlay);
+        }
+        setTimeout(() => {
+            document.querySelector('.overlay').classList.add('active');
+        }, 10);
+    } else {
+        document.body.style.overflow = '';
+        const overlay = document.querySelector('.overlay');
+        if (overlay) {
+            overlay.classList.remove('active');
+            setTimeout(() => {
+                overlay.remove();
+            }, 300);
+        }
+    }
+}
+
+function switchFilter(filterType) {
+    // Remove active class from all filter types and contents
+    document.querySelectorAll('.filter-type').forEach(type => type.classList.remove('active'));
+    document.querySelectorAll('.filter-content').forEach(content => content.classList.remove('active'));
+    
+    // Add active class to selected filter type and content
+    document.querySelector(`[data-filter="${filterType}"]`).classList.add('active');
+    document.getElementById(`${filterType}-content`).classList.add('active');
+}
+
+// Initialize the first filter as active
+document.addEventListener('DOMContentLoaded', function() {
+    switchFilter('group');
+    
+    // Initialize selection counts
+    ['group', 'type', 'status'].forEach(category => {
+        updateSelectionCount(category);
+    });
+});
+
+function filterOptions(category) {
+    const searchInput = document.querySelector(`#${category}-content .filter-search input`);
+    const searchTerm = searchInput.value.toLowerCase();
+    const options = document.querySelectorAll(`#${category}-options .option-item`);
+    
+    options.forEach(option => {
+        const text = option.querySelector('span').textContent.toLowerCase();
+        option.style.display = text.includes(searchTerm) ? '' : 'none';
+    });
+}
+
+function updateSelectionCount(category) {
+    const checkboxes = document.querySelectorAll(`#${category}-options input[type="checkbox"]:checked`);
+    const countElement = document.querySelector(`#${category}-content .selection-count`);
+    const count = checkboxes.length;
+    const label = category.charAt(0).toUpperCase() + category.slice(1);
+    countElement.textContent = `${count} ${label} selected`;
+}
 </script>
-
-<style>
-.badge {
-    padding: 0.5em 0.75em;
-    font-size: 0.85em;
-}
-
-.btn-group .btn {
-    margin: 0 2px;
-}
-
-.table th {
-    background-color: #f8f9fa;
-    border-top: none;
-}
-
-.card {
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-}
-
-.pagination {
-    margin-bottom: 0;
-}
-</style>
 {% endblock %} 
