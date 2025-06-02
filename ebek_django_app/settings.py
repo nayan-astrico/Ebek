@@ -14,12 +14,19 @@ from pathlib import Path
 import firebase_admin
 from firebase_admin import credentials
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+DEBUG = os.getenv("DEBUG")
 # Path to your Firebase service account key file
-FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
+if DEBUG == False:
+    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
+else:
+    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_development.json")
 
 # Initialize Firebase
 cred = credentials.Certificate(FIREBASE_KEY_PATH)

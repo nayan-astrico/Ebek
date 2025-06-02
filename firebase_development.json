@@ -1,0 +1,14 @@
+{
+    "type": "service_account",
+    "project_id": "ebek-migration",
+    "private_key_id": "eadfab856e965ce7408e87bfa55bcd6c2395c0b1",
+    "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDELiySkSeVhyLm\nZ+T1hSU/Lq94RO5oJBv/LT3N6CHXoH0tAdgMuhIseXIgNVKSt8oYzcaYwEA86HVo\nIEhK3SzHaQmNinC8Gi6iImNlszoxeR/zlhfwPNz9dOclaqjVmv+/559zZgw8g4Xu\n9ONHOTkjRJr9VQU8x2SdoUt80AkvH/sYUcLE3hCwLAUHx3N1wEZtCVGJWI9THvo+\nCSiApFVyr0ktq68oVTK1APEZtilrRgIwHaVzh0N59bBbUPFeWjcrYONauiEINCmw\npUrMfmS42LNvz7NJ9g/kqb46JcZNmw+uWdyjbEVkvzHO404UtCRMz7BfL84iJUXK\naU9hqgXbAgMBAAECggEAYHGcuv8+OQ3i0+eOkT8AFSQj4lns5GigFN5ObHwqqwE8\nmJQ3/OW6yn934iqkqflNks0SzYRx8B+NnH+GWruJ6IyURC+jhW3PsCh8ugIW4Tx9\nPzhyE0owkC/Y9LWPQ9e71EGPy2EHMfassNFWLG0O0G5JTbJu7TbPGYkyfa0eXrob\nJ8L6mNYF454HmSll14nSCkWIlfyxrKdth1sqZCyWCCjoLoWqrtXJUuDQGZvoNs2r\nCYsksKaP1w9CwfM0Pd+UaFwc0P+i6jTDOAuGOq16GVfNmhZN2JCQxE+LwGY4QcLO\nTSoAEKyL13Lpwwg+R7JuAgFD44TRmhEwSviW1lS3aQKBgQDpLyVEjrQYfvA55uie\nmDMsFPkE6bcBPKBecFWXVdUteiBP4DQvDnXW0nm0X2tckbT0qCBB9SyyCL0gYkzj\nMFX68kgqKz+pwQ18KBECwqfCEJNMVjpwXTXj/QvUUSwXbUVGEtbgVQDSJ8ETXduO\nBJw4FjBwe2zwWVbToLDDDHlDgwKBgQDXYCX6hzi1AoqBm97gC6zJM4lXinUY6MEK\noes4l+J1bJIiLxx8+naUwlvcj5uK07YnHmnKZIIcNrg3WiYfCj4DtJbVN5hn+87g\nwuIXhy5QgfcnSdy1yRtUlX/CVS5DSX8d6HjE/ZpIQXrflk7FU9A4/2KSnlhztaiq\nQC84KwisyQKBgQCmQdYZjoG74W3Yatm6khwSNxXhud2ghSB2lTOBhlJLbYLyUJIE\nZxP/yeu6fjonM0BJHEJ7pJpsiayHFW9qoMD8/pgTcOigWSQLPOn8BNvlkzniuKxM\nBzlwR7CSfhmozmEQ+Ee6hQDj1jJkY4wyMvlLSA7bdDUVHS26EB1XxGIFjwKBgAUJ\ntbm3ggcR6SWA/OSmwULvlq3aikSr5SAXi4YGX4C5qm1sRrFRtoZiSX3OSigkLaWa\nm4Tldvmr+gEpdazSM4MorUKNi14bUMqHJHzCZ73wXFSp8KS78Iy49oUYMv3V8UhE\n0NZizEIWbgZe4LbS8BL1PlwJoi4KuMhKuhAJSampAoGAA0jWyPE6WzV/azCxx8ae\nGDyyL2sqVUso88lSXvxTBAtYTCaGdOHI6kf/WaWaeRuj/ZjrIRAh3p76cMlvC9HV\nR1fv99EjzsNrhPjm9z1UMDtEAiE6TsR/4WClRWFK5f7Q1f658GGmWi7xbu1gFS6+\nn251PK0zKRyjYeYuWzPlXvU=\n-----END PRIVATE KEY-----\n",
+    "client_email": "firebase-adminsdk-9h10d@ebek-migration.iam.gserviceaccount.com",
+    "client_id": "112476533872513784918",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-9h10d%40ebek-migration.iam.gserviceaccount.com",
+    "universe_domain": "googleapis.com"
+  }
+  

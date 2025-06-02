@@ -59,5 +59,6 @@ urlpatterns = [
     path('onboarding/skillathon/', views.skillathon_list, name='skillathon_list'),
     path('onboarding/skillathon/create/', views.skillathon_create, name='skillathon_create'),
     path('onboarding/skillathon/<int:pk>/edit/', views.skillathon_edit, name='skillathon_edit'),
+    path('onboarding/skillathon/<int:pk>/delete/', views.skillathon_delete, name='skillathon_delete'),
     path('fetch-skillathons/', views.fetch_skillathons, name='fetch_skillathons'),
 ]

@@ -105,7 +105,6 @@
             left: 0;
             z-index: 1001;
             transition: all 0.4s cubic-bezier(.4,2,.6,1), box-shadow 0.3s;
-            box-shadow: 4px 0 18px 0 rgba(0,0,0,0.10), 0 1.5px 0 0 #f7c97a inset;
             border-top-right-radius: 22px;
             border-bottom-right-radius: 22px;
             overflow: hidden;
@@ -188,7 +187,7 @@
         }
 
         #sidebar .nav-link span {
-            font-size: 0.9rem;
+            font-size: 1 rem;
             font-weight: 500;
         }
 
@@ -209,9 +208,8 @@
         /* Content Area */
         #content {
             margin-left: var(--sidebar-width);
-            padding: 32px 32px 24px 32px;
-            margin-top: var(--header-height);
-            min-height: calc(100vh - var(--header-height));
+            padding: 32px 32px 80px 32px;
+            min-height: 100vh;
             transition: margin-left 0.4s cubic-bezier(.4,2,.6,1), padding 0.3s;
             background: #fcfcfc;
             border-top-left-radius: 18px;
@@ -236,6 +234,14 @@
             #content {
                 border-radius: 0;
                 padding: 16px 4px 8px 4px;
+            }
+            .sidebar-bottom-area {
+                width: 100%;
+                left: 0;
+            }
+            
+            #content {
+                padding-bottom: 80px;
             }
         }
 
@@ -406,14 +412,28 @@
             color: #fff;
         }
 
-        .sidebar-bottom-area {
-            width: 100%;
+        /* Sidebar as a flex column */
+        #sidebar {
             display: flex;
             flex-direction: column;
-            align-items: stretch;
-            justify-content: flex-end;
-            gap: 0;
-            padding: 0;
+            height: 100vh;
+        }
+
+        /* Navigation area grows and scrolls if needed */
+        .nav-items {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        /* Bottom area always at the bottom, no fixed position! */
+        .sidebar-bottom-area {
+            position: fixed;
+            left: 0;
+            bottom: 0;
+            width: var(--sidebar-width);
+            z-index: 1002;
+            /* background, border, etc. as needed */
         }
         .sidebar-user-info {
             width: 100%;
@@ -538,13 +558,7 @@
             <span class="brand-text">EBEK MED</span>
         </div>
         
-        <div class="nav-items mt-3" style="flex: 1 1 auto; overflow-y: auto; min-height: 0;">
-            <div class="nav-item">
-                <a href="{% url 'create_assessment' %}" class="nav-link" title="Create New Assessment">
-            <i class="fas fa-file-medical"></i>
-                    <span>Create Assessment</span>
-        </a>
-            </div>
+        
 
         {% if request.user.user_role == 'ebek_admin' or request.user.user_role == 'super_admin' %}
             <div class="nav-item">
@@ -579,29 +593,47 @@
                             Assessors
                         </a>
                     </div>
+                    <div class="nav-item submenu-item">
+                        <a href="{% url 'skillathon_list' %}" class="nav-link submenu-link" title="Manage Skillathon Events">
+                            Skillathon
+                        </a>
+                    </div>
                 </div>
+            </div>
+            <div class="nav-item">
+                <a href="{% url 'assign_assessment' %}" class="nav-link" title="View & Assign Assessments">
+                    <i class="fas fa-tasks"></i>
+                            <span>Assignments</span>
+                    </a>
+            </div>
+                <div class="nav-item">
+                    <a href="{% url 'create_assessment' %}" class="nav-link" title="Create New Assessment">
+                <i class="fas fa-file-medical"></i>
+                        <span>Create Assessment</span>
+                </a>
             </div>
         {% endif %}
         
-            <div class="nav-item">
+        
+            <!-- <div class="nav-item">
                 <a href="{% url 'users_management' %}" class="nav-link" title="Manage Supervisors & Students">
             <i class="fas fa-users"></i>
                     <span>User Management</span>
-        </a>
+            </a>
             </div>
 
             <div class="nav-item">
                 <a href="{% url 'cohort_list' %}" class="nav-link" title="Manage Student Batches">
             <i class="fas fa-user-friends"></i>
                     <span>Cohorts</span>
-        </a>
+            </a>
             </div>
 
             <div class="nav-item">
                 <a href="{% url 'assign_assessment' %}" class="nav-link" title="View & Assign Assessments">
             <i class="fas fa-tasks"></i>
                     <span>Assignments</span>
-        </a>
+            </a>
             </div>
 
             <div class="nav-item">
@@ -610,10 +642,9 @@
                     <span>Reports</span>
                 </a>
             </div>
-        </div>
+        </div> -->
 
         <div class="sidebar-bottom-area">
-            {% if request.user.is_authenticated %}
             <div class="nav-item">
                 <div class="sidebar-user-info d-flex align-items-center">
                     <div class="sidebar-user-initial mr-2">
@@ -624,17 +655,19 @@
             </div>
             <div class="nav-item">
                 <a href="{% url 'logout' %}" class="nav-link d-flex align-items-center sidebar-logout-link">
-                    <i class="fas fa-sign-out-alt"></i>
-                    <span class="sidebar-logout-text ml-2">Logout</span>
+                        <i class="fas fa-sign-out-alt" style="font-size: 1.2rem; margin: -6px;"></i>
+                    <span class="sidebar-logout-text" style="margin-left: 32px;">Logout</span>
                 </a>
             </div>
-            {% endif %}
             <div class="nav-item">
-                <div class="sidebar-footer">
+                <button id="toggleSidebar" class="nav-link d-flex align-items-center sidebar-logout-link" style="display:none !important;">
+                    <i class="fas fa-angle-double-left" id="sidebarToggleIcon"></i>
+                </button>
+                <!-- <div class="sidebar-footer">
                     <button class="btn p-0 d-flex justify-content-center align-items-center" id="toggleSidebar" style="font-size: 1.5rem; color: #fff; background: none; border: none; width: 40px; height: 40px; margin: 0 auto; display: flex;">
                         <i class="fas fa-angle-double-left" id="sidebarToggleIcon"></i>
                     </button>
-                </div>
+                </div> -->
             </div>
         </div>
     </div>
@@ -655,9 +688,13 @@
             if (sidebar.classList.contains('collapsed')) {
                 icon.classList.remove('fa-angle-double-left');
                 icon.classList.add('fa-angle-double-right');
+                // Update sidebar width variable when collapsed
+                document.documentElement.style.setProperty('--sidebar-width', '64px');
             } else {
                 icon.classList.remove('fa-angle-double-right');
                 icon.classList.add('fa-angle-double-left');
+                // Update sidebar width variable when expanded
+                document.documentElement.style.setProperty('--sidebar-width', '240px');
             }
         });
 
@@ -674,6 +711,15 @@
             if (onboardingSubmenu && onboardingSubmenu.querySelector('.active')) {
                 onboardingSubmenu.classList.add('show');
                 onboardingParent.setAttribute('aria-expanded', 'true');
+            }
+        });
+
+        window.addEventListener('DOMContentLoaded', function() {
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar.classList.contains('collapsed')) {
+                document.documentElement.style.setProperty('--sidebar-width', '64px');
+            } else {
+                document.documentElement.style.setProperty('--sidebar-width', '240px');
             }
         });
     </script>

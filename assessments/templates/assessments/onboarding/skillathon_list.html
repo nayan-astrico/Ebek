@@ -1,16 +1,17 @@
 {% extends 'assessments/base.html' %}
+{% load static %}
 
 {% block content %}
 <!-- Header -->
 <div class="header">
     <div class="header-left">
-        <h1>Institutions</h1>
-        <p class="text-muted">Manage your educational institutions</p>
+        <h1>Skillathon Events</h1>
+        <p class="text-muted">Manage your training and assessment events</p>
     </div>
     <div class="header-right">
-        <a href="{% url 'institution_create' %}" class="btn btn-primary">
+        <a href="{% url 'skillathon_create' %}" class="btn btn-primary">
             <i class="fas fa-plus"></i>
-            Add Institution
+            Add New Skillathon
         </a>
     </div>
 </div>
@@ -19,7 +20,7 @@
 <div class="search-filter-bar">
     <div class="search-box">
         <i class="fas fa-search"></i>
-        <input type="text" placeholder="Search institutions...">
+        <input type="text" placeholder="Search skillathon events...">
     </div>
     <button class="btn-filter" onclick="toggleFilterPanel()">
         <i class="fas fa-filter"></i>
@@ -30,27 +31,22 @@
 <!-- Filter Side Panel -->
 <div class="filter-panel" id="filterPanel">
     <div class="filter-header">
-        <h3>Filter Institutions</h3>
+        <h3>Filter Skillathon Events</h3>
     </div>
     
     <form method="get" class="filter-form">
         <div class="filter-layout">
             <!-- Main Filter Types (30%) -->
             <div class="filter-types">
-                <div class="filter-type {% if active_filter == 'group' %}active{% endif %}" 
-                     data-filter="group" 
-                     onclick="switchFilter('group')">
-                    <span>Group</span>
+                <div class="filter-type {% if active_filter == 'date' %}active{% endif %}" 
+                     data-filter="date" 
+                     onclick="switchFilter('date')">
+                    <span>Date</span>
                 </div>
-                <div class="filter-type {% if active_filter == 'institution' %}active{% endif %}" 
-                     data-filter="institution" 
-                     onclick="switchFilter('institution')">
-                    <span>Institution</span>
-                </div>
-                <div class="filter-type {% if active_filter == 'state' %}active{% endif %}" 
-                     data-filter="state" 
-                     onclick="switchFilter('state')">
-                    <span>State</span>
+                <div class="filter-type {% if active_filter == 'location' %}active{% endif %}" 
+                     data-filter="location" 
+                     onclick="switchFilter('location')">
+                    <span>Location</span>
                 </div>
                 <div class="filter-type {% if active_filter == 'status' %}active{% endif %}" 
                      data-filter="status" 
@@ -61,57 +57,32 @@
 
             <!-- Filter Content (70%) -->
             <div class="filter-content-wrapper">
-                <!-- Group Content -->
-                <div class="filter-content" id="group-content">
+                <!-- Date Content -->
+                <div class="filter-content" id="date-content">
                     <div class="filter-search">
-                        <input type="text" placeholder="Search groups" onkeyup="filterOptions('group')">
-                        <div class="selection-count">0 Group selected</div>
-                    </div>
-                    <div class="options-list" id="group-options">
-                        {% for group in groups %}
-                        <label class="option-item">
-                            <input type="checkbox" name="group" value="{{ group.id }}"
-                                   {% if group.id in selected_groups %}checked{% endif %}
-                                   onchange="updateSelectionCount('group')">
-                            <span>{{ group.name }}</span>
-                        </label>
-                        {% endfor %}
+                        <div class="date-range">
+                            <div class="form-group">
+                                <label>From Date</label>
+                                <input type="date" name="date_from" value="{{ request.GET.date_from }}" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>To Date</label>
+                                <input type="date" name="date_to" value="{{ request.GET.date_to }}" class="form-control">
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Institution Content -->
-                <div class="filter-content" id="institution-content">
+                <!-- Location Content -->
+                <div class="filter-content" id="location-content">
                     <div class="filter-search">
-                        <input type="text" placeholder="Search institutions" onkeyup="filterOptions('institution')">
-                        <div class="selection-count">0 Institution selected</div>
+                        <input type="text" placeholder="Search location" onkeyup="filterOptions('location')">
+                        <div class="selection-count">0 Location selected</div>
                     </div>
-                    <div class="options-list" id="institution-options">
-                        {% for institution in all_institutions %}
+                    <div class="options-list" id="location-options">
                         <label class="option-item">
-                            <input type="checkbox" name="institution" value="{{ institution.id }}"
-                                   {% if institution.id in selected_institutions %}checked{% endif %}
-                                   onchange="updateSelectionCount('institution')">
-                            <span>{{ institution.name }}</span>
+                            <input type="text" name="location" value="{{ request.GET.location }}" placeholder="Enter city or state">
                         </label>
-                        {% endfor %}
-                    </div>
-                </div>
-
-                <!-- State Content -->
-                <div class="filter-content" id="state-content">
-                    <div class="filter-search">
-                        <input type="text" placeholder="Search states" onkeyup="filterOptions('state')">
-                        <div class="selection-count">0 State selected</div>
-                    </div>
-                    <div class="options-list" id="state-options">
-                        {% for state in all_states %}
-                        <label class="option-item">
-                            <input type="checkbox" name="state" value="{{ state }}"
-                                   {% if state in selected_states %}checked{% endif %}
-                                   onchange="updateSelectionCount('state')">
-                            <span>{{ state }}</span>
-                        </label>
-                        {% endfor %}
                     </div>
                 </div>
 
@@ -121,20 +92,7 @@
                         <input type="text" placeholder="Search status" onkeyup="filterOptions('status')">
                         <div class="selection-count">0 Status selected</div>
                     </div>
-                    <div class="options-list" id="status-options">
-                        <label class="option-item">
-                            <input type="checkbox" name="status" value="active"
-                                   {% if 'active' in selected_statuses %}checked{% endif %}
-                                   onchange="updateSelectionCount('status')">
-                            <span>Active</span>
-                        </label>
-                        <label class="option-item">
-                            <input type="checkbox" name="status" value="inactive"
-                                   {% if 'inactive' in selected_statuses %}checked{% endif %}
-                                   onchange="updateSelectionCount('status')">
-                            <span>Inactive</span>
-                        </label>
-                    </div>
+                    
                 </div>
             </div>
         </div>
@@ -148,95 +106,75 @@
 </div>
 
 <!-- Table -->
-    <div class="card">
+<div class="card">
     <table class="table">
-                    <thead>
-                        <tr>
-                <th>Institution</th>
-                            <th>Group</th>
-                <th>State</th>
-                <th>Learners</th>
-                            <th>Unit Head</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for institution in institutions %}
-                        <tr>
+        <thead>
+            <tr>
+                <th>Event Name</th>
+                <th>Date</th>
+                <th>Location</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in events %}
+            <tr>
                 <td>
                     <div class="institution">
-                        <span>{{ institution.name }}</span>
+                        <span>{{ event.name }}</span>
                     </div>
                 </td>
-                            <td>{{ institution.group.name|default:"-" }}</td>
-                <td>{{ institution.state|default:"-" }}</td>
-                
-                <td>{{ institution.total_strength|default:"0" }}</td>
+                <td>{{ event.date|date:"d M Y" }}</td>
+                <td>{{ event.city }}, {{ event.state }}</td>
                 <td>
-                    {% if institution.unit_head %}
-                    <div class="unit-head">
-                        <span>{{ institution.unit_head.get_full_name }}</span>
-                        <small>{{ institution.unit_head.email }}</small>
-                    </div>
-                    {% else %}
-                    <span class="text-muted">Not Assigned</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <span class="badge {% if institution.is_active %}active{% else %}inactive{% endif %}">
-                        {% if institution.is_active %}Active{% else %}Inactive{% endif %}
-                                </span>
-                            </td>
-                            <td>
                     <div class="actions">
-                        <a href="{% url 'institution_edit' institution.pk %}" class="btn-icon">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
+                        <a href="{% url 'skillathon_edit' event.pk %}" class="btn-icon">
+                            <i class="fas fa-edit"></i>
+                        </a>
                         <button type="button" 
                                 class="btn-icon btn-danger" 
-                                data-name="{{ institution.name }}"
-                                data-url="{% url 'institution_delete' institution.pk %}"
+                                data-name="{{ event.name }}"
+                                data-url="{% url 'skillathon_delete' event.pk %}"
                                 onclick="confirmDelete(this)"
                                 title="Delete">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                <td colspan="7" class="empty">
-                    <i class="fas fa-school"></i>
-                    <p>No institutions found</p>
-                    <a href="{% url 'institution_create' %}" class="btn btn-primary">Add Institution</a>
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7" class="empty">
+                    <i class="fas fa-calendar-alt"></i>
+                    <p>No skillathon events found</p>
+                    <a href="{% url 'skillathon_create' %}" class="btn btn-primary">Add New Skillathon</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 
 <!-- Pagination -->
-            {% if institutions.has_other_pages %}
+{% if events.has_other_pages %}
 <div class="pagination">
-                    {% if institutions.has_previous %}
-    <a href="?page={{ institutions.previous_page_number }}" class="btn-page">
+    {% if events.has_previous %}
+    <a href="?page={{ events.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn-page">
         <i class="fas fa-chevron-left"></i>
     </a>
-                    {% endif %}
+    {% endif %}
 
-                    {% for num in institutions.paginator.page_range %}
-    <a href="?page={{ num }}" class="btn-page {% if institutions.number == num %}active{% endif %}">
+    {% for num in events.paginator.page_range %}
+    <a href="?page={{ num }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn-page {% if events.number == num %}active{% endif %}">
         {{ num }}
     </a>
-                    {% endfor %}
+    {% endfor %}
 
-                    {% if institutions.has_next %}
-    <a href="?page={{ institutions.next_page_number }}" class="btn-page">
+    {% if events.has_next %}
+    <a href="?page={{ events.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn-page">
         <i class="fas fa-chevron-right"></i>
     </a>
-            {% endif %}
+    {% endif %}
 </div>
 {% endif %}
 
@@ -245,7 +183,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5>Delete Institution</h5>
+                <h5>Delete Skillathon Event</h5>
                 <button type="button" class="close" data-dismiss="modal">
                     <span>&times;</span>
                 </button>
@@ -390,28 +328,6 @@
     gap: 12px;
 }
 
-.institution .icon {
-    width: 36px;
-    height: 36px;
-    background: #1AA09A;
-    color: white;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 600;
-}
-
-/* Unit Head */
-.unit-head {
-    display: flex;
-    flex-direction: column;
-}
-
-.unit-head small {
-    color: #666;
-}
-
 /* Status Badge */
 .badge {
     padding: 4px 12px;
@@ -420,14 +336,19 @@
     font-weight: 500;
 }
 
-.badge.active {
-    background: #c6f6d5;
-    color: #2f855a;
+.badge.bg-info {
+    background: #bee3f8;
+    color: #2c5282;
 }
 
-.badge.inactive {
-    background: #fed7d7;
-    color: #c53030;
+.badge.bg-warning {
+    background: #fefcbf;
+    color: #975a16;
+}
+
+.badge.bg-success {
+    background: #c6f6d5;
+    color: #2f855a;
 }
 
 /* Actions */
@@ -690,6 +611,23 @@
     opacity: 1;
 }
 
+/* Date Range */
+.date-range {
+    display: flex;
+    gap: 16px;
+}
+
+.date-range .form-group {
+    flex: 1;
+}
+
+.date-range label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: #4a5568;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .header {
@@ -773,10 +711,10 @@ function switchFilter(filterType) {
 
 // Initialize the first filter as active
 document.addEventListener('DOMContentLoaded', function() {
-    switchFilter('group');
+    switchFilter('date');
     
     // Initialize selection counts
-    ['group', 'institution', 'state', 'status'].forEach(category => {
+    ['date', 'location', 'status'].forEach(category => {
         updateSelectionCount(category);
     });
 });
@@ -787,7 +725,7 @@ function filterOptions(category) {
     const options = document.querySelectorAll(`#${category}-options .option-item`);
     
     options.forEach(option => {
-        const text = option.querySelector('span').textContent.toLowerCase();
+        const text = option.querySelector('span')?.textContent.toLowerCase() || '';
         option.style.display = text.includes(searchTerm) ? '' : 'none';
     });
 }
@@ -800,4 +738,4 @@ function updateSelectionCount(category) {
     countElement.textContent = `${count} ${label} selected`;
 }
 </script>
-{% endblock %} 
+{% endblock %}

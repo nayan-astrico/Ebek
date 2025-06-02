@@ -2,9 +2,9 @@ from django import forms
 from .models import Group, Institution, Hospital, Learner, Assessor, SkillathonEvent
 
 class GroupForm(forms.ModelForm):
-    group_head_name = forms.CharField(label='Group Head Name', max_length=255, required=True, widget=forms.TextInput(attrs={'class': 'form-control'}))
-    group_head_email = forms.EmailField(label='Group Head Email', required=True, widget=forms.EmailInput(attrs={'class': 'form-control'}))
-    group_head_phone = forms.CharField(label='Group Head Phone', max_length=20, required=True, widget=forms.TextInput(attrs={'class': 'form-control'}))
+    group_head_name = forms.CharField(label='Group Head Name', max_length=255, required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
+    group_head_email = forms.EmailField(label='Group Head Email', required=False, widget=forms.EmailInput(attrs={'class': 'form-control'}))
+    group_head_phone = forms.CharField(label='Group Head Phone', max_length=20, required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
 
     class Meta:
         model = Group
@@ -15,12 +15,12 @@ class GroupForm(forms.ModelForm):
         }
 
 class InstitutionForm(forms.ModelForm):
-    unit_head_name = forms.CharField(label='Unit Head Name', max_length=255, required=True, widget=forms.TextInput(attrs={'class': 'form-control'}))
-    unit_head_email = forms.EmailField(label='Unit Head Email', required=True, widget=forms.EmailInput(attrs={'class': 'form-control'}))
-    unit_head_phone = forms.CharField(label='Unit Head Phone', max_length=20, required=True, widget=forms.TextInput(attrs={'class': 'form-control'}))
+    unit_head_name = forms.CharField(label='Unit Head Name', max_length=255, required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
+    unit_head_email = forms.EmailField(label='Unit Head Email', required=False, widget=forms.EmailInput(attrs={'class': 'form-control'}))
+    unit_head_phone = forms.CharField(label='Unit Head Phone', max_length=20, required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
     class Meta:
         model = Institution
-        fields = ['name', 'group', 'address', 'state', 'district', 'pin_code', 'total_strength']
+        fields = ['name', 'group', 'address', 'state', 'district', 'pin_code', 'onboarding_type']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'group': forms.Select(attrs={'class': 'form-control'}),
@@ -28,16 +28,16 @@ class InstitutionForm(forms.ModelForm):
             'state': forms.TextInput(attrs={'class': 'form-control'}),
             'district': forms.TextInput(attrs={'class': 'form-control'}),
             'pin_code': forms.TextInput(attrs={'class': 'form-control'}),
-            'total_strength': forms.NumberInput(attrs={'class': 'form-control'}),
+            'onboarding_type': forms.Select(attrs={'class': 'form-control'}),
         }
 
 class HospitalForm(forms.ModelForm):
-    unit_head_name = forms.CharField(label='Unit Head Name', max_length=255, required=True, widget=forms.TextInput(attrs={'class': 'form-control'}))
-    unit_head_email = forms.EmailField(label='Unit Head Email', required=True, widget=forms.EmailInput(attrs={'class': 'form-control'}))
-    unit_head_phone = forms.CharField(label='Unit Head Phone', max_length=20, required=True, widget=forms.TextInput(attrs={'class': 'form-control'}))
+    unit_head_name = forms.CharField(label='Unit Head Name', max_length=255, required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
+    unit_head_email = forms.EmailField(label='Unit Head Email', required=False, widget=forms.EmailInput(attrs={'class': 'form-control'}))
+    unit_head_phone = forms.CharField(label='Unit Head Phone', max_length=20, required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
     class Meta:
         model = Hospital
-        fields = ['name', 'group', 'address', 'state', 'district', 'pin_code', 'nurse_strength', 'number_of_beds']
+        fields = ['name', 'group', 'address', 'state', 'district', 'pin_code', 'nurse_strength', 'number_of_beds', 'onboarding_type']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'group': forms.Select(attrs={'class': 'form-control'}),
@@ -45,8 +45,8 @@ class HospitalForm(forms.ModelForm):
             'state': forms.TextInput(attrs={'class': 'form-control'}),
             'district': forms.TextInput(attrs={'class': 'form-control'}),
             'pin_code': forms.TextInput(attrs={'class': 'form-control'}),
-            'nurse_strength': forms.NumberInput(attrs={'class': 'form-control'}),
             'number_of_beds': forms.NumberInput(attrs={'class': 'form-control'}),
+            'onboarding_type': forms.Select(attrs={'class': 'form-control'}),
         }
 
 class LearnerForm(forms.ModelForm):
@@ -59,7 +59,7 @@ class LearnerForm(forms.ModelForm):
                  'college', 'course', 'stream', 'year_of_study', 'hospital', 'designation',
                  'years_of_experience', 'educational_qualification', 'educational_institution',
                  'speciality', 'state', 'district', 'pincode', 'address', 'date_of_birth',
-                 'certifications']
+                 'certifications', 'learner_gender', 'skillathon_event']
         widgets = {
             'onboarding_type': forms.Select(attrs={'class': 'form-control'}),
             'learner_type': forms.Select(attrs={'class': 'form-control'}),
@@ -79,6 +79,8 @@ class LearnerForm(forms.ModelForm):
             'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'date_of_birth': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'certifications': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'learner_gender': forms.Select(attrs={'class': 'form-control'}),
+            'skillathon_event': forms.Select(attrs={'class': 'form-control'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -128,13 +130,12 @@ class AssessorForm(forms.ModelForm):
 class SkillathonEventForm(forms.ModelForm):
     class Meta:
         model = SkillathonEvent
-        fields = ['name', 'date', 'state', 'city', 'status']
+        fields = ['name', 'date', 'state', 'city']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'state': forms.TextInput(attrs={'class': 'form-control'}),
             'city': forms.TextInput(attrs={'class': 'form-control'}),
-            'status': forms.Select(attrs={'class': 'form-control'}),
         }
 
 class BulkLearnerUploadForm(forms.Form):
