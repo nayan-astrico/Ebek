@@ -100,27 +100,48 @@
             <div class="modal-body" style="padding: 20px;">
                 <form id="assignForm" onsubmit="return false;">
                     {% csrf_token %}
-
-                    <!-- Select Institute -->
                     <div class="form-group">
-                        <label for="institute" class="form-label">Select Institute</label>
+                        <label for="type" class="form-label">Select Type</label>
                         <div class="dropdown-container">
-                            <button class="dropdown-btn" id="instituteDropdownBtn">Select Institute</button>
-                            <ul class="dropdown-list" id="instituteDropdownList"></ul>
+                            <button class="dropdown-btn" id="typeDropdownBtn">Select Type</button>
+                            <ul class="dropdown-list" id="typeDropdownList">
+                                <li data-value="Internal" data-id="Internal">Internal</li>
+                                <li data-value="External" data-id="External">External</li>
+                            </ul>
                         </div>
                     </div>
 
-                    <!-- Select Batch -->
-                    <div class="form-group">
-                        <label for="batch" class="form-label">Select Batch</label>
-                        <div id="batchChipsContainer" class="chip-container"></div>
-                        <div class="dropdown-container">
-                            <button class="dropdown-btn" id="batchDropdownBtn">Select Batch</button>
-                            <ul class="dropdown-list" id="batchDropdownList"></ul>
+
+                    <div id="internal-assessment-container" style="display: none;">
+                        <div class="form-group">
+                            <label for="skillathon" class="form-label">Select Skillathon</label>
+                            <div class="dropdown-container">
+                                <button class="dropdown-btn" id="skillathonDropdownBtn">Select Skillathon</button>
+                                <ul class="dropdown-list" id="skillathonDropdownList"></ul>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Select Procedure -->
+                    <div id="external-assessment-container" style="display: none;">
+                        <div class="form-group">
+                            <label for="institute" class="form-label">Select Institute</label>
+                            <div class="dropdown-container">
+                                <button class="dropdown-btn" id="instituteDropdownBtn">Select Institute</button>
+                                <ul class="dropdown-list" id="instituteDropdownList"></ul>
+                            </div>
+                        </div>
+    
+                        <!-- Select Batch -->
+                        <div class="form-group">
+                            <label for="batch" class="form-label">Select Batch</label>
+                            <div id="batchChipsContainer" class="chip-container"></div>
+                            <div class="dropdown-container">
+                                <button class="dropdown-btn" id="batchDropdownBtn">Select Batch</button>
+                                <ul class="dropdown-list" id="batchDropdownList"></ul>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label for="procedure" class="form-label">Select Procedure</label>
                         <div id="procedureChipsContainer" class="chip-container"></div>
@@ -221,6 +242,10 @@
         margin-top: 5px;
         display: none;
         z-index: 1000;
+    }
+
+    .dropdown-list.show {
+        display: block !important;
     }
 
     .dropdown-list li {
@@ -425,6 +450,7 @@
     }
 
     $(document).ready(function () {
+
         // Open modal
         $('#assignAssessmentBtn').click(function (e) {
             e.preventDefault(); // Prevent default button action
@@ -432,26 +458,32 @@
         });
 
         // Handle dropdown toggle and auto-closing logic
-        $('.dropdown-btn').click(function (e) {
+        $('#typeDropdownBtn').click(function (e) {
             e.preventDefault();
-            e.stopPropagation(); // Stop the click from propagating to the document
-            const dropdownList = $(this).next('.dropdown-list');
-
-            // Close any open dropdowns except this one
-            $('.dropdown-list').not(dropdownList).hide();
-
-            // Toggle this dropdown
-            dropdownList.toggle();
+            e.stopPropagation();
+            $('#typeDropdownList').toggle();
         });
 
-        // Close dropdown if clicking anywhere outside
-        $(document).click(function () {
-            $('.dropdown-list').hide(); // Close all open dropdowns
+        $('#typeDropdownList li').click(function (e) {
+            e.preventDefault();
+            const type = $(this).data('value');
+            $('#typeDropdownBtn').text(type);
+            $('#typeDropdownList').hide();
+            
+            if (type === 'Internal') {
+                $('#internal-assessment-container').show();
+                $('#external-assessment-container').hide();
+                // Fetch skillathons when internal type is selected
+                fetchSkillathons();
+            } else {
+                $('#internal-assessment-container').hide();
+                $('#external-assessment-container').show();
+            }
         });
 
-        // Prevent dropdown from closing when clicking inside
-        $('.dropdown-list').click(function (e) {
-            e.stopPropagation(); // Prevent the click from propagating to the document
+        // Close dropdown when clicking outside
+        $(document).click(function() {
+            $('#typeDropdownList').hide();
         });
 
         // Fetch institutes dynamically
@@ -485,6 +517,46 @@
                     console.error('Failed to fetch cohorts.');
                 },
             });
+        });
+
+        // Function to fetch skillathons
+        function fetchSkillathons() {
+            $.ajax({
+                url: '/fetch-skillathons/',
+                type: 'GET',
+                success: function(response) {
+                    const skillathonList = $('#skillathonDropdownList');
+                    skillathonList.empty();
+                    
+                    response.skillathons.forEach(skillathon => {
+                        skillathonList.append(
+                            `<li data-value="${skillathon.name}" data-id="${skillathon.id}">${skillathon.name}</li>`
+                        );
+                    });
+                },
+                error: function() {
+                    console.error('Failed to fetch skillathons.');
+                }
+            });
+        }
+
+        // Handle skillathon dropdown toggle
+        $('#skillathonDropdownBtn').click(function(e) {
+            e.preventDefault();
+            $('#skillathonDropdownList').toggle();
+        });
+
+        // Handle skillathon selection
+        $('#skillathonDropdownList').on('click', 'li', function(e) {
+            e.preventDefault();
+            const value = $(this).data('value');
+            $('#skillathonDropdownBtn').text(value);
+            $('#skillathonDropdownList').hide();
+        });
+
+        // Close dropdown when clicking outside
+        $(document).click(function() {
+            $('#skillathonDropdownList').hide();
         });
 
         // Fetch assessors dynamically and handle independent selection
@@ -541,9 +613,13 @@
                 dropdown.append(`<li data-value="${item[property]}" data-id="${item['id']}">${item[property]}</li>`);
             });
         }
+
+        
     });
 
     $('#assignForm').on('submit', function (e) {
+
+        console.log('Assign Form Submitted');
 
         e.preventDefault();
 
@@ -573,13 +649,6 @@
         }).get();
 
         console.log('Selected Assessors:', assessors);
-
-
-        // Front-end validation
-        if (!batchIds.length || !procedures.length || !testDate || !assessors.length) {
-            alert('All fields are required.');
-            return;
-        }
 
         button.prop('disabled', true); // Disable the button
         spinner.show(); // Show the spinner
@@ -629,7 +698,7 @@
 
 </script>
 
-<script>
+<!-- <script>
     // Search filter implementation (same as before)
     document.getElementById('search').addEventListener('input', function () {
         const searchValue = this.value.toLowerCase();
@@ -650,7 +719,7 @@
             alert('Delete Assessment: ' + id); // Add actual delete functionality here
         }
     }
-</script>
+</script> -->
 
 
 {% endblock %}

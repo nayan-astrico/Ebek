@@ -138,7 +138,7 @@
                 <th>Mobile</th>
                 <th>Type</th>
                 <th>Institution/Hospital</th>
-                <th>Course/Designation</th>
+                <th>Skillathon</th>
                 <th>Status</th>
                 <th>Actions</th>
             </tr>
@@ -162,11 +162,7 @@
                     {% endif %}
                 </td>
                 <td>
-                    {% if learner.learner_type == 'student' %}
-                        {{ learner.course|default:"-" }}
-                    {% else %}
-                        {{ learner.designation|default:"-" }}
-                    {% endif %}
+                    {{ learner.skillathon_event.name|default:"-" }}
                 </td>
                 <td>
                     <span class="badge {% if learner.is_active %}active{% else %}inactive{% endif %}">
@@ -270,7 +266,7 @@
                 <h4>Download Templates</h4>
             </div>
             <div class="template-buttons">
-                <a href="/media/excel_templates/learner_student_template.csv" class="template-card" download>
+                <a href="/media/excel_templates/learner_student_template.xlsx" class="template-card" download>
                     <div class="template-icon">
                         <i class="fas fa-graduation-cap"></i>
                     </div>
@@ -280,7 +276,7 @@
                     </div>
                     <i class="fas fa-download"></i>
                 </a>
-                <a href="/media/excel_templates/learner_nurse_template.csv" class="template-card" download>
+                <a href="/media/excel_templates/learner_nurse_template.xlsx" class="template-card" download>
                     <div class="template-icon">
                         <i class="fas fa-user-nurse"></i>
                     </div>
@@ -297,26 +293,26 @@
         <div class="upload-section">
             <div class="section-header">
                 <i class="fas fa-cloud-upload-alt"></i>
-                <h4>Upload CSV File</h4>
+                <h4>Upload Excel File</h4>
             </div>
             <form id="uploadForm" method="post" enctype="multipart/form-data">
                 {% csrf_token %}
                 <div class="upload-zone" id="uploadZone">
                     <div class="upload-placeholder">
                         <div class="upload-icon">
-                            <i class="fas fa-cloud-upload-alt"></i>
+                            <i class="fas fa-file-excel"></i>
                         </div>
-                        <h5>Drag and drop your CSV file here</h5>
+                        <h5>Drag and drop your Excel file here</h5>
                         <p>or</p>
                         <label class="btn btn-outline">
                             Choose File
-                            <input type="file" id="fileInput" accept=".csv" hidden>
+                            <input type="file" id="fileInput" accept=".xlsx" hidden>
                         </label>
-                        <p class="upload-hint">Supported format: CSV</p>
+                        <p class="upload-hint">Supported format: Excel (.xlsx)</p>
                     </div>
                     <div class="upload-preview" style="display: none;">
                         <div class="file-info">
-                            <i class="fas fa-file-csv"></i>
+                            <i class="fas fa-file-excel"></i>
                             <span class="filename">No file selected</span>
                         </div>
                         <button type="button" class="btn-icon" onclick="removeFile()">
@@ -1306,7 +1302,18 @@
     color: white;
     text-decoration: none;
 }
+
+.file-info i.fa-file-excel {
+    color: #217346; /* Excel green color */
+}
+
+.upload-icon i.fa-file-excel {
+    font-size: 32px;
+    color: white;
+}
 </style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <script>
 function confirmDelete(button) {
@@ -1469,11 +1476,11 @@ fileInput.addEventListener('change', (e) => {
 function handleFiles(files) {
     if (files.length > 0) {
         const file = files[0];
-        if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
+        if (file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.name.endsWith('.xlsx')) {
             showFilePreview(file);
-            validateAndPreviewCSV(file);
+            validateAndPreviewExcel(file);
         } else {
-            alert('Please upload a CSV file');
+            alert('Please upload an Excel (.xlsx) file');
         }
     }
 }
@@ -1482,10 +1489,12 @@ function showFilePreview(file) {
     const placeholder = uploadZone.querySelector('.upload-placeholder');
     const preview = uploadZone.querySelector('.upload-preview');
     const filename = preview.querySelector('.filename');
+    const fileIcon = preview.querySelector('.file-info i');
     
     placeholder.style.display = 'none';
     preview.style.display = 'flex';
     filename.textContent = file.name;
+    fileIcon.className = 'fas fa-file-excel';
 }
 
 function removeFile() {
@@ -1501,18 +1510,131 @@ function removeFile() {
     document.querySelector('.validation-results').innerHTML = '';
 }
 
-function validateAndPreviewCSV(file) {
+function validateAndPreviewExcel(file) {
     const reader = new FileReader();
     reader.onload = function(e) {
-        const text = e.target.result;
-        const lines = text.split('\n');
-        if (lines.length > 0) {
-            const headers = lines[0].split(',');
-            createPreviewTable(headers, lines.slice(1, 6)); // Show first 5 rows
-            validateHeaders(headers);
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+        
+        if (jsonData.length > 0) {
+            const headers = jsonData[0];
+            // Filter out empty rows and get first few non-empty rows
+            const nonEmptyRows = jsonData.slice(1).filter(row => 
+                row.some(cell => cell !== null && cell !== undefined && cell.toString().trim() !== '')
+            ).slice(0, 5); // Get up to 5 non-empty rows
+            
+            // Validate headers
+            const validationResults = validateHeaders(headers);
+            
+            // Create preview table with non-empty rows
+            createPreviewTable(headers, nonEmptyRows);
+            
+            // Validate data (using all rows for validation)
+            const dataValidation = validateData(headers, nonEmptyRows);
+            
+            // Show validation results
+            showValidationResults(validationResults, dataValidation);
         }
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
+}
+
+function validateHeaders(headers) {
+    const requiredHeaders = {
+        'Onboarding Type': true,
+        'Learner Type': true,
+        'Learner Name': true,
+        'Learner Email': true,
+        'Learner Phone': true,
+        'College': false,
+        'Course': false,
+        'Stream': false,
+        'Year of Study': false,
+        'Hospital': false,
+        'Designation': false,
+        'Years of Experience': false,
+        'Educational Qualification': false,
+        'Educational Institution': false,
+        'Speciality': false,
+        'State': false,
+        'District': false,
+        'Pincode': false,
+        'Address': false,
+        'Date of Birth': false,
+        'Certifications': false,
+        'Learner Gender': true,
+        'Skillathon Event': false
+    };
+
+    const missing = [];
+    const extra = [];
+
+    // Check for missing required headers
+    Object.entries(requiredHeaders).forEach(([header, required]) => {
+        if (required && !headers.includes(header)) {
+            missing.push(header);
+        }
+    });
+
+    // Check for extra headers
+    headers.forEach(header => {
+        if (!requiredHeaders.hasOwnProperty(header)) {
+            extra.push(header);
+        }
+    });
+
+    return {
+        isValid: missing.length === 0,
+        missing,
+        extra
+    };
+}
+
+function validateData(headers, rows) {
+    const errors = [];
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const phoneRegex = /^\d{10}$/;
+    const dateRegex = /^\d{2}\/\d{2}\/\d{4}$/;
+    const pincodeRegex = /^\d{6}$/;
+
+    rows.forEach((row, index) => {
+        const rowErrors = [];
+        const rowData = {};
+        
+        // Create object from row data
+        headers.forEach((header, i) => {
+            rowData[header] = row[i];
+        });
+
+        // Validate required fields
+        if (!rowData['Learner Name']) {
+            rowErrors.push('Name is required');
+        }
+        if (!rowData['Learner Email']) {
+            rowErrors.push('Email is required');
+        } else if (!emailRegex.test(rowData['Learner Email'])) {
+            rowErrors.push('Invalid email format');
+        }
+        if (!rowData['Learner Phone']) {
+            rowErrors.push('Phone is required');
+        } else if (!phoneRegex.test(rowData['Learner Phone'])) {
+            rowErrors.push('Phone must be 10 digits');
+        }
+
+        if (rowErrors.length > 0) {
+            errors.push({
+                row: index + 2, // +2 because of 0-based index and header row
+                errors: rowErrors
+            });
+        }
+    });
+
+    return {
+        isValid: errors.length === 0,
+        errors
+    };
 }
 
 function createPreviewTable(headers, rows) {
@@ -1521,16 +1643,16 @@ function createPreviewTable(headers, rows) {
     
     // Add headers
     headers.forEach(header => {
-        html += `<th>${header.trim()}</th>`;
+        html += `<th>${header}</th>`;
     });
     html += '</tr></thead><tbody>';
     
     // Add rows
     rows.forEach(row => {
-        const cells = row.split(',');
         html += '<tr>';
-        cells.forEach(cell => {
-            html += `<td>${cell.trim()}</td>`;
+        headers.forEach(header => {
+            const cellValue = row[headers.indexOf(header)] || '';
+            html += `<td>${cellValue || '-'}</td>`;
         });
         html += '</tr>';
     });
@@ -1539,37 +1661,85 @@ function createPreviewTable(headers, rows) {
     tableWrapper.innerHTML = html;
 }
 
-function validateHeaders(headers) {
-    const requiredHeaders = [
-        'Onboarding Type', 'Full Name', 'Email', 'Mobile Number',
-        'Learner Type', 'College/Hospital', 'Course/Designation'
-    ];
-    
+function showValidationResults(headerValidation, dataValidation) {
     const validationResults = document.querySelector('.validation-results');
-    const missing = requiredHeaders.filter(h => !headers.includes(h));
-    
-    if (missing.length > 0) {
-        validationResults.innerHTML = `
+    let html = '';
+
+    // Show header validation results
+    if (!headerValidation.isValid) {
+        html += `
             <div class="alert alert-danger">
-                <strong>Missing required columns:</strong>
-                <ul>
-                    ${missing.map(h => `<li>${h}</li>`).join('')}
-                </ul>
-            </div>
-        `;
-    } else {
-        validationResults.innerHTML = `
-            <div class="alert alert-success">
-                <i class="fas fa-check-circle"></i>
-                File structure validated successfully
+                <i class="fas fa-exclamation-circle"></i>
+                <div class="alert-content">
+                    <strong>Header Validation Failed</strong>
+                    ${headerValidation.missing.length > 0 ? `
+                        <p>Missing required columns:</p>
+                        <ul>
+                            ${headerValidation.missing.map(h => `<li>${h}</li>`).join('')}
+                        </ul>
+                    ` : ''}
+                    ${headerValidation.extra.length > 0 ? `
+                        <p>Extra columns found:</p>
+                        <ul>
+                            ${headerValidation.extra.map(h => `<li>${h}</li>`).join('')}
+                        </ul>
+                    ` : ''}
+                </div>
             </div>
         `;
     }
+
+    // Show data validation results
+    if (!dataValidation.isValid) {
+        html += `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-circle"></i>
+                <div class="alert-content">
+                    <strong>Data Validation Failed</strong>
+                    <p>Errors found in the following rows:</p>
+                    <ul>
+                        ${dataValidation.errors.map(error => `
+                            <li>Row ${error.row}:
+                                <ul>
+                                    ${error.errors.map(e => `<li>${e}</li>`).join('')}
+                                </ul>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            </div>
+        `;
+    }
+
+    // Show success message if all validations pass
+    if (headerValidation.isValid && dataValidation.isValid) {
+        html += `
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i>
+                <div class="alert-content">
+                    <strong>Validation Successful</strong>
+                    <p>All headers and data are valid. You can proceed with the upload.</p>
+                </div>
+            </div>
+        `;
+    }
+
+    validationResults.innerHTML = html;
 }
 
 function submitUpload() {
     const form = document.getElementById('uploadForm');
     const formData = new FormData(form);
+    const fileInput = document.getElementById('fileInput');
+    
+    // Make sure we have a file
+    if (!fileInput.files.length) {
+        alert('Please select a file to upload');
+        return;
+    }
+    
+    // Add the file to formData with the correct field name
+    formData.append('file', fileInput.files[0]);
     
     // Add loading state
     const uploadButton = document.querySelector('.upload-actions .btn-primary');
@@ -1577,25 +1747,30 @@ function submitUpload() {
     uploadButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
     uploadButton.disabled = true;
     
-    fetch('/upload-learners/', {
+    fetch('/onboarding/learners/bulk-upload/', {
         method: 'POST',
         body: formData,
         headers: {
             'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
         }
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
             alert('Upload successful!');
             toggleUploadPanel();
             location.reload(); // Refresh the page to show new data
         } else {
-            alert('Upload failed: ' + data.error);
+            alert('Upload failed: ' + (data.error || 'Unknown error'));
         }
     })
     .catch(error => {
-        alert('Upload failed: ' + error);
+        alert('Upload failed: ' + error.message);
     })
     .finally(() => {
         uploadButton.innerHTML = originalText;

@@ -16,6 +16,14 @@ from assessments.utils_ses import send_email
 import random
 import string
 from django.urls import reverse
+import openpyxl
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from .onboarding_forms import LearnerForm
+from .models import Learner, Institution, Hospital, SkillathonEvent
+from django.contrib.auth import get_user_model
+from django.http import JsonResponse
+
 
 # Group Views
 @login_required
@@ -54,52 +62,61 @@ def group_list(request):
 @login_required
 def group_create(request):
     User = get_user_model()
+    print("group_create")
     if request.method == 'POST':
         form = GroupForm(request.POST)
         if form.is_valid():
+            print("form is valid")
             # Extract group head info
             head_name = form.cleaned_data['group_head_name']
             head_email = form.cleaned_data['group_head_email']
             head_phone = form.cleaned_data['group_head_phone']
             group_name = form.cleaned_data['name']
             print(form.cleaned_data)
+            user = None
             # Check if user exists
-            try:
-                user = User.objects.get(email=head_email)
-                # Update name and phone if changed
-                updated = False
-                if user.full_name != head_name:
-                    user.full_name = head_name
-                    updated = True
-                if user.phone_number != head_phone:
-                    user.phone_number = head_phone
-                    updated = True
-                if updated:
+            if head_name == '' or head_email == '' or head_phone == '':
+                pass
+            else:
+                try:
+                    user = User.objects.get(email=head_email)
+                    # Update name and phone if changed
+                    updated = False
+                    if user.full_name != head_name:
+                        user.full_name = head_name
+                        updated = True
+                    if user.phone_number != head_phone:
+                        user.phone_number = head_phone
+                        updated = True
+                    if updated:
+                        user.save()
+                    created = False
+                except User.DoesNotExist:
+                    print("User does not exist")
+                    user = User.objects.create(
+                        email=head_email,
+                        full_name=head_name,
+                        phone_number=head_phone,
+                        is_active=True
+                    )
+                    # Set default password
+                    default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+                    user.set_password(default_password)
                     user.save()
-                created = False
-            except User.DoesNotExist:
-                user = User.objects.create(
-                    email=head_email,
-                    full_name=head_name,
-                    phone_number=head_phone,
-                    is_active=True
-                )
-                # Set default password
-                default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-                user.set_password(default_password)
-                user.save()
-                # Send email with credentials
-                reset_link = request.build_absolute_uri(
-                    reverse('login')
-                )
-                print(reset_link)
-                subject = 'Your Group Admin Account Created'
-                body = f"""Dear {head_name},\n\nYour group admin account has been created for the group {group_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                send_email(subject, body, [head_email])
-                created = True
+                    # Send email with credentials
+                    reset_link = request.build_absolute_uri(
+                        reverse('login')
+                    )
+                    print(reset_link)
+                    subject = 'Your Group Admin Account Created'
+                    body = f"""Dear {head_name},\n\nYour group admin account has been created for the group {group_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
+                    send_email(subject, body, [head_email])
+                    created = True
             # Create group and assign group_head
             group = form.save(commit=False)
-            group.group_head = user
+            if user is not None:
+                group.group_head = user
+            
             group.is_active = request.POST.get('is_active') == 'on'
             group.save()
             messages.success(request, 'Group created successfully.')
@@ -120,44 +137,45 @@ def group_edit(request, pk):
             head_phone = form.cleaned_data['group_head_phone']
             group_name = form.cleaned_data['name']
             current_head = group.group_head
-            if not current_head or current_head.email != head_email:
-                user, created = User.objects.get_or_create(
-                    email=head_email,
-                    defaults={
-                        'is_active': True,
-                    }
-                )
-                if created:
-                    user.full_name = head_name
-                    user.phone_number = head_phone
-                    default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-                    user.set_password(default_password)
-                    user.save()
-                    reset_link = request.build_absolute_uri(reverse('login'))
-                    subject = 'Your Group Admin Account Created'
-                    body = f"""Dear {head_name},\n\nYour group admin account has been created for the group {group_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                    send_email(subject, body, [head_email])
+            if head_name != "" and head_email != "" and head_phone != "":
+                if not current_head or current_head.email != head_email:
+                    user, created = User.objects.get_or_create(
+                        email=head_email,
+                        defaults={
+                            'is_active': True,
+                        }
+                    )
+                    if created:
+                        user.full_name = head_name
+                        user.phone_number = head_phone
+                        default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+                        user.set_password(default_password)
+                        user.save()
+                        reset_link = request.build_absolute_uri(reverse('login'))
+                        subject = 'Your Group Admin Account Created'
+                        body = f"""Dear {head_name},\n\nYour group admin account has been created for the group {group_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
+                        send_email(subject, body, [head_email])
+                    else:
+                        updated = False
+                        if user.full_name != head_name:
+                            user.full_name = head_name
+                            updated = True
+                        if user.phone_number != head_phone:
+                            user.phone_number = head_phone
+                            updated = True
+                        if updated:
+                            user.save()
+                    group.group_head = user
                 else:
                     updated = False
-                    if user.full_name != head_name:
-                        user.full_name = head_name
+                    if current_head.full_name != head_name:
+                        current_head.full_name = head_name
                         updated = True
-                    if user.phone_number != head_phone:
-                        user.phone_number = head_phone
+                    if current_head.phone_number != head_phone:
+                        current_head.phone_number = head_phone
                         updated = True
                     if updated:
-                        user.save()
-                group.group_head = user
-            else:
-                updated = False
-                if current_head.full_name != head_name:
-                    current_head.full_name = head_name
-                    updated = True
-                if current_head.phone_number != head_phone:
-                    current_head.phone_number = head_phone
-                    updated = True
-                if updated:
-                    current_head.save()
+                        current_head.save()
             group = form.save(commit=False)
             group.save()
             messages.success(request, 'Group updated successfully.')
@@ -234,35 +252,40 @@ def institution_create(request):
             head_email = form.cleaned_data['unit_head_email']
             head_phone = form.cleaned_data['unit_head_phone']
             institution_name = form.cleaned_data['name']
-            user, created = User.objects.get_or_create(
-                email=head_email,
-                defaults={
-                    'is_active': True,
-                }
-            )
-            if created:
-                user.full_name = head_name
-                user.phone_number = head_phone
-                default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-                user.set_password(default_password)
-                user.save()
-                reset_link = request.build_absolute_uri(reverse('login'))
-                subject = 'Your Unit Head Account Created'
-                body = f"""Dear {head_name},\n\nYour unit head account has been created for the institution {institution_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                send_email(subject, body, [head_email])
+            user = None
+            if head_name == '' or head_email == '' or head_phone == '':
+                pass
             else:
-                # Update name/phone if changed
-                updated = False
-                if user.full_name != head_name:
+                user, created = User.objects.get_or_create(
+                    email=head_email,
+                    defaults={
+                        'is_active': True,
+                    }
+                )
+                if created:
                     user.full_name = head_name
-                    updated = True
-                if user.phone_number != head_phone:
                     user.phone_number = head_phone
-                    updated = True
-                if updated:
+                    default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+                    user.set_password(default_password)
                     user.save()
+                    reset_link = request.build_absolute_uri(reverse('login'))
+                    subject = 'Your Unit Head Account Created'
+                    body = f"""Dear {head_name},\n\nYour unit head account has been created for the institution {institution_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
+                    send_email(subject, body, [head_email])
+                else:
+                    # Update name/phone if changed
+                    updated = False
+                    if user.full_name != head_name:
+                        user.full_name = head_name
+                        updated = True
+                    if user.phone_number != head_phone:
+                        user.phone_number = head_phone
+                        updated = True
+                    if updated:
+                        user.save()
             institution = form.save(commit=False)
-            institution.unit_head = user
+            if user is not None:
+                institution.unit_head = user
             institution.is_active = request.POST.get('is_active') == 'on'
             institution.save()
             messages.success(request, 'Institution created successfully.')
@@ -283,44 +306,45 @@ def institution_edit(request, pk):
             head_phone = form.cleaned_data['unit_head_phone']
             institution_name = form.cleaned_data['name']
             current_head = institution.unit_head
-            if not current_head or current_head.email != head_email:
-                user, created = User.objects.get_or_create(
-                    email=head_email,
-                    defaults={
-                        'is_active': True,
-                    }
-                )
-                if created:
-                    user.full_name = head_name
-                    user.phone_number = head_phone
-                    default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-                    user.set_password(default_password)
-                    user.save()
-                    reset_link = request.build_absolute_uri(reverse('login'))
-                    subject = 'Your Unit Head Account Created'
-                    body = f"""Dear {head_name},\n\nYour unit head account has been created for the institution {institution_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                    send_email(subject, body, [head_email])
+            if head_name != "" and head_email != "" and head_phone != "":
+                if not current_head or current_head.email != head_email:
+                    user, created = User.objects.get_or_create(
+                        email=head_email,
+                        defaults={
+                            'is_active': True,
+                        }
+                    )
+                    if created:
+                        user.full_name = head_name
+                        user.phone_number = head_phone
+                        default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+                        user.set_password(default_password)
+                        user.save()
+                        reset_link = request.build_absolute_uri(reverse('login'))
+                        subject = 'Your Unit Head Account Created'
+                        body = f"""Dear {head_name},\n\nYour unit head account has been created for the institution {institution_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
+                        send_email(subject, body, [head_email])
+                    else:
+                        updated = False
+                        if user.full_name != head_name:
+                            user.full_name = head_name
+                            updated = True
+                        if user.phone_number != head_phone:
+                            user.phone_number = head_phone
+                            updated = True
+                        if updated:
+                            user.save()
+                    institution.unit_head = user
                 else:
                     updated = False
-                    if user.full_name != head_name:
-                        user.full_name = head_name
+                    if current_head.full_name != head_name:
+                        current_head.full_name = head_name
                         updated = True
-                    if user.phone_number != head_phone:
-                        user.phone_number = head_phone
+                    if current_head.phone_number != head_phone:
+                        current_head.phone_number = head_phone
                         updated = True
                     if updated:
-                        user.save()
-                institution.unit_head = user
-            else:
-                updated = False
-                if current_head.full_name != head_name:
-                    current_head.full_name = head_name
-                    updated = True
-                if current_head.phone_number != head_phone:
-                    current_head.phone_number = head_phone
-                    updated = True
-                if updated:
-                    current_head.save()
+                        current_head.save()
             institution = form.save(commit=False)
             institution.save()
             messages.success(request, 'Institution updated successfully.')
@@ -396,35 +420,40 @@ def hospital_create(request):
             head_email = form.cleaned_data['unit_head_email']
             head_phone = form.cleaned_data['unit_head_phone']
             hospital_name = form.cleaned_data['name']
-            user, created = User.objects.get_or_create(
-                email=head_email,
-                defaults={
-                    'is_active': True,
-                }
-            )
-            if created:
-                user.full_name = head_name
-                user.phone_number = head_phone
-                default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-                user.set_password(default_password)
-                user.save()
-                reset_link = request.build_absolute_uri(reverse('login'))
-                subject = 'Your Unit Head Account Created'
-                body = f"""Dear {head_name},\n\nYour unit head account has been created for the hospital {hospital_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                send_email(subject, body, [head_email])
+            user = None
+            if head_name == '' or head_email == '' or head_phone == '':
+                pass
             else:
-                # Update name/phone if changed
-                updated = False
-                if user.full_name != head_name:
+                user, created = User.objects.get_or_create(
+                    email=head_email,
+                    defaults={
+                        'is_active': True,
+                    }
+                )
+                if created:
                     user.full_name = head_name
-                    updated = True
-                if user.phone_number != head_phone:
                     user.phone_number = head_phone
-                    updated = True
-                if updated:
+                    default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+                    user.set_password(default_password)
                     user.save()
+                    reset_link = request.build_absolute_uri(reverse('login'))
+                    subject = 'Your Unit Head Account Created'
+                    body = f"""Dear {head_name},\n\nYour unit head account has been created for the hospital {hospital_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
+                    send_email(subject, body, [head_email])
+                else:
+                    # Update name/phone if changed
+                    updated = False
+                    if user.full_name != head_name:
+                        user.full_name = head_name
+                        updated = True
+                    if user.phone_number != head_phone:
+                        user.phone_number = head_phone
+                        updated = True
+                    if updated:
+                        user.save()
             hospital = form.save(commit=False)
-            hospital.unit_head = user
+            if user is not None:
+                hospital.unit_head = user
             hospital.is_active = request.POST.get('is_active') == 'on'
             hospital.save()
             messages.success(request, 'Hospital created successfully.')
@@ -445,44 +474,45 @@ def hospital_edit(request, pk):
             head_phone = form.cleaned_data['unit_head_phone']
             hospital_name = form.cleaned_data['name']
             current_head = hospital.unit_head
-            if not current_head or current_head.email != head_email:
-                user, created = User.objects.get_or_create(
-                    email=head_email,
-                    defaults={
-                        'is_active': True,
-                    }
-                )
-                if created:
-                    user.full_name = head_name
-                    user.phone_number = head_phone
-                    default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-                    user.set_password(default_password)
-                    user.save()
-                    reset_link = request.build_absolute_uri(reverse('login'))
-                    subject = 'Your Unit Head Account Created'
-                    body = f"""Dear {head_name},\n\nYour unit head account has been created for the hospital {hospital_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                    send_email(subject, body, [head_email])
+            if head_name != "" and head_email != "" and head_phone != "":
+                if not current_head or current_head.email != head_email:
+                    user, created = User.objects.get_or_create(
+                        email=head_email,
+                        defaults={
+                            'is_active': True,
+                        }
+                    )
+                    if created:
+                        user.full_name = head_name
+                        user.phone_number = head_phone
+                        default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+                        user.set_password(default_password)
+                        user.save()
+                        reset_link = request.build_absolute_uri(reverse('login'))
+                        subject = 'Your Unit Head Account Created'
+                        body = f"""Dear {head_name},\n\nYour unit head account has been created for the hospital {hospital_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
+                        send_email(subject, body, [head_email])
+                    else:
+                        updated = False
+                        if user.full_name != head_name:
+                            user.full_name = head_name
+                            updated = True
+                        if user.phone_number != head_phone:
+                            user.phone_number = head_phone
+                            updated = True
+                        if updated:
+                            user.save()
+                    hospital.unit_head = user
                 else:
                     updated = False
-                    if user.full_name != head_name:
-                        user.full_name = head_name
+                    if current_head.full_name != head_name:
+                        current_head.full_name = head_name
                         updated = True
-                    if user.phone_number != head_phone:
-                        user.phone_number = head_phone
+                    if current_head.phone_number != head_phone:
+                        current_head.phone_number = head_phone
                         updated = True
                     if updated:
-                        user.save()
-                hospital.unit_head = user
-            else:
-                updated = False
-                if current_head.full_name != head_name:
-                    current_head.full_name = head_name
-                    updated = True
-                if current_head.phone_number != head_phone:
-                    current_head.phone_number = head_phone
-                    updated = True
-                if updated:
-                    current_head.save()
+                        current_head.save()
             hospital = form.save(commit=False)
             hospital.save()
             messages.success(request, 'Hospital updated successfully.')
@@ -548,37 +578,42 @@ def learner_create(request):
             learner_name = form.cleaned_data['learner_name']
             learner_email = form.cleaned_data['learner_email']
             learner_phone = form.cleaned_data['learner_phone']
-            
-            user, created = User.objects.get_or_create(
-                email=learner_email,
-                defaults={
-                    'is_active': True,
-                }
-            )
-            if created:
-                user.full_name = learner_name
-                user.phone_number = learner_phone
-                default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-                user.set_password(default_password)
-                user.save()
-                reset_link = request.build_absolute_uri(reverse('login'))
-                subject = 'Your Learner Account Created'
-                body = f"""Dear {learner_name},\n\nYour learner account has been created.\n\nUsername: {learner_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                send_email(subject, body, [learner_email])
+
+            if learner_name == '' or learner_email == '' or learner_phone == '':
+                pass
             else:
-                # Update name/phone if changed
-                updated = False
-                if user.full_name != learner_name:
+            
+                user, created = User.objects.get_or_create(
+                    email=learner_email,
+                    defaults={
+                        'is_active': True,
+                    }
+                )
+                if created:
                     user.full_name = learner_name
-                    updated = True
-                if user.phone_number != learner_phone:
                     user.phone_number = learner_phone
-                    updated = True
-                if updated:
+                    default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+                    user.set_password(default_password)
                     user.save()
+                    reset_link = request.build_absolute_uri(reverse('login'))
+                    subject = 'Your Learner Account Created'
+                    body = f"""Dear {learner_name},\n\nYour learner account has been created.\n\nUsername: {learner_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
+                    send_email(subject, body, [learner_email])
+                else:
+                    # Update name/phone if changed
+                    updated = False
+                    if user.full_name != learner_name:
+                        user.full_name = learner_name
+                        updated = True
+                    if user.phone_number != learner_phone:
+                        user.phone_number = learner_phone
+                        updated = True
+                    if updated:
+                        user.save()
             
             learner = form.save(commit=False)
-            learner.learner_user = user
+            if user is not None:
+                learner.learner_user = user
             learner.save()
             messages.success(request, 'Learner created successfully.')
             return redirect('learner_list')
@@ -651,38 +686,185 @@ def learner_edit(request, pk):
 @login_required
 def learner_bulk_upload(request):
     if request.method == 'POST':
-        form = BulkLearnerUploadForm(request.POST, request.FILES)
-        if form.is_valid():
-            csv_file = request.FILES['file']
-            decoded_file = csv_file.read().decode('utf-8').splitlines()
-            reader = csv.DictReader(decoded_file)
+        file = request.FILES.get('file')
+        if not file:
+            return JsonResponse({
+                'success': False,
+                'error': 'No file uploaded'
+            })
             
+        if not file.name.endswith('.xlsx'):
+            return JsonResponse({
+                'success': False,
+                'error': 'Please upload a valid Excel (.xlsx) file'
+            })
+
+        try:
+            wb = openpyxl.load_workbook(file)
+            ws = wb.active
+
+            # Define the mapping from Excel columns to form fields
+            header_map = {
+                'Onboarding Type': 'onboarding_type',
+                'Learner Type': 'learner_type',
+                'Learner Name': 'learner_name',
+                'Learner Email': 'learner_email',
+                'Learner Phone': 'learner_phone',
+                'College': 'college',
+                'Course': 'course',
+                'Stream': 'stream',
+                'Year of Study': 'year_of_study',
+                'Hospital': 'hospital',
+                'Designation': 'designation',
+                'Years of Experience': 'years_of_experience',
+                'Educational Qualification': 'educational_qualification',
+                'Educational Institution': 'educational_institution',
+                'Speciality': 'speciality',
+                'State': 'state',
+                'District': 'district',
+                'Pincode': 'pincode',
+                'Address': 'address',
+                'Date of Birth': 'date_of_birth',
+                'Certifications': 'certifications',
+                'Learner Gender': 'learner_gender',
+                'Skillathon Event': 'skillathon_event',
+            }
+
+            # Read headers from the first row
+            headers = [cell.value for cell in ws[1]]
+            # Validate required headers
+            missing_headers = []
+            for excel_col, form_field in header_map.items():
+                if excel_col not in headers:
+                    missing_headers.append(excel_col)
+            
+            if missing_headers:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Missing required columns: {", ".join(missing_headers)}'
+                })
+
             success_count = 0
-            error_count = 0
-            
-            for row in reader:
-                try:
-                    Learner.objects.create(
-                        onboarding_type=row['onboarding_type'],
-                        full_name=row['full_name'],
-                        email=row['email'],
-                        mobile_number=row['mobile_number'],
-                        learner_type=row['learner_type'],
-                        # Add other fields as needed
-                    )
-                    success_count += 1
-                except Exception as e:
-                    error_count += 1
-                    messages.error(request, f'Error in row {success_count + error_count}: {str(e)}')
-            
-            messages.success(request, f'Successfully imported {success_count} learners.')
-            if error_count > 0:
-                messages.warning(request, f'Failed to import {error_count} learners.')
-            
-            return redirect('learner_list')
-    else:
-        form = BulkLearnerUploadForm()
-    return render(request, 'assessments/onboarding/learner_bulk_upload.html', {'form': form})
+            update_count = 0
+            error_rows = []
+            User = get_user_model()
+
+            # Get all rows and filter out empty ones
+            all_rows = list(ws.iter_rows(min_row=2, values_only=True))
+            non_empty_rows = [
+                (idx, row) for idx, row in enumerate(all_rows, start=2)
+                if any(cell is not None and str(cell).strip() for cell in row)
+            ]
+
+            for idx, row in non_empty_rows:
+                row_data = dict(zip(headers, row))
+                # Prepare form data
+                form_data = {}
+                for excel_col, form_field in header_map.items():
+                    value = row_data.get(excel_col)
+                    if value is not None:
+                        value = str(value).strip()
+                        if value:  # Only process non-empty values
+                            # Handle ForeignKeys by name
+                            if form_field == 'college' and value:
+                                try:
+                                    form_data['college'] = Institution.objects.get(name=value).id
+                                except Institution.DoesNotExist:
+                                    form_data['college'] = None
+                            elif form_field == 'hospital' and value:
+                                try:
+                                    form_data['hospital'] = Hospital.objects.get(name=value).id
+                                except Hospital.DoesNotExist:
+                                    form_data['hospital'] = None
+                            elif form_field == 'skillathon_event' and value:
+                                try:
+                                    form_data['skillathon_event'] = SkillathonEvent.objects.get(name=value).id
+                                except SkillathonEvent.DoesNotExist:
+                                    form_data['skillathon_event'] = None
+                            else:
+                                form_data[form_field] = value
+                            
+                            if form_field == 'onboarding_type' and value:
+                                form_data['onboarding_type'] = value.lower()
+                            
+                            if form_field == 'learner_gender' and value:
+                                form_data['learner_gender'] = value.lower()
+
+                # Add required user fields for the form
+                form_data['learner_name'] = row_data.get('Learner Name', '').strip()
+                form_data['learner_email'] = row_data.get('Learner Email', '').strip()
+                form_data['learner_phone'] = str(row_data.get('Learner Phone', '')).strip()[:10]
+
+                # Skip if required fields are empty
+                if not all([form_data['learner_name'], form_data['learner_email'], form_data['learner_phone']]):
+                    error_rows.append({
+                        'row': idx,
+                        'errors': {'__all__': ['Name, email and phone are required']}
+                    })
+                    continue
+
+                form = LearnerForm(form_data)
+                if form.is_valid():
+                    # Check if learner already exists with same name, email and phone
+                    existing_learner = Learner.objects.filter(
+                        learner_user__email=form_data['learner_email'],
+                        learner_user__full_name=form_data['learner_name'],
+                        learner_user__phone_number=form_data['learner_phone']
+                    ).first()
+
+                    if existing_learner:
+                        # Update existing learner
+                        for field, value in form.cleaned_data.items():
+                            if field != 'learner_user':  # Don't update the user relationship
+                                setattr(existing_learner, field, value)
+                        existing_learner.save()
+                        update_count += 1
+                    else:
+                        # Create new learner
+                        email = form.cleaned_data['learner_email']
+                        full_name = form.cleaned_data['learner_name']
+                        phone = form.cleaned_data['learner_phone']
+                        user, created = User.objects.get_or_create(
+                            email=email,
+                            defaults={'full_name': full_name, 'phone_number': phone, 'is_active': True}
+                        )
+                        if not created:
+                            # Update name/phone if changed
+                            updated = False
+                            if user.full_name != full_name:
+                                user.full_name = full_name
+                                updated = True
+                            if user.phone_number != phone:
+                                user.phone_number = phone
+                                updated = True
+                            if updated:
+                                user.save()
+                        learner = form.save(commit=False)
+                        learner.learner_user = user
+                        learner.save()
+                        success_count += 1
+                else:
+                    error_rows.append({
+                        'row': idx,
+                        'errors': form.errors
+                    })
+
+            return JsonResponse({
+                'success': True,
+                'message': f'Successfully imported {success_count} new learners and updated {update_count} existing learners.',
+                'errors': error_rows if error_rows else None
+            })
+
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'Error processing file: {str(e)}'
+            })
+
+    return JsonResponse({
+        'success': False,
+        'error': 'Invalid request method'
+    })
 
 @login_required
 def learner_delete(request, pk):
@@ -776,50 +958,53 @@ def assessor_edit(request, pk):
     assessor = get_object_or_404(Assessor, pk=pk)
     if request.method == 'POST':
         form = AssessorForm(request.POST, instance=assessor)
+        user = None
         if form.is_valid():
             assessor_name = form.cleaned_data['assessor_name']
             assessor_email = form.cleaned_data['assessor_email']
             assessor_phone = form.cleaned_data['assessor_phone']
             current_user = assessor.assessor_user
+
+            if assessor_name != "" and assessor_email != "" and assessor_phone != "":
             
-            if not current_user or current_user.email != assessor_email:
-                user, created = User.objects.get_or_create(
-                    email=assessor_email,
-                    defaults={
-                        'is_active': True,
-                    }
-                )
-                if created:
-                    user.full_name = assessor_name
-                    user.phone_number = assessor_phone
-                    default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-                    user.set_password(default_password)
-                    user.save()
-                    reset_link = request.build_absolute_uri(reverse('login'))
-                    subject = 'Your Assessor Account Created'
-                    body = f"""Dear {assessor_name},\n\nYour assessor account has been created.\n\nUsername: {assessor_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                    send_email(subject, body, [assessor_email])
+                if not current_user or current_user.email != assessor_email:
+                    user, created = User.objects.get_or_create(
+                        email=assessor_email,
+                        defaults={
+                            'is_active': True,
+                        }
+                    )
+                    if created:
+                        user.full_name = assessor_name
+                        user.phone_number = assessor_phone
+                        default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+                        user.set_password(default_password)
+                        user.save()
+                        reset_link = request.build_absolute_uri(reverse('login'))
+                        subject = 'Your Assessor Account Created'
+                        body = f"""Dear {assessor_name},\n\nYour assessor account has been created.\n\nUsername: {assessor_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
+                        send_email(subject, body, [assessor_email])
+                    else:
+                        updated = False
+                        if user.full_name != assessor_name:
+                            user.full_name = assessor_name
+                            updated = True
+                        if user.phone_number != assessor_phone:
+                            user.phone_number = assessor_phone
+                            updated = True
+                        if updated:
+                            user.save()
+                    assessor.assessor_user = user
                 else:
                     updated = False
-                    if user.full_name != assessor_name:
-                        user.full_name = assessor_name
+                    if current_user.full_name != assessor_name:
+                        current_user.full_name = assessor_name
                         updated = True
-                    if user.phone_number != assessor_phone:
-                        user.phone_number = assessor_phone
+                    if current_user.phone_number != assessor_phone:
+                        current_user.phone_number = assessor_phone
                         updated = True
                     if updated:
-                        user.save()
-                assessor.assessor_user = user
-            else:
-                updated = False
-                if current_user.full_name != assessor_name:
-                    current_user.full_name = assessor_name
-                    updated = True
-                if current_user.phone_number != assessor_phone:
-                    current_user.phone_number = assessor_phone
-                    updated = True
-                if updated:
-                    current_user.save()
+                        current_user.save()
             
             assessor = form.save(commit=False)
             assessor.save()
@@ -892,3 +1077,12 @@ def skillathon_edit(request, pk):
     else:
         form = SkillathonEventForm(instance=event)
     return render(request, 'assessments/onboarding/skillathon_form.html', {'form': form, 'action': 'Edit'}) 
+
+@login_required
+def skillathon_delete(request, pk):
+    event = get_object_or_404(SkillathonEvent, pk=pk)
+    if request.method == 'POST':
+        event.delete()
+        messages.success(request, 'Skillathon event deleted successfully.')
+        return redirect('skillathon_list')
+    return redirect('skillathon_list')

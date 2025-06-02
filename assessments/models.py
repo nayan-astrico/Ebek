@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
-from .constants import role
+from .constants import *
 import uuid
 from datetime import timedelta
 from django.utils import timezone
@@ -71,7 +71,12 @@ class EbekUser(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
-
+    
+    def set_password(self, raw_password):
+        # Store the raw password temporarily for Firebase sync
+        self._raw_password = raw_password
+        super().set_password(raw_password)
+        
     class Meta:
         verbose_name = 'User'
         verbose_name_plural = 'Users'
@@ -98,8 +103,9 @@ class Group(models.Model):
     def save(self, *args, **kwargs):
         if not self.group_id:
             self.group_id = str(uuid.uuid4())
-        
-        self.group_head.user_role = 'group_admin'
+        if self.group_head is not None:
+            self.group_head.user_role = 'group_admin'
+            self.group_head.save()
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -108,21 +114,24 @@ class Group(models.Model):
 class Institution(models.Model):
     name = models.CharField(max_length=255)
     group = models.ForeignKey(Group, on_delete=models.SET_NULL, null=True, blank=True)
-    address = models.TextField()
-    state = models.CharField(max_length=100)
-    district = models.CharField(max_length=100)
-    pin_code = models.CharField(max_length=10)
+    address = models.TextField(blank=True, null=True)
+    state = models.CharField(max_length=100, blank=True, null=True)
+    district = models.CharField(max_length=100, blank=True, null=True)
+    pin_code = models.CharField(max_length=10, blank=True, null=True)
     unit_head = models.ForeignKey('EbekUser', on_delete=models.SET_NULL, null=True, related_name='unit_head_of_institution')
     total_strength = models.IntegerField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     institute_id = models.CharField(max_length=50, unique=True, editable=False)
+    onboarding_type = models.CharField(max_length=3, choices=ONBOARDING_TYPES)
 
     def save(self, *args, **kwargs):
         if not self.institute_id:
             self.institute_id = str(uuid.uuid4())
-        self.unit_head.user_role = 'institute_admin'
+        if self.unit_head is not None:
+            self.unit_head.user_role = 'institute_admin'
+            self.unit_head.save()
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -132,10 +141,10 @@ class Institution(models.Model):
 class Hospital(models.Model):
     name = models.CharField(max_length=255)
     group = models.ForeignKey(Group, on_delete=models.SET_NULL, null=True, blank=True)
-    address = models.TextField()
-    state = models.CharField(max_length=100)
-    district = models.CharField(max_length=100)
-    pin_code = models.CharField(max_length=10)
+    address = models.TextField(blank=True, null=True)
+    state = models.CharField(max_length=100, blank=True, null=True)
+    district = models.CharField(max_length=100, blank=True, null=True)
+    pin_code = models.CharField(max_length=10, blank=True, null=True)
     unit_head = models.ForeignKey('EbekUser', on_delete=models.SET_NULL, null=True, related_name='unit_head_of_hospital')
     nurse_strength = models.IntegerField(null=True, blank=True)
     number_of_beds = models.IntegerField(null=True, blank=True)
@@ -143,32 +152,21 @@ class Hospital(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    onboarding_type = models.CharField(max_length=3, choices=ONBOARDING_TYPES)
 
     def save(self, *args, **kwargs):
         if not self.hospital_id:
             self.hospital_id = str(uuid.uuid4())
-        self.unit_head.user_role = 'hospital_admin'
+        if self.unit_head is not None:
+            self.unit_head.user_role = 'hospital_admin'
+            self.unit_head.save()
         super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
 
 class Learner(models.Model):
-    LEARNER_TYPES = [
-        ('student', 'Student'),
-        ('nurse', 'Working Nurse')
-    ]
-    STREAM_CHOICES = [
-        ('bsc_4y', 'BSc (4Y)'),
-        ('gnm_3y', 'GNM (3Y Diploma)'),
-        ('post_basic_2y', 'Post-basic (2Y)'),
-        ('msc', 'MSc (Speciality)')
-    ]
-    ONBOARDING_TYPES = [
-        ('b2b', 'B2B'),
-        ('b2c', 'B2C')
-    ]
-
+    
     onboarding_type = models.CharField(max_length=3, choices=ONBOARDING_TYPES)
     learner_type = models.CharField(max_length=10, choices=LEARNER_TYPES)
     
@@ -187,17 +185,19 @@ class Learner(models.Model):
     
     # Common fields
     speciality = models.CharField(max_length=100, null=True, blank=True)
-    state = models.CharField(max_length=100)
-    district = models.CharField(max_length=100)
-    pincode = models.CharField(max_length=10)
+    state = models.CharField(max_length=100, null=True, blank=True)
+    district = models.CharField(max_length=100, null=True, blank=True)
+    pincode = models.CharField(max_length=10, null=True, blank=True)
     address = models.TextField(null=True, blank=True)
-    date_of_birth = models.DateField()
+    date_of_birth = models.DateField(null=True, blank=True)
     certifications = models.TextField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     learner_user = models.ForeignKey('EbekUser', on_delete=models.SET_NULL, null=True, blank=True)
     learner_id = models.CharField(max_length=50, unique=True, editable=False)
+    learner_gender = models.CharField(max_length=10, choices=GENDER_CHOICES, null=True, blank=True)
+    skillathon_event = models.ForeignKey('SkillathonEvent', on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return self.learner_user.full_name
@@ -205,7 +205,12 @@ class Learner(models.Model):
     def save(self, *args, **kwargs):
         if not self.learner_id:
             self.learner_id = str(uuid.uuid4())
-        self.learner_user.user_role = 'learner'
+        if self.learner_user:
+            if self.learner_type == 'student':
+                self.learner_user.user_role = 'student'
+            else:
+                self.learner_user.user_role = 'nurse'
+            self.learner_user.save()
         super().save(*args, **kwargs)
 
 class Assessor(models.Model):
@@ -228,9 +233,9 @@ class Assessor(models.Model):
     location = models.CharField(max_length=255, null=True, blank=True)
     
     # Common fields
-    qualification = models.CharField(max_length=255)
-    designation = models.CharField(max_length=100)
-    specialization = models.CharField(max_length=20, choices=SPECIALIZATION_CHOICES)
+    qualification = models.CharField(max_length=255, null=True, blank=True)
+    designation = models.CharField(max_length=100, null=True, blank=True)
+    specialization = models.CharField(max_length=20, choices=SPECIALIZATION_CHOICES, null=True, blank=True)
     is_verifier = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -246,22 +251,20 @@ class Assessor(models.Model):
     def save(self, *args, **kwargs):
         if not self.assessor_id:
             self.assessor_id = str(uuid.uuid4())
-        self.assessor_user.user_role = 'supervisor'
+        if self.assessor_type == 'internal':
+            self.assessor_user.user_role = 'ebek_admin'
+            self.assessor_user.save() 
+        else:
+            self.assessor_user.user_role = 'supervisor'
+            self.assessor_user.save()
         super().save(*args, **kwargs)
 
 class SkillathonEvent(models.Model):
-    STATUS_CHOICES = [
-        ('upcoming', 'Upcoming'),
-        ('ongoing', 'Ongoing'),
-        ('completed', 'Completed'),
-        ('cancelled', 'Cancelled')
-    ]
 
     name = models.CharField(max_length=255)
     date = models.DateField()
     state = models.CharField(max_length=100)
     city = models.CharField(max_length=100)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='upcoming')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

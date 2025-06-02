@@ -76,3 +76,10 @@ class AssessorAdmin(admin.ModelAdmin):
     readonly_fields = ('assessor_id', 'created_at', 'updated_at')
 
 admin.site.register(Assessor, AssessorAdmin)
+
+class SkillathonEventAdmin(admin.ModelAdmin):
+    list_display = ('name', 'date', 'state', 'city', 'created_at')
+    search_fields = ('name', 'date', 'state', 'city')
+    readonly_fields = ('created_at', 'updated_at')
+
+admin.site.register(SkillathonEvent, SkillathonEventAdmin)

@@ -1460,7 +1460,11 @@ def get_cohort_students(request, cohort_id):
 
 def login_page(request):
     if request.user.is_authenticated:
-        return redirect('create_assessment')
+        print(request.user.user_role)
+        if request.user.user_role == 'ebek_admin' or request.user.user_role == 'super_admin':
+            return redirect('learner_list')
+        else:
+            return redirect('<html>Welcome to EBEK</html>')
     return render(request, 'assessments/login.html')
 
 def login_view(request):
@@ -1471,7 +1475,7 @@ def login_view(request):
     if user is not None:
         login(request, user)
             # Update last login in Firebase
-        return redirect('create_assessment')
+        return redirect('learner_list')
     else:
         messages.error(request, 'User not found')
         return redirect('login_page')
@@ -1577,3 +1581,19 @@ def reset_password(request, token):
 @login_required
 def onboarding_dashboard(request):
     return render(request, 'assessments/onboarding/onboarding_dashboard.html')
+
+def fetch_skillathons(request):
+    """Fetch all skillathons from the Skillathon collection."""
+    try:
+        skillathons_ref = db.collection('Skillathon')
+        skillathons = []
+        for doc in skillathons_ref.stream():
+            skillathon_data = doc.to_dict()
+            skillathons.append({
+                'id': doc.id,
+                'name': skillathon_data.get('skillathonName', 'Unnamed Skillathon')
+            })
+
+        return JsonResponse({'skillathons': skillathons}, status=200)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

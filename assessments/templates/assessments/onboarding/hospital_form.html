@@ -1,14 +1,15 @@
 {% extends 'assessments/base.html' %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title mb-0">{{ action }} Hospital</h3>
-                </div>
-                <div class="card-body">
+<div class="page-container">
+    <div class="container-fluid py-4">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card bg-white border-0">
+                    <div class="card-header bg-white border-0 pb-0">
+                        <h3 class="card-title mb-0">{{ action }} Hospital</h3>
+                    </div>
+                    <div class="card-body pt-4">
                     <form method="post" novalidate>
                         {% csrf_token %}
                         
@@ -26,6 +27,18 @@
                             {% if form.name.errors %}
                             <div class="invalid-feedback d-block">
                                 {% for error in form.name.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label for="{{ form.onboarding_type.id_for_label }}">Onboarding Type</label>
+                            {{ form.onboarding_type }}
+                            {% if form.onboarding_type.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.onboarding_type.errors %}
                                 {{ error }}
                                 {% endfor %}
                             </div>
@@ -132,21 +145,7 @@
                             {% endif %}
                         </div>
 
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label for="{{ form.nurse_strength.id_for_label }}">Nurse Strength</label>
-                                    {{ form.nurse_strength }}
-                                    {% if form.nurse_strength.errors %}
-                                    <div class="invalid-feedback d-block">
-                                        {% for error in form.nurse_strength.errors %}
-                                        {{ error }}
-                                        {% endfor %}
-                                    </div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-6">
+                        
                                 <div class="form-group">
                                     <label for="{{ form.number_of_beds.id_for_label }}">Number of Beds</label>
                                     {{ form.number_of_beds }}
@@ -158,21 +157,21 @@
                                     </div>
                                     {% endif %}
                                 </div>
-                            </div>
+                                <div class="form-group">
+                                    <div class="custom-control custom-switch">
+                                        <input type="checkbox" class="custom-control-input" id="is_active" name="is_active" 
+                                               {% if form.instance.is_active %}checked{% endif %}>
+                                        <label class="custom-control-label" for="is_active">Active</label>
+                                    </div>
+                                </div>
+        
+                                <div class="form-group text-right mb-0">
+                                    <a href="{% url 'hospital_list' %}" class="btn btn-light">Cancel</a>
+                                    <button type="submit" class="btn btn-primary ml-2">Save</button>
+                                </div>
                         </div>
 
-                        <div class="form-group">
-                            <div class="custom-control custom-switch">
-                                <input type="checkbox" class="custom-control-input" id="is_active" name="is_active" 
-                                       {% if form.instance.is_active %}checked{% endif %}>
-                                <label class="custom-control-label" for="is_active">Active</label>
-                            </div>
-                        </div>
-
-                        <div class="form-group text-right">
-                            <a href="{% url 'hospital_list' %}" class="btn btn-secondary">Cancel</a>
-                            <button type="submit" class="btn btn-primary">Save</button>
-                        </div>
+                        
                     </form>
                 </div>
             </div>
@@ -181,30 +180,118 @@
 </div>
 
 <style>
-.card {
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-}
-
-.card-header {
-    background-color: #f8f9fa;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
-}
-
-.form-group {
-    margin-bottom: 1.5rem;
-}
-
-.invalid-feedback {
-    display: block;
-}
-
-.btn {
-    padding: 0.5rem 1.5rem;
-}
-
-.custom-switch {
-    padding-left: 2.5rem;
-}
-</style>
-
+    .page-container {
+        background: #fff;
+        min-height: 100vh;
+        padding-top: 1rem;
+    }
+    
+    .card {
+        background: #fff;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        border-radius: 8px;
+    }
+    
+    .card-header {
+        padding: 1.5rem 1.5rem 0;
+    }
+    
+    .card-body {
+        padding: 1.5rem;
+    }
+    
+    .card-title {
+        color: #2D3748;
+        font-weight: 600;
+        font-size: 1.25rem;
+    }
+    
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+    
+    .form-label {
+        color: #4A5568;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+    }
+    
+    .form-control {
+        border: 1px solid #E2E8F0;
+        border-radius: 6px;
+        padding: 0.5rem 0.75rem;
+        height: calc(1.5em + 1rem + 2px);
+        font-size: 0.875rem;
+    }
+    
+    .form-control:focus {
+        border-color: #1AA09A;
+        box-shadow: 0 0 0 2px rgba(26, 160, 154, 0.1);
+    }
+    
+    textarea.form-control {
+        height: auto;
+        min-height: 100px;
+    }
+    
+    .invalid-feedback {
+        display: block;
+        color: #E53E3E;
+        font-size: 0.75rem;
+        margin-top: 0.25rem;
+    }
+    
+    .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        border-radius: 6px;
+        transition: all 0.2s;
+    }
+    
+    .btn-primary {
+        background-color: #1AA09A;
+        border-color: #1AA09A;
+    }
+    
+    .btn-primary:hover {
+        background-color: #158F89;
+        border-color: #158F89;
+    }
+    
+    .btn-light {
+        background-color: #EDF2F7;
+        border-color: #EDF2F7;
+        color: #4A5568;
+    }
+    
+    .btn-light:hover {
+        background-color: #E2E8F0;
+        border-color: #E2E8F0;
+        color: #2D3748;
+    }
+    
+    .custom-switch {
+        padding-left: 2.5rem;
+        margin-top: 1rem;
+    }
+    
+    .custom-control-input:checked ~ .custom-control-label::before {
+        background-color: #1AA09A;
+        border-color: #1AA09A;
+    }
+    
+    .custom-control-label {
+        font-size: 0.875rem;
+        color: #4A5568;
+    }
+    
+    /* Add required field indicator style */
+    .required::after {
+        content: "*";
+        color: #E53E3E;
+        margin-left: 4px;
+    }
+    </style>
 {% endblock %} 

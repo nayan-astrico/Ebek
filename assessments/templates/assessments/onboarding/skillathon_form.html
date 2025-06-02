@@ -1,0 +1,205 @@
+{% extends 'assessments/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="page-container">
+    <div class="container-fluid py-4">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card bg-white border-0">
+                    <div class="card-header bg-white border-0 pb-0">
+                        <h3 class="card-title mb-0">{{ action }} Skillathon Event</h3>
+                    </div>
+                    <div class="card-body pt-4">
+                        <form method="post" novalidate>
+                            {% csrf_token %}
+
+                            {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {% for error in form.non_field_errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+
+                            <div class="form-group">
+                                <label for="{{ form.name.id_for_label }}">Event Name</label>
+                                {{ form.name }}
+                                {% if form.name.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.name.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="form-group">
+                                <label for="{{ form.date.id_for_label }}">Date</label>
+                                {{ form.date }}
+                                {% if form.date.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.date.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="{{ form.state.id_for_label }}">State</label>
+                                        {{ form.state }}
+                                        {% if form.state.errors %}
+                                        <div class="invalid-feedback d-block">
+                                            {% for error in form.state.errors %}
+                                            {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="{{ form.city.id_for_label }}">City</label>
+                                        {{ form.city }}
+                                        {% if form.city.errors %}
+                                        <div class="invalid-feedback d-block">
+                                            {% for error in form.city.errors %}
+                                            {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group text-right mb-0">
+                                <a href="{% url 'skillathon_list' %}" class="btn btn-light">Cancel</a>
+                                <button type="submit" class="btn btn-primary ml-2">Save</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .page-container {
+        background: #fff;
+        min-height: 100vh;
+        padding-top: 1rem;
+    }
+    
+    .card {
+        background: #fff;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        border-radius: 8px;
+    }
+    
+    .card-header {
+        padding: 1.5rem 1.5rem 0;
+    }
+    
+    .card-body {
+        padding: 1.5rem;
+    }
+    
+    .card-title {
+        color: #2D3748;
+        font-weight: 600;
+        font-size: 1.25rem;
+    }
+    
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+    
+    .form-label {
+        color: #4A5568;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+    }
+    
+    .form-control {
+        border: 1px solid #E2E8F0;
+        border-radius: 6px;
+        padding: 0.5rem 0.75rem;
+        height: calc(1.5em + 1rem + 2px);
+        font-size: 0.875rem;
+    }
+    
+    .form-control:focus {
+        border-color: #1AA09A;
+        box-shadow: 0 0 0 2px rgba(26, 160, 154, 0.1);
+    }
+    
+    textarea.form-control {
+        height: auto;
+        min-height: 100px;
+    }
+    
+    .invalid-feedback {
+        display: block;
+        color: #E53E3E;
+        font-size: 0.75rem;
+        margin-top: 0.25rem;
+    }
+    
+    .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        border-radius: 6px;
+        transition: all 0.2s;
+    }
+    
+    .btn-primary {
+        background-color: #1AA09A;
+        border-color: #1AA09A;
+    }
+    
+    .btn-primary:hover {
+        background-color: #158F89;
+        border-color: #158F89;
+    }
+    
+    .btn-light {
+        background-color: #EDF2F7;
+        border-color: #EDF2F7;
+        color: #4A5568;
+    }
+    
+    .btn-light:hover {
+        background-color: #E2E8F0;
+        border-color: #E2E8F0;
+        color: #2D3748;
+    }
+    
+    .custom-switch {
+        padding-left: 2.5rem;
+        margin-top: 1rem;
+    }
+    
+    .custom-control-input:checked ~ .custom-control-label::before {
+        background-color: #1AA09A;
+        border-color: #1AA09A;
+    }
+    
+    .custom-control-label {
+        font-size: 0.875rem;
+        color: #4A5568;
+    }
+    
+    /* Add required field indicator style */
+    .required::after {
+        content: "*";
+        color: #E53E3E;
+        margin-left: 4px;
+    }
+    </style>
+{% endblock %}
