@@ -635,7 +635,184 @@ def fetch_exam_reports(request):
         print(str(e))
         return JsonResponse({"error": str(e)}, status=500)
 
+@csrf_exempt
+def fetch_exam_metrics(request):
+    try:
+        # Create base query
+        base_query = db.collection('ExamAssignment')
+        institute_id = request.GET.get("institute_id")
+        skillathon_id = request.GET.get("skillathon_id")
 
+        # Add institute filter if specified
+        if institute_id:
+            institute_ref = db.collection('InstituteNames').document(institute_id)
+            base_query = base_query.where("institute", "==", institute_ref)
+
+        # Add skillathon filter if specified
+        if skillathon_id:
+            base_query = base_query.where("skillathon_id", "==", skillathon_id)
+
+        # Get all completed exams
+        exam_assignments_ref = base_query.where("status", "==", "Completed")
+        exam_assignments = exam_assignments_ref.stream()
+
+        # Initialize metrics data
+        metrics = {
+            "total_students": 0,
+            "completed_all_procedures": 0,
+            "procedure_counts": {},
+            "grade_distribution": {
+                "A": 0, "B": 0, "C": 0, "D": 0, "E": 0
+            },
+            "gender_metrics": {
+                "total": {"male": 0, "female": 0, "others": 0},
+                "grade_wise": {
+                    "A": {"male": 0, "female": 0, "others": 0},
+                    "B": {"male": 0, "female": 0, "others": 0},
+                    "C": {"male": 0, "female": 0, "others": 0},
+                    "D": {"male": 0, "female": 0, "others": 0},
+                    "E": {"male": 0, "female": 0, "others": 0}
+                },
+                "procedure_wise": {}
+            },
+            "skill_wise_metrics": {}
+        }
+
+        # Track unique students and their procedures
+        student_procedures = {}
+        unique_procedures = set()
+        student_data_cache = {}
+        critical_steps_data = {}
+
+        # Process all exam assignments
+        for exam in exam_assignments:
+            exam_doc = exam.to_dict()
+            student_ref = exam_doc.get('user')
+            procedure_name = exam_doc.get("procedure_name", "Unknown")
+            
+            if not student_ref:
+                continue
+
+            # Initialize skill-wise metrics if not exists
+            if procedure_name not in metrics["skill_wise_metrics"]:
+                metrics["skill_wise_metrics"][procedure_name] = {
+                    "grade_distribution": {"A": 0, "B": 0, "C": 0, "D": 0, "E": 0},
+                    "critical_steps": {
+                        "missed_one": 0,
+                        "missed_multiple": 0,
+                        "completed_all": 0
+                    },
+                    "common_missed_steps": {}
+                }
+
+            # Calculate grade for this exam
+            total_score = exam_doc.get("marks", 0)
+            max_marks = sum(
+                question.get('right_marks_for_question', 0) 
+                for section in exam_doc.get('examMetaData', []) 
+                for question in section.get("section_questions", [])
+            )
+            
+            if max_marks > 0:
+                percentage = round((total_score / max_marks) * 100, 2)
+                grade = get_grade_letter(percentage)
+                metrics["skill_wise_metrics"][procedure_name]["grade_distribution"][grade] += 1
+
+            # Process critical steps
+            critical_missed = 0
+            missed_steps = []
+            exam_metadata = exam_doc.get("examMetaData", [])
+            
+            for section in exam_metadata:
+                for question in section.get("section_questions", []):
+                    if question.get("critical") and question.get("answer_scored", 0) == 0:
+                        critical_missed += 1
+                        missed_steps.append(question.get("question"))
+
+            # Update critical steps metrics
+            if critical_missed == 0:
+                metrics["skill_wise_metrics"][procedure_name]["critical_steps"]["completed_all"] += 1
+            elif critical_missed == 1:
+                metrics["skill_wise_metrics"][procedure_name]["critical_steps"]["missed_one"] += 1
+            else:
+                metrics["skill_wise_metrics"][procedure_name]["critical_steps"]["missed_multiple"] += 1
+
+            # Track commonly missed steps
+            for step in missed_steps:
+                if step not in metrics["skill_wise_metrics"][procedure_name]["common_missed_steps"]:
+                    metrics["skill_wise_metrics"][procedure_name]["common_missed_steps"][step] = 0
+                metrics["skill_wise_metrics"][procedure_name]["common_missed_steps"][step] += 1
+
+            # Continue with existing metrics collection...
+            student_id = student_ref.id
+            
+            if student_id not in student_data_cache:
+                student_doc = student_ref.get()
+                student_data = student_doc.to_dict()
+                student_data_cache[student_id] = {
+                    'gender': student_data.get('gender', 'others').lower()
+                }
+            
+            student_gender = student_data_cache[student_id]['gender']
+            
+            # Track unique procedures
+            unique_procedures.add(procedure_name)
+            
+            if student_id not in student_procedures:
+                student_procedures[student_id] = {
+                    'procedures': set(),
+                    'gender': student_gender
+                }
+            student_procedures[student_id]['procedures'].add(procedure_name)
+
+            # Update procedure counts
+            if procedure_name not in metrics["procedure_counts"]:
+                metrics["procedure_counts"][procedure_name] = 0
+            metrics["procedure_counts"][procedure_name] += 1
+
+            # Update gender metrics
+            metrics["gender_metrics"]["total"][student_gender] += 1
+            metrics["gender_metrics"]["grade_wise"][grade][student_gender] += 1
+
+        # Calculate total unique students and completed all procedures
+        metrics["total_students"] = len(student_procedures)
+        total_procedures = len(unique_procedures)
+        metrics["completed_all_procedures"] = sum(
+            1 for info in student_procedures.values()
+            if len(info['procedures']) == total_procedures
+        )
+
+        # Process common missed steps to get only the most common one for each procedure
+        for procedure in metrics["skill_wise_metrics"]:
+            common_steps = metrics["skill_wise_metrics"][procedure]["common_missed_steps"]
+            if common_steps:
+                most_common_step = max(common_steps.items(), key=lambda x: x[1])
+                metrics["skill_wise_metrics"][procedure]["common_missed_steps"] = {
+                    "step": most_common_step[0],
+                    "count": most_common_step[1]
+                }
+            else:
+                metrics["skill_wise_metrics"][procedure]["common_missed_steps"] = {
+                    "step": "None",
+                    "count": 0
+                }
+
+        return JsonResponse(metrics)
+
+    except Exception as e:
+        print(str(e))
+        return JsonResponse({"error": str(e)}, status=500)
+
+def get_grade_letter(percentage):
+    if percentage >= 90:
+        return "A"
+    elif percentage >= 80:
+        return "B"
+    elif percentage >= 70:
+        return "C"
+    elif percentage >= 60:
+        return "D"
+    return "E"
 
 @csrf_exempt
 def fetch_particular_student(request):
@@ -1577,3 +1754,125 @@ def reset_password(request, token):
 @login_required
 def onboarding_dashboard(request):
     return render(request, 'assessments/onboarding/onboarding_dashboard.html')
+
+@csrf_exempt
+def fetch_student_metrics(request):
+    try:
+        institute_id = request.GET.get("institute_id")
+
+        # Create base query
+        base_query = db.collection('ExamAssignment')
+        base_query = base_query.where("status", "==", "Completed")
+
+        # Add institute filter only if institute_id is provided and not empty
+        if institute_id and institute_id.strip():
+            institute_ref = db.collection('InstituteNames').document(institute_id)
+            base_query = base_query.where("institute", "==", institute_ref)
+
+        # Get all exam assignments
+        exam_assignments = base_query.stream()
+
+        # Initialize response data
+        response_data = {
+            "highest_score": 0,
+            "highest_score_student": "-",
+            "highest_score_institute": "-",
+            "lowest_score": 100,
+            "lowest_score_student": "-",
+            "lowest_score_institute": "-",
+            "procedures": set(),
+            "students": []
+        }
+
+        # Track student data to avoid duplicates
+        student_data = {}
+
+        for exam in exam_assignments:
+            exam_doc = exam.to_dict()
+            student_ref = exam_doc.get('user')
+            institute_ref = exam_doc.get('institute')
+            procedure_name = exam_doc.get("procedure_name", "Unknown")
+
+            if not student_ref or not institute_ref:
+                continue
+
+            # Get student info
+            student_doc = student_ref.get()
+            student_data_dict = student_doc.to_dict()
+            student_name = student_data_dict.get('username', 'Unknown')
+            student_id = student_doc.id
+
+            # Get institute info
+            institute_doc = institute_ref.get()
+            institute_name = institute_doc.to_dict().get('instituteName', 'Unknown') if institute_doc.exists else 'Unknown'
+
+            # Calculate score
+            total_score = exam_doc.get("marks", 0)
+            max_marks = sum(
+                question.get('right_marks_for_question', 0) 
+                for section in exam_doc.get('examMetaData', []) 
+                for question in section.get("section_questions", [])
+            )
+            percentage = round((total_score / max_marks) * 100, 2) if max_marks else 0
+            grade = get_grade_letter(percentage)
+
+            # Track procedures
+            response_data["procedures"].add(procedure_name)
+
+            # Update highest/lowest scores
+            if percentage > response_data["highest_score"]:
+                response_data["highest_score"] = percentage
+                response_data["highest_score_student"] = student_name
+                response_data["highest_score_institute"] = institute_name
+
+            if percentage < response_data["lowest_score"]:
+                response_data["lowest_score"] = percentage
+                response_data["lowest_score_student"] = student_name
+                response_data["lowest_score_institute"] = institute_name
+
+            # Track student data
+            if student_id not in student_data:
+                student_data[student_id] = {
+                    "name": student_name,
+                    "institute": institute_name,
+                    "grades": {}
+                }
+            
+            # Add grade for this procedure
+            student_data[student_id]["grades"][procedure_name] = {
+                "grade": grade,
+                "percentage": percentage
+            }
+
+        # Convert procedures set to sorted list
+        response_data["procedures"] = sorted(list(response_data["procedures"]))
+        
+        # Add student data to response
+        response_data["students"] = list(student_data.values())
+
+        return JsonResponse(response_data)
+
+    except Exception as e:
+        print(f"Error in fetch_student_metrics: {str(e)}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+@csrf_exempt
+def fetch_skillathons(request):
+    try:
+        # Get all skillathon events ordered by date
+        events = SkillathonEvent.objects.all().order_by('-date')
+        
+        # Convert to list of dictionaries
+        skillathons = [
+            {
+                'id': event.id,
+                'name': event.name,
+                'date': event.date.strftime('%Y-%m-%d'),
+                'status': event.status
+            }
+            for event in events
+        ]
+        
+        return JsonResponse({'skillathons': skillathons})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

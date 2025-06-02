@@ -15,6 +15,8 @@ urlpatterns = [
     path('create-procedure-assignment-and-test/', views.create_procedure_assignment_and_test, name='create-procedure-assignment-and-test'),
     path('exam-reports/', views.render_exam_reports_page, name='exam_reports_page'),
     path('fetch-exam-reports/', views.fetch_exam_reports, name='fetch_exam_reports'),
+    path('fetch-exam-metrics/', views.fetch_exam_metrics, name='fetch_exam_metrics'),
+    path('fetch-student-metrics/', views.fetch_student_metrics, name='fetch_student_metrics'),
     path('fetch-particular-student/', views.fetch_particular_student, name='fetch_particular_student'),
     path('institutes/', views.institute_list, name='institute_list'),
     path('institutes/create/', views.create_institute, name='create_institute'),
@@ -57,4 +59,5 @@ urlpatterns = [
     path('onboarding/skillathon/', views.skillathon_list, name='skillathon_list'),
     path('onboarding/skillathon/create/', views.skillathon_create, name='skillathon_create'),
     path('onboarding/skillathon/<int:pk>/edit/', views.skillathon_edit, name='skillathon_edit'),
+    path('fetch-skillathons/', views.fetch_skillathons, name='fetch_skillathons'),
 ]

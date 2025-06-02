@@ -15,9 +15,9 @@
         <a href="{% url 'learner_create' %}" class="btn btn-add">
             <i class="fas fa-plus"></i>
             Add Learner
-        </a>
+            </a>
+        </div>
     </div>
-</div>
 
 <!-- Search and Filter Bar -->
 <div class="search-filter-bar">
@@ -67,14 +67,14 @@
                         <div class="selection-count">0 Institution selected</div>
                     </div>
                     <div class="options-list" id="institution-options">
-                        {% for institution in institutions %}
+                            {% for institution in institutions %}
                         <label class="option-item">
                             <input type="checkbox" name="institution" value="{{ institution.id }}"
                                    {% if institution.id in selected_institutions %}checked{% endif %}
                                    onchange="updateSelectionCount('institution')">
                             <span>{{ institution.name }}</span>
                         </label>
-                        {% endfor %}
+                            {% endfor %}
                     </div>
                 </div>
 
@@ -85,14 +85,14 @@
                         <div class="selection-count">0 Hospital selected</div>
                     </div>
                     <div class="options-list" id="hospital-options">
-                        {% for hospital in hospitals %}
+                            {% for hospital in hospitals %}
                         <label class="option-item">
                             <input type="checkbox" name="hospital" value="{{ hospital.id }}"
                                    {% if hospital.id in selected_hospitals %}checked{% endif %}
                                    onchange="updateSelectionCount('hospital')">
                             <span>{{ hospital.name }}</span>
                         </label>
-                        {% endfor %}
+                            {% endfor %}
                     </div>
                 </div>
 
@@ -115,9 +115,9 @@
                                    onchange="updateSelectionCount('learner-type')">
                             <span>Working Nurse</span>
                         </label>
+                </div>
                     </div>
                 </div>
-            </div>
         </div>
 
         <!-- Filter Actions -->
@@ -126,71 +126,71 @@
             <button type="submit" class="btn btn-primary">Apply filter</button>
         </div>
     </form>
-</div>
+    </div>
 
 <!-- Table -->
-<div class="card">
+    <div class="card">
     <table class="table">
-        <thead>
-            <tr>
-                <th>Full Name</th>
-                <th>Email</th>
-                <th>Mobile</th>
-                <th>Type</th>
-                <th>Institution/Hospital</th>
-                <th>Course/Designation</th>
-                <th>Status</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for learner in learners %}
-            <tr>
+                    <thead>
+                        <tr>
+                            <th>Full Name</th>
+                            <th>Email</th>
+                            <th>Mobile</th>
+                            <th>Type</th>
+                            <th>Institution/Hospital</th>
+                            <th>Course/Designation</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for learner in learners %}
+                        <tr>
                 <td>
                     <div class="institution">
                         <span>{{ learner.learner_user.full_name }}</span>
                     </div>
                 </td>
-                <td>{{ learner.learner_user.email }}</td>
-                <td>{{ learner.learner_user.phone_number }}</td>
-                <td>{{ learner.get_learner_type_display }}</td>
-                <td>
-                    {% if learner.learner_type == 'student' %}
-                        {{ learner.college.name|default:"-" }}
-                    {% else %}
-                        {{ learner.hospital.name|default:"-" }}
-                    {% endif %}
-                </td>
-                <td>
-                    {% if learner.learner_type == 'student' %}
-                        {{ learner.course|default:"-" }}
-                    {% else %}
-                        {{ learner.designation|default:"-" }}
-                    {% endif %}
-                </td>
-                <td>
+                            <td>{{ learner.learner_user.email }}</td>
+                            <td>{{ learner.learner_user.phone_number }}</td>
+                            <td>{{ learner.get_learner_type_display }}</td>
+                            <td>
+                                {% if learner.learner_type == 'student' %}
+                                    {{ learner.college.name|default:"-" }}
+                                {% else %}
+                                    {{ learner.hospital.name|default:"-" }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if learner.learner_type == 'student' %}
+                                    {{ learner.course|default:"-" }}
+                                {% else %}
+                                    {{ learner.designation|default:"-" }}
+                                {% endif %}
+                            </td>
+                            <td>
                     <span class="badge {% if learner.is_active %}active{% else %}inactive{% endif %}">
-                        {{ learner.is_active|yesno:"Active,Inactive" }}
-                    </span>
-                </td>
-                <td>
+                                    {{ learner.is_active|yesno:"Active,Inactive" }}
+                                </span>
+                            </td>
+                            <td>
                     <div class="actions">
                         <a href="{% url 'learner_edit' learner.pk %}" class="btn-icon">
-                            <i class="fas fa-edit"></i>
-                        </a>
+                                        <i class="fas fa-edit"></i>
+                                    </a>
                         <button type="button" 
                                 class="btn-icon btn-danger" 
                                 data-name="{{ learner.full_name }}"
                                 data-url="{% url 'learner_delete' learner.pk %}"
                                 onclick="confirmDelete(this)"
                                 title="Delete">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </td>
-            </tr>
-            {% empty %}
-            <tr>
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
                 <td colspan="8" class="empty">
                     <i class="fas fa-user-graduate"></i>
                     <p>No learners found</p>
@@ -199,33 +199,33 @@
                         Add Learner
                     </a>
                 </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
 
 <!-- Pagination -->
-{% if learners.has_other_pages %}
+            {% if learners.has_other_pages %}
 <div class="pagination">
-    {% if learners.has_previous %}
+                    {% if learners.has_previous %}
     <a href="?page={{ learners.previous_page_number }}" class="btn-page">
         <i class="fas fa-chevron-left"></i>
     </a>
-    {% endif %}
+                    {% endif %}
 
-    {% for num in learners.paginator.page_range %}
+                    {% for num in learners.paginator.page_range %}
     <a href="?page={{ num }}" class="btn-page {% if learners.number == num %}active{% endif %}">
         {{ num }}
     </a>
-    {% endfor %}
+                    {% endfor %}
 
-    {% if learners.has_next %}
+                    {% if learners.has_next %}
     <a href="?page={{ learners.next_page_number }}" class="btn-page">
         <i class="fas fa-chevron-right"></i>
     </a>
-    {% endif %}
-</div>
+            {% endif %}
+        </div>
 {% endif %}
 
 <!-- Delete Modal -->
