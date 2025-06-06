@@ -162,10 +162,10 @@
                     {% endif %}
                 </td>
                 <td>
-                    {% if learner.learner_type == 'student' %}
-                        {{ learner.course|default:"-" }}
+                    {% if learner.skillathon_event %}
+                        {{ learner.skillathon_event.name }}
                     {% else %}
-                        {{ learner.designation|default:"-" }}
+                        -
                     {% endif %}
                 </td>
                 <td>

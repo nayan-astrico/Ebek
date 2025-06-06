@@ -22,11 +22,12 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 DEBUG = os.getenv("DEBUG")
-# Path to your Firebase service account key file
+print(DEBUG)
+
 if DEBUG == False:
     FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
 else:
-    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_development.json")
+    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
 
 # Initialize Firebase
 cred = credentials.Certificate(FIREBASE_KEY_PATH)
@@ -154,5 +155,5 @@ LOGIN_REDIRECT_URL = 'create_assessment'
 LOGOUT_REDIRECT_URL = 'login_page'
 
 # Session settings
-SESSION_COOKIE_AGE = 3600  # 1 hour in seconds
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+SESSION_COOKIE_AGE = 360000  # 1 hour in seconds
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False

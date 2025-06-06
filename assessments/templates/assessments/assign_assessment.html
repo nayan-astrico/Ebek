@@ -4,192 +4,254 @@
 {% block content %}
 {% load custom_filters %}
 
-
-<!-- Button to open modal -->
-<button class="btn-assign-assessment" data-toggle="modal" data-target="#assignAssessmentModal">Assign Assessment</button>
-
-<!-- Search Form -->
-<div>
-    <!-- Search Bar and Filter -->
-    <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
-        <div>
-            <input type="text" id="searchInput" placeholder="Search Procedures" 
-                   value="{{ query }}" style="padding: 8px; width: 300px; border: 1px solid #ddd; border-radius: 5px;">
-            <button onclick="applyFilter()" style="background-color: #f7a82d; color: white; border: none; padding: 8px 16px; border-radius: 5px;">
-                Search
-            </button>
-        </div>
+<!-- Header -->
+<div class="header">
+    <div class="header-left">
+        <h1>Assessments</h1>
+        <p class="text-muted">Manage your assessments</p>
     </div>
+    <div class="header-right">
+        <button class="btn btn-primary" onclick="toggleAssignPanel()">
+            <i class="fas fa-plus"></i>
+            Assign Assessment
+        </button>
+    </div>
+</div>
 
-    <!-- Procedures Table -->
-    <table style="width: 100%; border-collapse: collapse;">
+<!-- Search and Filter Bar -->
+<!-- <div class="search-filter-bar">
+    <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" placeholder="Search assessments..." value="{{ query }}">
+    </div>
+    <button class="btn-filter" onclick="applyFilter()">
+        <i class="fas fa-filter"></i>
+        Filters
+    </button>
+</div> -->
+
+<!-- Table -->
+<div class="card">
+    <table class="table">
         <thead>
-            <tr style="background-color: #f9f9f9; border-bottom: 2px solid #ddd;">
-                <th style="padding: 10px;">Assessment Name</th>
-                <th style="padding: 10px;">Institute</th>
-                <th style="padding: 10px;">Status</th>
-                <th style="padding: 10px;">Actions</th>
+            <tr>
+                <th>Assessment Name</th>
+                <th>Skillathon</th>
+                <th>Procedures</th>
+                <th>Status</th>
             </tr>
         </thead>
         <tbody>
             {% for test in page_obj %}
-                <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 10px;">{{ test.assessment_name }}</td>
-                    <td style="padding: 10px;">{{ test.institute }}</td>
-                    <td style="padding: 10px; text-align: center;">{{ test.status }}</td>
-                    <td style="padding: 10px;">
-                        <button onclick="editProcedure('{{ procedure.id }}')" style="border: none; background: none; cursor: pointer;">
-                            <i class="fas fa-pencil-alt" style="color: #666;"></i>
-                        </button>
-                        <button onclick="deleteProcedure('{{ procedure.id }}')" style="border: none; background: none; cursor: pointer;">
-                            <i class="fas fa-trash" style="color: #ff4d4d;"></i>
-                        </button>
-                    </td>
-                </tr>
+            <tr>
+                <td>
+                    <div class="institution">
+                        <span>{{ test.assessment_name }}</span>
+                    </div>
+                </td>
+                <td>{{ test.skillathon|default:"-" }}</td>
+                <td>
+                    {% for proc in test.procedure_assignments %}
+                        <span class="badge badge-info">{{ proc.procedure_name }}</span>
+                    {% empty %}
+                        <span>-</span>
+                    {% endfor %}
+                </td>
+                <td>
+                    <span class="badge {% if test.status == 'Not Completed' %}inactive{% else %}active{% endif %}">
+                        {{ test.status }}
+                    </span>
+                </td>
+            </tr>
             {% empty %}
-                <tr>
-                    <td colspan="4" style="text-align: center; padding: 20px; color: #999;">No assessments found.</td>
-                </tr>
+            <tr>
+                <td colspan="5" class="empty">
+                    <p>No assessments found</p>
+                </td>
+            </tr>
             {% endfor %}
         </tbody>
     </table>
-
-    <!-- Pagination -->
-    <div style="text-align: right; margin-top: 20px;">
-        {% if page_obj.paginator.num_pages > 1 %}
-            <span>
-                <!-- Previous Button -->
-                {% if page_obj.has_previous %}
-                    <a href="?page={{ page_obj.previous_page_number }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin-right: 10px;">Previous</a>
-                {% endif %}
-
-                <!-- Page Links -->
-                {% for page in page_obj.paginator.page_range %}
-                    {% if page <= 5 %}
-                        <a href="?page={{ page }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin: 0 5px;">{{ page }}</a>
-                    {% elif page >= page_obj.paginator.num_pages|subtract:1 %}
-                        <a href="?page={{ page }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin: 0 5px;">{{ page }}</a>
-                    {% elif page >= page_obj.number|subtract:2 %}
-                        {% if page <= page_obj.number|add:2 %}
-                            <a href="?page={{ page }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin: 0 5px;">{{ page }}</a>
-                        {% endif %}
-                    {% elif page == 6 %}
-                        <span style="margin: 0 5px;">...</span>
-                    {% endif %}
-                {% endfor %}
-
-                <!-- Next Button -->
-                {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin-left: 10px;">Next</a>
-                {% endif %}
-            </span>
-        {% endif %}
-    </div>
 </div>
 
-<!-- Modal for Assign Assessment -->
-<div class="modal fade" id="assignAssessmentModal" tabindex="-1" role="dialog" aria-labelledby="assignAssessmentLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" role="document">
-        <div class="modal-content" style="border-radius: 10px; background-color: white; border: none; width: 450px;">
-            <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
-                <h5 class="modal-title" id="assignAssessmentLabel" style="font-weight: bold; color: #333;">Assign Assessment</h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="outline: none;">
-                    <span aria-hidden="true">&times;</span>
-                </button>
+<!-- Pagination (reuse from learner_list.html) -->
+{% if page_obj.has_other_pages %}
+<div class="pagination">
+    {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}" class="btn-page">
+            <i class="fas fa-chevron-left"></i>
+        </a>
+    {% endif %}
+    {% for num in page_obj.paginator.page_range %}
+        <a href="?page={{ num }}" class="btn-page {% if page_obj.number == num %}active{% endif %}">
+            {{ num }}
+        </a>
+    {% endfor %}
+    {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}" class="btn-page">
+            <i class="fas fa-chevron-right"></i>
+        </a>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Assign Assessment Sliding Panel -->
+<div class="assign-panel" id="assignPanel">
+    <div class="assign-header">
+        <h3>Assign Assessment</h3>
+        <button type="button" class="btn-close" onclick="toggleAssignPanel()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    <form id="assignForm" onsubmit="return false;" style="overflow: scroll;">
+        {% csrf_token %}
+        <div class="assign-content">
+            <div class="form-group">
+                <label for="type" class="form-label">Select Type</label>
+                <div class="dropdown-container">
+                    <button class="dropdown-btn" id="typeDropdownBtn">Select Type</button>
+                    <ul class="dropdown-list" id="typeDropdownList">
+                        <li data-value="B2C" data-id="B2C">B2C</li>
+                        <li data-value="B2B" data-id="B2B">B2B</li>
+                    </ul>
+                </div>
             </div>
-            <div class="modal-body" style="padding: 20px;">
-                <form id="assignForm" onsubmit="return false;">
-                    {% csrf_token %}
-                    <div class="form-group">
-                        <label for="type" class="form-label">Select Type</label>
-                        <div class="dropdown-container">
-                            <button class="dropdown-btn" id="typeDropdownBtn">Select Type</button>
-                            <ul class="dropdown-list" id="typeDropdownList">
-                                <li data-value="Internal" data-id="Internal">Internal</li>
-                                <li data-value="External" data-id="External">External</li>
-                            </ul>
-                        </div>
-                    </div>
 
-                    <div id="internal-assessment-container" style="display: none;">
-                        <div class="form-group">
-                            <label for="skillathon" class="form-label">Select Skillathon</label>
-                            <div class="dropdown-container">
-                                <button class="dropdown-btn" id="skillathonDropdownBtn">Select Skillathon</button>
-                                <ul class="dropdown-list" id="skillathonDropdownList"></ul>
-                            </div>
-                        </div>
+            <div id="internal-assessment-container" style="display: none;">
+                <div class="form-group">
+                    <label for="skillathon" class="form-label">Select Skillathon</label>
+                    <div class="dropdown-container">
+                        <button class="dropdown-btn" id="skillathonDropdownBtn">Select Skillathon</button>
+                        <ul class="dropdown-list" id="skillathonDropdownList"></ul>
                     </div>
+                </div>
+            </div>
 
-                    <div id="external-assessment-container" style="display: none;">
-                        <div class="form-group">
-                            <label for="institute" class="form-label">Select Institute</label>
-                            <div class="dropdown-container">
-                                <button class="dropdown-btn" id="instituteDropdownBtn">Select Institute</button>
-                                <ul class="dropdown-list" id="instituteDropdownList"></ul>
-                            </div>
-                        </div>
-    
-                        <!-- Select Batch -->
-                        <div class="form-group">
-                            <label for="batch" class="form-label">Select Batch</label>
-                            <div id="batchChipsContainer" class="chip-container"></div>
-                            <div class="dropdown-container">
-                                <button class="dropdown-btn" id="batchDropdownBtn">Select Batch</button>
-                                <ul class="dropdown-list" id="batchDropdownList"></ul>
-                            </div>
-                        </div>
+            <div id="external-assessment-container" style="display: none;">
+                <div class="form-group">
+                    <label for="institute" class="form-label">Select Institute</label>
+                    <div class="dropdown-container">
+                        <button class="dropdown-btn" id="instituteDropdownBtn">Select Institute</button>
+                        <ul class="dropdown-list" id="instituteDropdownList"></ul>
                     </div>
-
-                    <div class="form-group">
-                        <label for="procedure" class="form-label">Select Procedure</label>
-                        <div id="procedureChipsContainer" class="chip-container"></div>
-                        <div class="dropdown-container">
-                            <button class="dropdown-btn" id="procedureDropdownBtn">Select Procedure</button>
-                            <ul class="dropdown-list" id="procedureDropdownList"></ul>
-                        </div>
+                </div>
+        
+                <!-- Select Batch -->
+                <div class="form-group">
+                    <label for="batch" class="form-label">Select Batch</label>
+                    <div id="batchChipsContainer" class="chip-container"></div>
+                    <div class="dropdown-container">
+                        <button class="dropdown-btn" id="batchDropdownBtn">Select Batch</button>
+                        <ul class="dropdown-list" id="batchDropdownList"></ul>
                     </div>
+                </div>
+            </div>
 
-                    <!-- Select Assessor -->
-                    <div class="form-group">
-                        <label for="assessor" class="form-label">Select Assessor</label>
-                        <div id="assessorChipsContainer" class="chip-container"></div>
-                        <div class="dropdown-container">
-                            <button class="dropdown-btn" id="assessorDropdownBtn">Select Assessor</button>
-                            <ul class="dropdown-list" id="assessorDropdownList"></ul>
-                        </div>
-                    </div>
+            <div class="form-group">
+                <label for="procedure" class="form-label">Select Procedure</label>
+                <div id="procedureChipsContainer" class="chip-container"></div>
+                <div class="dropdown-container">
+                    <button class="dropdown-btn" id="procedureDropdownBtn">Select Procedure</button>
+                    <ul class="dropdown-list" id="procedureDropdownList"></ul>
+                </div>
+            </div>
 
-                    <!-- Select Date -->
-                    <div class="form-group">
-                        <label for="date" class="form-label">Date</label>
-                        <input type="date" id="date" class="form-control" style="border-radius: 5px; height: 45px;">
-                    </div>
+            <!-- Select Assessor -->
+            <div class="form-group">
+                <label for="assessor" class="form-label">Select Assessor</label>
+                <div id="assessorChipsContainer" class="chip-container"></div>
+                <div class="dropdown-container">
+                    <button class="dropdown-btn" id="assessorDropdownBtn">Select Assessor</button>
+                    <ul class="dropdown-list" id="assessorDropdownList"></ul>
+                </div>
+            </div>
 
-                    <!-- Assign Button -->
-                    <button type="submit" class="btn btn-warning assign-btn">
-                        Assign
-                        <span class="spinner-border spinner-border-sm" style="display: none;" role="status" aria-hidden="true"></span>
-                    </button>
-                    
-                </form>
+            <!-- Select Date -->
+            <div class="form-group">
+                <label for="date" class="form-label">Date</label>
+                <input type="date" id="date" class="form-control" style="border-radius: 5px; height: 45px;">
             </div>
         </div>
-    </div>
+        <div class="assign-actions">
+            <button type="button" class="btn btn-light" onclick="toggleAssignPanel()">Cancel</button>
+            <button type="submit" class="btn btn-primary assign-btn">
+                Assign
+                <span class="spinner-border spinner-border-sm" style="display: none;" role="status" aria-hidden="true"></span>
+            </button>
+        </div>
+    </form>
 </div>
+<div class="overlay" id="assignOverlay" onclick="toggleAssignPanel()"></div>
 
 <style>
-    .btn-assign-assessment {
+    .btn-add {
         background-color: #f7a82d;
         color: white;
         border: none;
         padding: 8px 16px;
         border-radius: 5px;
         cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 500;
     }
 
-    .btn-assign-assessment:hover {
+    .btn-add:hover {
         background-color: #e69500;
+        color: white;
+    }
+
+    .btn-light {
+        background-color: #f8f9fa;
+        color: #333;
+        border: 1px solid #ced4da;
+        padding: 8px 16px;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    .btn-light:hover {
+        background-color: #e9ecef;
+    }
+
+    .btn-icon {
+        background: none;
+        border: none;
+        color: #6c757d;
+        padding: 4px 8px;
+        cursor: pointer;
+        border-radius: 4px;
+    }
+
+    .btn-icon:hover {
+        background-color: #f8f9fa;
+        color: #333;
+    }
+
+    .btn-icon.btn-danger {
+        color: #dc3545;
+    }
+
+    .btn-icon.btn-danger:hover {
+        background-color: #dc3545;
+        color: white;
+    }
+
+    .empty {
+        text-align: center;
+        padding: 40px 0;
+    }
+
+    .empty i {
+        font-size: 48px;
+        color: #6c757d;
+        margin-bottom: 16px;
+    }
+
+    .empty p {
+        color: #6c757d;
+        margin-bottom: 16px;
     }
 
     .form-group {
@@ -257,7 +319,7 @@
 
     .chip {
         display: inline-block;
-        background-color: #007bff;
+        background-color: #F16564;
         color: white;
         padding: 5px 10px;
         margin: 2px;
@@ -279,7 +341,7 @@
         border-radius: 5px;
     }
 
-    .assign-btn {
+    /* .assign-btn {
         width: 100%;
         background-color: #f7a82d;
         border: none;
@@ -292,6 +354,251 @@
 
     .assign-btn:hover {
         background-color: #e69500;
+    } */
+
+    .card {
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        overflow: hidden;
+    }
+
+    .table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .table th {
+        background: #f8fafc;
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 12px;
+        font-weight: 600;
+        color: #4a5568;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .table td {
+        padding: 16px;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .institution {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .badge {
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .badge.active {
+        background: #c6f6d5;
+        color: #2f855a;
+    }
+
+    .badge.inactive {
+        background: #fed7d7;
+        color: #c53030;
+    }
+    .badge-info{
+        background-color: #1aa09a;
+    }
+
+    .actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    .btn-primary {
+        background: #F16564;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 8px;
+        color: white;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        transition: background-color 0.2s;
+        text-decoration: none;
+        box-shadow: none;
+    }
+
+    .btn-primary:hover {
+        background: #e45857;
+        color: white;
+    }
+
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .header-left h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1a202c;
+        line-height: 1.2;
+    }
+
+    .header-left p {
+        margin: 2px 0 0;
+        color: #666;
+        font-size: 1rem;
+    }
+
+    .header-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .search-filter-bar {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 18px;
+    }
+
+    .search-box {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 8px 14px;
+        font-size: 14px;
+    }
+
+    .search-box i {
+        color: #4a5568;
+        font-size: 16px;
+    }
+
+    .search-box input {
+        border: none;
+        outline: none;
+        width: 100%;
+        font-size: 14px;
+        background: transparent;
+        padding: 0;
+    }
+
+    .btn-filter {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        color: #4a5568;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: 500;
+    }
+
+    .btn-filter:hover {
+        background: #f7fafc;
+        color: #222;
+    }
+
+    .assign-panel {
+        position: fixed;
+        top: 0;
+        right: -600px;
+        width: 480px;
+        height: 100vh;
+        background: white;
+        box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+        transition: right 0.3s ease;
+        z-index: 1100;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .assign-panel.active {
+        right: 0;
+    }
+
+    .assign-header {
+        padding: 24px;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #f8fafc;
+    }
+
+    .assign-header h3 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+        color: #1a202c;
+    }
+
+    .btn-close {
+        width: 32px;
+        height: 32px;
+        border: none;
+        background: none;
+        color: #64748b;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        font-size: 20px;
+    }
+
+    .btn-close:hover {
+        background: #e2e8f0;
+        color: #1a202c;
+    }
+
+    .assign-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 24px;
+    }
+
+    .assign-actions {
+        padding: 20px 24px;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+        background: white;
+    }
+
+    .overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.3);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        z-index: 1099;
+        pointer-events: none;
+    }
+    .overlay.active {
+        opacity: 1;
+        pointer-events: all;
     }
 </style>
 
@@ -317,7 +624,7 @@
             $('#typeDropdownBtn').text(type);
             $('#typeDropdownList').hide();
             
-            if (type === 'Internal') {
+            if (type === 'B2C') {
                 $('#internal-assessment-container').show();
                 $('#external-assessment-container').hide();
                 fetchSkillathons();
@@ -380,12 +687,15 @@
         // Handle skillathon selection
         $('#skillathonDropdownList').on('click', 'li', function(e) {
             e.preventDefault();
+            $('#skillathonDropdownList li').removeClass('selected');
+            $(this).addClass('selected');
             const value = $(this).data('value');
             $('#skillathonDropdownBtn').text(value);
             $('#skillathonDropdownList').hide();
         });
 
         // Fetch assessors dynamically
+        // Fetching all assessors for now, will be filtered based on type later and institution later.
         $('#assessorDropdownBtn').click(function () {
             $.ajax({
                 url: '/fetch-assessors/',
@@ -416,11 +726,15 @@
             e.preventDefault();
             const value = $(this).data('value');
             const id = $(this).data('id');
-            const containerId = $(this).closest('.dropdown-container').find('.chip-container').attr('id');
-            
+            // Map dropdown list ID to chip container ID
+            const dropdownId = $(this).parent().attr('id');
+            let containerId = '';
+            if (dropdownId === 'batchDropdownList') containerId = 'batchChipsContainer';
+            if (dropdownId === 'procedureDropdownList') containerId = 'procedureChipsContainer';
+            if (dropdownId === 'assessorDropdownList') containerId = 'assessorChipsContainer';
+
             // Check if already selected
             if ($(`#${containerId} .chip[data-value="${value}"]`).length === 0) {
-                // Add chip
                 $(`#${containerId}`).append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
             }
             $(this).closest('.dropdown-list').hide();
@@ -448,10 +762,26 @@
         const button = $('.assign-btn'); 
         const spinner = button.find('.spinner-border'); 
 
-        // Gather selected batch IDs from the chip container
-        const batchIds = $('#batchChipsContainer .chip').map(function () {
-            return $(this).data('id');
-        }).get();
+        // Get test type
+        const testType = $('#typeDropdownBtn').text().trim();
+
+        // Get skillathon id (for B2C)
+        let skillathonId = null;
+        if (testType === 'B2C') {
+            // Find the selected skillathon chip or dropdown item
+            skillathonId = $('#skillathonDropdownList .selected').data('id') ||
+                $('#skillathonDropdownList li').filter(function() {
+                    return $(this).text() === $('#skillathonDropdownBtn').text();
+                }).data('id');
+        }
+
+        // Gather selected batch IDs from the chip container (for B2B)
+        let batchIds = [];
+        if (testType === 'B2B') {
+            batchIds = $('#batchChipsContainer .chip').map(function () {
+                return $(this).data('id');
+            }).get();
+        }
 
         // Gather selected procedure IDs from the chip container
         const procedures = $('#procedureChipsContainer .chip').map(function () {
@@ -474,16 +804,18 @@
             url: '/create-procedure-assignment-and-test/',
             type: 'POST',
             data: {
+                test_type: testType,
                 batch_ids: batchIds,
                 procedure_ids: procedures,
                 test_date: testDate,
                 assessor_ids: assessors,
+                skillathon_id: skillathonId,
                 csrfmiddlewaretoken: $('[name="csrfmiddlewaretoken"]').val(),
             },
             traditional: true,
             success: function (response) {
                 alert('Tests and assignments created successfully.');
-                $('#assignAssessmentModal').modal('hide');
+                toggleAssignPanel();
                 window.location.reload();
             },
             error: function (xhr) {
@@ -499,6 +831,14 @@
             },
         });
     });
+
+    function toggleAssignPanel() {
+        const panel = document.getElementById('assignPanel');
+        const overlay = document.getElementById('assignOverlay');
+        panel.classList.toggle('active');
+        overlay.classList.toggle('active');
+        document.body.style.overflow = panel.classList.contains('active') ? 'hidden' : '';
+    }
 </script>
 
 {% endblock %}

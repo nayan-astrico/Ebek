@@ -24,28 +24,13 @@
         <!-- Filters Section -->
         <div class="filters-section">
             <div class="filter-group">
-                <select id="skillathonFilter" class="select-filter">
+                <select id="skillathonFilter" class="select-filter" onchange="onSkillathonChange()">
                     <option value="">Select Skillathon</option>
                 </select>
-
-                <select id="instituteFilter" class="select-filter">
-        <option value="">All Institutes</option>
-    </select>
-</div>
-
-            <div class="search-group">
-                <div class="search-input-wrapper">
-                    <i class="fas fa-search search-icon"></i>
-                    <input 
-                        type="text" 
-                        id="searchInput" 
-                        placeholder="Search student name..." 
-                        class="search-input"
-                        onkeypress="if(event.key === 'Enter') fetch_particular_student()">
-                    <button onclick="fetch_particular_student()" class="search-button">
-                        Search
-                    </button>
-                </div>
+                <select id="instituteFilter" class="select-filter" disabled onchange="onInstituteChange()">
+                    <option value="">All Institutes</option>
+                </select>
+                <button id="goButton" class="search-button" onclick="fetchMetrics()" disabled>Go</button>
             </div>
         </div>
 
@@ -83,7 +68,7 @@
                 </div>
             </div>
             <div class="chart-container">
-                <h3>Grade Distribution</h3>
+                <h3>Overall Grade Distribution</h3>
                 <div class="chart-wrapper">
                     <canvas id="gradeChart"></canvas>
                 </div>
@@ -125,67 +110,24 @@
         <div class="skill-analysis-section">
             <h2 class="section-title">Skill-wise Analysis</h2>
             <div id="skillAnalysisContainer">
-                <!-- Skills will be dynamically added here -->
             </div>
-        </div>
-
-        <!-- Table Section -->
-        <div class="table-container">
-            <table class="reports-table">
-    <thead>
-                    <tr>
-                        <th>Student Name</th>
-                        <th>Institute</th>
-                        <th>Total Score</th>
-                        <th>Grade</th>
-                        <th>Percentage</th>
-                        <th>Critical Steps Missed</th>
-                        <th>Procedure Name</th>
-                        <th>Actions</th>
-        </tr>
-    </thead>
-    <tbody id="examReportsBody">
-                    <!-- Data will be populated here -->
-    </tbody>
-</table>
-
-            <!-- Empty State -->
-            <div id="emptyState" class="empty-state" style="display: none;">
-                <i class="fas fa-clipboard-list empty-icon"></i>
-                <h3>No Reports Found</h3>
-                <p>Try adjusting your filters or search criteria</p>
-</div>
-
-            <!-- Loading State -->
-            <div id="loadingState" class="loading-state" style="display: none;">
-                <div class="spinner"></div>
-                <p>Loading reports...</p>
-            </div>
-        </div>
-
-        <!-- Load More Section -->
-        <div class="load-more-container">
-            <button id="loadMoreBtn" onclick="fetchExamReports()" class="load-more-btn">
-                Load More
-            </button>
         </div>
     </div>
 
     <!-- Student Report Tab -->
     <div id="student-tab" class="tab-content">
-        <div class="student-report-container">
             <!-- Filters Section -->
-            <div class="student-filters">
+            <div class="filters-section">
                 <div class="filter-group">
-                    <select id="studentSkillathonFilter" class="select-filter" onchange="fetchStudentMetrics()">
+                    <select id="studentSkillathonFilter" class="select-filter" onchange="onStudentSkillathonChange()">
                         <option value="">Select Skillathon</option>
-                        <option value="1">Skillathon 2024 - March</option>
-                        <option value="2">Skillathon 2024 - April</option>
                     </select>
 
-                    <select id="studentInstituteFilter" class="select-filter" onchange="fetchStudentMetrics()">
+                    <select id="studentInstituteFilter" class="select-filter" onchange="onStudentInstituteChange()">
                         <option value="">All Institutes</option>
                     </select>
+
+                    <button id="studentGoButton" class="search-button" onclick="fetchStudentMetricsAuto()" disabled>Go</button>
                 </div>
             </div>
 
@@ -201,8 +143,8 @@
                             <div class="score-details">
                                 <div class="score-value" id="highestScore">0%</div>
                                 <div class="student-info">
-                                    <span class="student-name" id="highestScoreStudent">-</span>
-                                    <span class="institute-name" id="highestScoreInstitute">-</span>
+                                    <div class="student-name" id="highestScoreStudent">-</div>
+                                    <div class="institute-name" id="highestScoreInstitute">-</div>
                                 </div>
                             </div>
                         </div>
@@ -216,8 +158,8 @@
                             <div class="score-details">
                                 <div class="score-value" id="lowestScore">0%</div>
                                 <div class="student-info">
-                                    <span class="student-name" id="lowestScoreStudent">-</span>
-                                    <span class="institute-name" id="lowestScoreInstitute">-</span>
+                                    <div class="student-name" id="lowestScoreStudent">-</div>
+                                    <div class="institute-name" id="lowestScoreInstitute">-</div>
                                 </div>
                             </div>
                         </div>
@@ -252,7 +194,6 @@
                 <h3>No Data Available</h3>
                 <p>Please select a Skillathon to view metrics</p>
             </div>
-        </div>
     </div>
 </div>
 
@@ -267,7 +208,7 @@
         </div>
         
         <div class="panel-body">
-            <div class="student-info">
+            <div class="student-info" style="margin-bottom: 32px;">
                 <div class="info-group">
                     <div class="info-item">
                         <label>Student Name</label>
@@ -971,14 +912,6 @@
         display: block;
     }
 
-    /* Student Report Styles */
-    .student-report-container {
-        background: white;
-        border-radius: 16px;
-        padding: 24px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-    }
-
     .student-filters {
         margin-bottom: 24px;
     }
@@ -1162,8 +1095,14 @@
     }
 
     .student-name {
-        font-size: 14px;
+        font-size: 16px;
+        color: black;
+        margin-left: 5px;
+    }
+    .institute-name {
+        font-size: 16px;
         color: #64748b;
+        margin-left: 5px;
     }
 
     /* Performance Table Styles */
@@ -1230,28 +1169,28 @@
     }
 
     .grade-A {
-        background-color: #d4edda;
-        color: #155724;
+        background-color: #4CAF50;
+        color: white;
     }
 
     .grade-B {
-        background-color: #e2efda;
-        color: #285a28;
+        background-color: #8BC34A;
+        color: white;
     }
 
     .grade-C {
-        background-color: #fff3cd;
-        color: #856404;
+        background-color: #FFC107;
+        color: white;
     }
 
-    .grade-D {
-        background-color: #ffe5d0;
-        color: #c85000;
+    .grade-D {  
+        background-color: #FF9800;
+        color: white;
     }
 
     .grade-E {
-        background-color: #f8d7da;
-        color: #721c24;
+        background-color: #F44336;
+        color: white;
     }
 
     .percentage {
@@ -1390,23 +1329,9 @@
     }
 
     .student-info {
-        background: white;
-        border-radius: 16px;
-        padding: 24px;
-        margin-bottom: 32px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        border-radius: 12px;
         position: relative;
         overflow: hidden;
-    }
-
-    .student-info::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 4px;
-        background: linear-gradient(to right, #F16564, #ff8a8a);
     }
 
     .info-group {
@@ -1530,12 +1455,12 @@
     }
 
     .status-completed {
-        background-color: rgba(34, 197, 94, 0.1);
+        background-color: rgb(34 197 94 / 37%);
         color: #15803d;
     }
 
     .status-missed {
-        background-color: rgba(239, 68, 68, 0.1);
+        background-color: rgb(239 68 68 / 34%);
         color: #dc2626;
     }
 
@@ -1817,6 +1742,44 @@
         background: rgba(239, 68, 68, 0.1);
         color: #dc2626;
     }
+
+    /* Add after existing styles */
+    .scrollable-missed-steps {
+        max-height: 120px;
+        overflow-y: auto;
+        border: 1px solid #f1f1f1;
+        border-radius: 8px;
+        background: #fafbfc;
+        padding: 4px 8px;
+    }
+    .critical-step-count {
+        background: #fdba74;
+        color: #9a3412;
+        padding: 2px 10px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.95em;
+    }
+
+    .load-more-container {
+    text-align: center;
+    margin-top: 24px;
+    }
+
+    .load-more-btn {
+        padding: 12px 24px;
+        background: #F16564;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .load-more-btn:hover {
+        background: #e45857;
+    }
 </style>
 
 <script>
@@ -1826,11 +1789,22 @@
     let loadedExamIds = new Set();
     let selectedInstitute = '';
     let selectedSkillathon = '';
+    let selectedStudentSkillathon = '';
+    let selectedStudentInstitute = '';
     let gradeChart = null;
     let genderTotalChart = null;
     let maleGradeChart = null;
     let femaleGradeChart = null;
     let othersGradeChart = null;
+    let overallGradeChart = null;
+    let fetchMetricsInterval = null;
+    let fetchStudentMetricsInterval = null;
+
+    let studentOffset = 0;
+    const studentLimit = 3;
+    let studentHasMore = true;
+    let currentSkillathonId = '';
+    let currentInstituteId = '';
 
     function showLoading() {
         document.getElementById('loadingState').style.display = 'block';
@@ -1871,94 +1845,94 @@
     function handleInstituteChange() {
         selectedInstitute = document.getElementById('instituteFilter').value;
         fetchMetrics();  // Fetch new metrics immediately
-        fetchExamReports(true);  // Reset and fetch new reports
+        // fetchExamReports(true);  // Reset and fetch new reports
     }
 
     function handleSkillathonChange() {
         selectedSkillathon = document.getElementById('skillathonFilter').value;
         fetchMetrics();  // Fetch new metrics immediately
-        fetchExamReports(true);  // Reset and fetch new reports
+        // fetchExamReports(true);  // Reset and fetch new reports
     }
 
-    function fetchExamReports(reset = false) {
-        if (reset) {
-            offset = 0;
-            hasMoreData = true;
-            loadedExamIds.clear();
-            document.getElementById("examReportsBody").innerHTML = "";
-        }
+    // function fetchExamReports(reset = false) {
+    //     if (reset) {
+    //         offset = 0;
+    //         hasMoreData = true;
+    //         loadedExamIds.clear();
+    //         document.getElementById("examReportsBody").innerHTML = "";
+    //     }
         
-        if (!hasMoreData) return;
+    //     if (!hasMoreData) return;
 
-        showLoading();
-        hideEmptyState();
+    //     showLoading();
+    //     hideEmptyState();
 
-        const url = new URL('/fetch-exam-reports/', window.location.origin);
-        url.searchParams.append('offset', offset);
-        url.searchParams.append('limit', limit);
-        if (selectedInstitute) {
-            url.searchParams.append('institute_id', selectedInstitute);
-        }
-        if (selectedSkillathon) {
-            url.searchParams.append('skillathon_id', selectedSkillathon);
-        }
+    //     const url = new URL('/fetch-exam-reports/', window.location.origin);
+    //     url.searchParams.append('offset', offset);
+    //     url.searchParams.append('limit', limit);
+    //     if (selectedInstitute) {
+    //         url.searchParams.append('institute_id', selectedInstitute);
+    //     }
+    //     if (selectedSkillathon) {
+    //         url.searchParams.append('skillathon_id', selectedSkillathon);
+    //     }
 
-        fetch(url)
-            .then(response => response.json())
-            .then(data => {
-                hideLoading();
+    //     fetch(url)
+    //         .then(response => response.json())
+    //         .then(data => {
+    //             hideLoading();
                 
-                if (!data.exam_reports || !data.exam_reports.length) {
-                    hasMoreData = false;
-                    document.getElementById("loadMoreBtn").style.display = "none";
-                    if (offset === 0) {
-                        showEmptyState();
-                    }
-                    return;
-                }
+    //             if (!data.exam_reports || !data.exam_reports.length) {
+    //                 hasMoreData = false;
+    //                 document.getElementById("loadMoreBtn").style.display = "none";
+    //                 if (offset === 0) {
+    //                     showEmptyState();
+    //                 }
+    //                 return;
+    //             }
                 
-                // Update table with the current page of data
-                let tableBody = document.getElementById("examReportsBody");
-                data.exam_reports.forEach(report => {
-                    if (loadedExamIds.has(report.exam_id)) return;
-                    loadedExamIds.add(report.exam_id);
+    //             // Update table with the current page of data
+    //             let tableBody = document.getElementById("examReportsBody");
+    //             data.exam_reports.forEach(report => {
+    //                 if (loadedExamIds.has(report.exam_id)) return;
+    //                 loadedExamIds.add(report.exam_id);
                     
-                    const gradeInfo = calculateGrade(report.percentage);
-                    let row = `
-                        <tr>
-                        <td>${report.student_name}</td>
-                        <td>${report.institute_name}</td>
-                            <td class="text-center">${report.total_score}</td>
-                            <td class="text-center ${gradeInfo.class}">${gradeInfo.grade}</td>
-                            <td class="text-center ${gradeInfo.class}">${report.percentage}%</td>
-                            <td class="text-center">${report.critical_missed}</td>
-                        <td>${report.procedure_name}</td>
-                            <td class="text-center">
-                                <button class="action-btn" onclick="toggleDetails('${report.exam_id}')">
-                                <i class="fas fa-chevron-down" id="icon-${report.exam_id}"></i>
-                            </button>
-                        </td>
-                    </tr>
-                        <tr id="details-${report.exam_id}" class="details-row" style="display: none;">
-                            <td colspan="8">
-                                <div class="details-content">
-                                    ${generateFeedback(report.critical_missed, report.critical_points)}
-                                </div>
-                        </td>
-                    </tr>`;
+    //                 const gradeInfo = calculateGrade(report.percentage);
+    //                 let row = `
+    //                     <tr>
+    //                     <td>${report.student_name}</td>
+    //                     <td>${report.institute_name}</td>
+    //                         <td class="text-center">${report.total_score}</td>
+    //                         <td class="text-center ${gradeInfo.class}">${gradeInfo.grade}</td>
+    //                         <td class="text-center ${gradeInfo.class}">${report.percentage}%</td>
+    //                         <td class="text-center">${report.critical_missed}</td>
+    //                     <td>${report.procedure_name}</td>
+    //                         <td class="text-center">
+    //                             <button class="action-btn" onclick="toggleDetails('${report.exam_id}')">
+    //                             <i class="fas fa-chevron-down" id="icon-${report.exam_id}"></i>
+    //                         </button>
+    //                     </td>
+    //                 </tr>
+    //                     <tr id="details-${report.exam_id}" class="details-row" style="display: none;">
+    //                         <td colspan="8">
+    //                             <div class="details-content">
+    //                                 ${generateFeedback(report.critical_missed, report.critical_points)}
+    //                             </div>
+    //                     </td>
+    //                 </tr>`;
                     
-                    tableBody.insertAdjacentHTML('beforeend', row);
-                });
+    //                 tableBody.insertAdjacentHTML('beforeend', row);
+    //             });
 
-                offset += limit;
-                document.getElementById("loadMoreBtn").style.display = hasMoreData ? "block" : "none";
-            })
-            .catch(error => {
-                console.error("Error fetching reports:", error);
-                hideLoading();
-                showEmptyState();
-            });
-    }
+    //             offset += limit;
+    //             document.getElementById("loadMoreBtn").style.display = hasMoreData ? "block" : "none";
+    //         })
+    //         .catch(error => {
+    //             console.error("Error fetching reports:", error);
+    //             hideLoading();
+    //             showEmptyState();
+    //         });
+    // }
 
     function calculateGrade(percentage) {
         if (percentage >= 90) return { grade: 'A', class: 'grade-a' };
@@ -2041,23 +2015,14 @@
         return html_feedback;
     }
 
-    function fetch_particular_student() {
-        const username = document.getElementById("searchInput").value.trim();
-        if (!username) {
-            // Show error toast or notification
-            return;
-        }
-        window.open(`/fetch-particular-student?username=${encodeURIComponent(username)}`);
-    }
-
-    function initializeGradeChart() {
+    function initializeOverallGradeChart() {
         const ctx = document.getElementById('gradeChart').getContext('2d');
-        gradeChart = new Chart(ctx, {
+        overallGradeChart = new Chart(ctx, {
             type: 'pie',
             data: {
-                labels: ['A', 'B', 'C', 'D', 'E'],
+                labels: ['A (>= 90%)', 'B (>= 80%)', 'C (>= 70%)', 'D (>= 60%)', 'E (< 60%)'],
                 datasets: [{
-                    data: [0, 0, 0, 0, 0],
+                    data: [0,0,0,0,0],
                     backgroundColor: [
                         '#4CAF50', // Green for A
                         '#8BC34A', // Light Green for B
@@ -2095,6 +2060,19 @@
                 }
             }
         });
+    }
+
+    function updateOverallGradeChart(metrics) {
+        if (overallGradeChart) {
+            overallGradeChart.data.datasets[0].data = [
+                metrics.grade_distribution.A,
+                metrics.grade_distribution.B,
+                metrics.grade_distribution.C,
+                metrics.grade_distribution.D,
+                metrics.grade_distribution.E
+            ];
+            overallGradeChart.update();
+        }
     }
 
     function initializeGenderCharts() {
@@ -2235,26 +2213,13 @@
         container.innerHTML = ''; // Clear existing content
 
         // Debug log the metrics data
-        console.log('Skill metrics data:', metrics.skill_wise_metrics);
+        // console.log('Skill metrics data:', metrics.skill_wise_metrics);
 
         // For each procedure/skill in the metrics
         Object.entries(metrics.skill_wise_metrics || {}).forEach(([skillName, skillData]) => {
-            // Debug log each skill entry
-            console.log('Processing skill:', { name: skillName, data: skillData });
-
-            if (!skillName) {
-                console.warn('Skipping undefined skill name');
-                return;
-            }
-
-            if (!skillData) {
-                console.warn(`Skipping undefined data for skill: ${skillName}`);
-                return;
-            }
-
+            if (!skillName) return;
+            if (!skillData) return;
             const safeSkillName = sanitizeId(skillName);
-            console.log('Sanitized skill name:', safeSkillName);
-
             const skillCard = document.createElement('div');
             skillCard.className = 'skill-card';
 
@@ -2292,17 +2257,22 @@
             `;
             metricsGrid.appendChild(criticalChartCard);
 
-            // Common Missed Steps
-            const commonMissedCard = document.createElement('div');
-            commonMissedCard.className = 'skill-metric-card';
-            commonMissedCard.innerHTML = `
-                <h4>Most Commonly Missed Critical Step</h4>
-                <div class="critical-steps-info">
-                    <span class="critical-step-text">${skillData.common_missed_steps?.step || 'None'}</span>
-                    <span class="critical-step-count">${skillData.common_missed_steps?.count || 0} times</span>
+            // All Missed Critical Steps (scrollable)
+            const allMissedCard = document.createElement('div');
+            allMissedCard.className = 'skill-metric-card';
+            allMissedCard.innerHTML = `
+                <h4>All Missed Critical Steps</h4>
+                <div class="missed-steps-list scrollable-missed-steps" style="max-height: 200px; overflow-y: auto;">
+                    ${skillData.common_missed_steps && Object.keys(skillData.common_missed_steps).length > 0
+                        ? `<ul style='margin:0;padding-left:0;'>${Object.entries(skillData.common_missed_steps)
+                            .sort((a, b) => b[1] - a[1])
+                            .map(([step, count]) =>
+                                `<li style='display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f1f1f1; font-size: 12px;'><span>${step}</span><span class='critical-step-count'>${count} times</span></li>`
+                            ).join('')}</ul>`
+                        : `<div style='color:#888;'>No missed critical steps</div>`}
                 </div>
             `;
-            metricsGrid.appendChild(commonMissedCard);
+            metricsGrid.appendChild(allMissedCard);
 
             skillCard.appendChild(metricsGrid);
             container.appendChild(skillCard);
@@ -2315,14 +2285,11 @@
                 console.error(`Grade chart canvas not found: ${gradeChartId}`);
                 return;
             }
-
             if (!criticalCanvas) {
                 console.error(`Critical chart canvas not found: ${criticalChartId}`);
                 return;
             }
-
             try {
-                // Initialize charts with explicit IDs
                 initializeGradeChart(gradeChartId, skillData.grade_distribution || {});
                 initializeCriticalChart(criticalChartId, skillData.critical_steps || {});
             } catch (error) {
@@ -2333,7 +2300,7 @@
 
     function initializeGradeChart(chartId, gradeData) {
         try {
-            console.log('Initializing grade chart:', { chartId, gradeData });
+            // console.log('Initializing grade chart:', { chartId, gradeData });
 
             const canvas = document.getElementById(chartId);
             if (!canvas) {
@@ -2356,7 +2323,7 @@
             };
 
             new Chart(ctx, {
-                type: 'bar',
+                type: 'pie', // Changed from 'bar' to 'pie'
                 data: {
                     labels: ['A', 'B', 'C', 'D', 'E'],
                     datasets: [{
@@ -2368,7 +2335,8 @@
                             '#FF9800',
                             '#F44336'
                         ],
-                        borderRadius: 6
+                        borderWidth: 1,
+                        borderColor: '#fff'
                     }]
                 },
                 options: {
@@ -2376,14 +2344,22 @@
                     maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                stepSize: 1
+                            position: 'right',
+                            labels: {
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+                                    return `Grade ${label}: ${value} (${percentage}%)`;
+                                }
                             }
                         }
                     }
@@ -2489,20 +2465,17 @@
         
         // Update gender charts
         updateGenderCharts(metrics);
-        
-        // Update skill-wise analysis
         updateSkillWiseAnalysis(metrics);
+        updateOverallGradeChart(metrics);
     }
 
     function fetchMetrics() {
+        if (!selectedSkillathon) return;
         const url = new URL('/fetch-exam-metrics/', window.location.origin);
+        url.searchParams.append('skillathon_id', selectedSkillathon);
         if (selectedInstitute) {
             url.searchParams.append('institute_id', selectedInstitute);
         }
-        if (selectedSkillathon) {
-            url.searchParams.append('skillathon_id', selectedSkillathon);
-        }
-
         fetch(url)
             .then(response => response.json())
             .then(data => {
@@ -2513,6 +2486,64 @@
             .catch(error => {
                 console.error("Error fetching metrics:", error);
             });
+        // Start interval if not already started
+        if (!fetchMetricsInterval) {
+            fetchMetricsInterval = setInterval(() => {
+        if (selectedSkillathon) {
+                    fetchMetrics();
+                }
+            }, 5000);
+        }
+    }
+
+    function fetchStudentMetrics() {
+        const skillathonId = document.getElementById('studentSkillathonFilter').value;
+        const instituteId = document.getElementById('studentInstituteFilter').value;
+
+        if (!skillathonId) {
+            return;
+        }
+
+        const params = new URLSearchParams();
+        if (skillathonId) params.append('skillathon_id', skillathonId);
+        if (instituteId) params.append('institute_id', instituteId);
+
+        fetch(`/fetch-student-metrics/?${params}`)
+            .then(response => response.json())
+            .then(data => {
+                const studentMetrics = document.getElementById('studentMetrics');
+                const noDataFound = document.getElementById('noDataFound');
+                
+                if (data.students && data.students.length > 0) {
+                    if (studentMetrics) studentMetrics.style.display = 'block';
+                    if (noDataFound) noDataFound.style.display = 'none';
+                    
+                    updateScoreCards(data);
+                    
+                    updateStudentTable(data);
+                } else {
+                    if (studentMetrics) studentMetrics.style.display = 'none';
+                    if (noDataFound) noDataFound.style.display = 'block';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching student metrics:', error);
+                clearStudentMetrics();
+            });
+    }
+
+    function clearFetchMetricsInterval() {
+        if (fetchMetricsInterval) {
+            clearInterval(fetchMetricsInterval);
+            fetchMetricsInterval = null;
+        }
+    }
+
+    function clearFetchStudentMetricsInterval() {
+        if (fetchStudentMetricsInterval) {
+            clearInterval(fetchStudentMetricsInterval);
+            fetchStudentMetricsInterval = null;
+        }
     }
 
     function switchTab(tabName) {
@@ -2537,6 +2568,17 @@
             event.target.classList.add('active');
         }
 
+        // Handle intervals
+        if (tabName === 'overall') {
+            clearFetchStudentMetricsInterval();
+            clearFetchMetricsInterval();
+            // Only start fetchMetrics if Go was pressed
+        } else if (tabName === 'student') {
+            clearFetchMetricsInterval();
+            clearFetchStudentMetricsInterval();
+            // Only start fetchStudentMetrics if Go is pressed in student tab
+        }
+
         // Reset student report when switching to it
         if (tabName === 'student') {
             const studentSkillathonFilter = document.getElementById('studentSkillathonFilter');
@@ -2549,8 +2591,8 @@
             
             // Populate institute filter for student report
             fetch('/fetch-institutes/')
-                .then(response => response.json())
-                .then(data => {
+            .then(response => response.json())
+            .then(data => {
                     const studentInstituteFilter = document.getElementById('studentInstituteFilter');
                     if (studentInstituteFilter) {
                         studentInstituteFilter.innerHTML = '<option value="">All Institutes</option>';
@@ -2561,7 +2603,6 @@
                             studentInstituteFilter.appendChild(option);
                         });
                         // Fetch metrics immediately after loading institutes
-                        fetchStudentMetrics();
                     }
                 })
                 .catch(error => {
@@ -2660,36 +2701,62 @@
         // This would be implemented based on your actual data structure
     }
 
-    function fetchStudentMetrics() {
-        const skillathonId = document.getElementById('studentSkillathonFilter').value;
-        const instituteId = document.getElementById('studentInstituteFilter').value;
-        const params = new URLSearchParams();
-        
-        if (instituteId) {
-            params.append('institute_id', instituteId);
-        }
+    // Call this to load the first batch (e.g. on filter change)
 
-        fetch(`/fetch-student-metrics/?${params}`)
-            .then(response => response.json())
-            .then(data => {
-                const studentMetrics = document.getElementById('studentMetrics');
-                const noDataFound = document.getElementById('noDataFound');
-                
-                if (data.students && data.students.length > 0) {
-                    if (studentMetrics) studentMetrics.style.display = 'block';
-                    if (noDataFound) noDataFound.style.display = 'none';
-                    
-                    updateScoreCards(data);
-                    updateStudentTable(data);
+    // Helper to append student rows (reuse your updateStudentTable logic, but append instead of replace)
+    function appendStudentRows(data) {
+        const tableBody = document.getElementById('performanceTableBody');
+        data.students.forEach(student => {
+            const row = document.createElement('tr');
+            // ... (same as your updateStudentTable logic for each row)
+            // Add student name
+            const nameCell = document.createElement('td');
+            nameCell.className = 'student-col sticky-col';
+            nameCell.textContent = student.name;
+            row.appendChild(nameCell);
+            // Add institute
+            const instituteCell = document.createElement('td');
+            instituteCell.className = 'institute-col sticky-col';
+            instituteCell.textContent = student.institute;
+            row.appendChild(instituteCell);
+            // Add grades for each procedure
+            data.procedures.forEach(procedure => {
+                const cell = document.createElement('td');
+                const grade = student.grades[procedure];
+                const missedSteps = (student.missed_critical_steps && student.missed_critical_steps[procedure]) || [];
+                if (grade) {
+                    cell.textContent = `${grade.grade} (${grade.percentage}%)`;
+                    cell.className = getGradeClass(grade.grade);
+                    if (missedSteps.length > 0) {
+                        const warnIcon = document.createElement('span');
+                        warnIcon.textContent = ' ⚠';
+                        warnIcon.style.color = '#F16564';
+                        warnIcon.style.cursor = 'pointer';
+                        warnIcon.title = `Missed Critical Steps: \n${missedSteps.join('\n')}`;
+                        cell.appendChild(warnIcon);
+                    }
+                    cell.style.cursor = 'pointer';
+                    cell.dataset.student = JSON.stringify({
+                        name: student.name,
+                        institute: student.institute,
+                        procedure: procedure,
+                        grade: grade,
+                        examData: student.exam_data || {}
+                    });
+                    cell.onclick = () => openProcedurePanel(
+                        student.name,
+                        student.institute,
+                        procedure,
+                        grade,
+                        (student.exam_data && student.exam_data[procedure]) ? student.exam_data[procedure] : []
+                    );
                 } else {
-                    if (studentMetrics) studentMetrics.style.display = 'none';
-                    if (noDataFound) noDataFound.style.display = 'block';
+                    cell.textContent = '-';
                 }
-            })
-            .catch(error => {
-                console.error('Error fetching student metrics:', error);
-                clearStudentMetrics();
+                row.appendChild(cell);
             });
+            tableBody.appendChild(row);
+        });
     }
 
     function clearStudentMetrics() {
@@ -2722,6 +2789,7 @@
     }
 
     function updateScoreCards(data) {
+        console.log(data)
         document.getElementById('highestScore').textContent = `${data.highest_score}%`;
         document.getElementById('highestScoreStudent').textContent = data.highest_score_student;
         document.getElementById('highestScoreInstitute').textContent = data.highest_score_institute;
@@ -2737,46 +2805,54 @@
 
         if (!headerRow || !tableBody) {
             console.error('Table elements not found');
-            return;
-        }
-
+                    return;
+                }
+                
         // Clear existing content
         while (headerRow.children.length > 2) {
             headerRow.removeChild(headerRow.lastChild);
         }
 
         // Add procedure columns to header
-        data.procedures.forEach(procedure => {
-            const th = document.createElement('th');
-            th.textContent = procedure;
-            headerRow.appendChild(th);
-        });
+        if (data.procedures && data.procedures.length > 0) {
+            data.procedures.forEach(procedure => {
+                const th = document.createElement('th');
+                th.textContent = procedure;
+                headerRow.appendChild(th);
+            });
+        }
 
         // Clear and populate table body
         tableBody.innerHTML = '';
         data.students.forEach(student => {
             const row = document.createElement('tr');
-            
             // Add student name
             const nameCell = document.createElement('td');
             nameCell.className = 'student-col sticky-col';
             nameCell.textContent = student.name;
             row.appendChild(nameCell);
-            
             // Add institute
             const instituteCell = document.createElement('td');
             instituteCell.className = 'institute-col sticky-col';
             instituteCell.textContent = student.institute;
             row.appendChild(instituteCell);
-            
             // Add grades for each procedure
             data.procedures.forEach(procedure => {
                 const cell = document.createElement('td');
                 const grade = student.grades[procedure];
-                
+                const missedSteps = (student.missed_critical_steps && student.missed_critical_steps[procedure]) || [];
                 if (grade) {
                     cell.textContent = `${grade.grade} (${grade.percentage}%)`;
                     cell.className = getGradeClass(grade.grade);
+                    // Add missed critical steps indicator if any
+                    if (missedSteps.length > 0) {
+                        const warnIcon = document.createElement('span');
+                        warnIcon.textContent = ' ⚠';
+                        warnIcon.style.color = '#F16564';
+                        warnIcon.style.cursor = 'pointer';
+                        warnIcon.title = `Missed Critical Steps: \n${missedSteps.join('\n')}`;
+                        cell.appendChild(warnIcon);
+                    }
                     // Add click handler and cursor style
                     cell.style.cursor = 'pointer';
                     cell.dataset.student = JSON.stringify({
@@ -2791,15 +2867,13 @@
                         student.institute,
                         procedure,
                         grade,
-                        student.exam_data || {}
+                        (student.exam_data && student.exam_data[procedure]) ? student.exam_data[procedure] : []
                     );
                 } else {
                     cell.textContent = '-';
                 }
-                
                 row.appendChild(cell);
             });
-            
             tableBody.appendChild(row);
         });
     }
@@ -2838,18 +2912,21 @@
         
         steps.forEach((step, index) => {
             const row = document.createElement('tr');
-            const status = step.critical && !step.completed ? 'critical' : 
-                          !step.completed ? 'missed' : 'completed';
+            const status = !step.completed ? 'missed' : 'completed';
             
             row.innerHTML = `
                 <td>${index + 1}</td>
                 <td>${step.description}</td>
+                
                 <td>
                     <span class="step-status status-${status}">
                         ${status.charAt(0).toUpperCase() + status.slice(1)}
                     </span>
-                </td>
+                        </td>
             `;
+            if(step.critical){
+                row.style.backgroundColor = '#fad2d2';
+            }
             stepsBody.appendChild(row);
         });
 
@@ -2869,9 +2946,47 @@
         document.body.style.overflow = '';
     }
 
+    function onSkillathonChange() {
+        selectedSkillathon = document.getElementById('skillathonFilter').value;
+        // Enable institute dropdown if skillathon is selected
+        const instituteFilter = document.getElementById('instituteFilter');
+        const goButton = document.getElementById('goButton');
+        if (selectedSkillathon) {
+            instituteFilter.disabled = false;
+            goButton.disabled = false;
+        } else {
+            instituteFilter.disabled = true;
+            goButton.disabled = true;
+            selectedInstitute = '';
+            instituteFilter.value = '';
+        }
+        clearMetricsDisplay();
+        clearFetchMetricsInterval();
+    }
+
+    function onInstituteChange() {
+        selectedInstitute = document.getElementById('instituteFilter').value;
+        clearMetricsDisplay();
+        clearFetchMetricsInterval();
+    }
+
+    function clearMetricsDisplay() {
+        // Reset metrics display to default/empty
+        document.getElementById('totalStudents').textContent = '0';
+        document.getElementById('completedAllProcedures').textContent = '0';
+        const procedureCountsDiv = document.getElementById('procedureCounts');
+        if (procedureCountsDiv) procedureCountsDiv.innerHTML = '';
+        if (overallGradeChart) {
+            overallGradeChart.data.datasets[0].data = [0,0,0,0,0];
+            overallGradeChart.update();
+        }
+        updateGenderCharts({gender_metrics: {total: {male: 0, female: 0, others: 0}, grade_wise: {A: {male: 0, female: 0, others: 0}, B: {male: 0, female: 0, others: 0}, C: {male: 0, female: 0, others: 0}, D: {male: 0, female: 0, others: 0}, E: {male: 0, female: 0, others: 0}}}});
+        updateSkillWiseAnalysis({skill_wise_metrics: {}});
+    }
+
     // Initialize everything
     document.addEventListener("DOMContentLoaded", () => {
-        initializeGradeChart();
+        initializeOverallGradeChart();
         initializeGenderCharts();
         
         // Fetch skillathons
@@ -2938,12 +3053,40 @@
                 console.error('Error fetching institutes:', error);
             });
 
-        fetchMetrics();
-        fetchExamReports();
-        
         // Add event listeners
-        document.getElementById('skillathonFilter').addEventListener('change', handleSkillathonChange);
-        document.getElementById('instituteFilter').addEventListener('change', handleInstituteChange);
+        document.getElementById('skillathonFilter').addEventListener('change', onSkillathonChange);
+        document.getElementById('instituteFilter').addEventListener('change', onInstituteChange);
     });
+
+    // Student Report Go button logic
+    function onStudentSkillathonChange() {
+        selectedStudentSkillathon = document.getElementById('studentSkillathonFilter').value;
+        updateStudentGoButtonState();
+        clearStudentMetrics();
+        clearFetchStudentMetricsInterval();
+    }
+    function onStudentInstituteChange() {
+        selectedStudentInstitute = document.getElementById('studentInstituteFilter').value;
+        updateStudentGoButtonState();
+        clearStudentMetrics();
+        clearFetchStudentMetricsInterval();
+    }
+    function updateStudentGoButtonState() {
+        const goBtn = document.getElementById('studentGoButton');
+        if (selectedStudentSkillathon) {
+            goBtn.disabled = false;
+        } else {
+            goBtn.disabled = true;
+        }
+    }
+    function fetchStudentMetricsAuto() {
+        fetchStudentMetrics();
+        if (!fetchStudentMetricsInterval) {
+            fetchStudentMetricsInterval = setInterval(() => {
+                fetchStudentMetrics();
+            }, 3000); // 5 minutes
+        }
+    }
+
 </script>
 {% endblock %}

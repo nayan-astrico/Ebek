@@ -23,6 +23,10 @@ from .onboarding_forms import LearnerForm
 from .models import Learner, Institution, Hospital, SkillathonEvent
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
+from .firebase_sync import sync_user_to_firestore, sync_user_to_firebase_auth, batch_sync_users_to_firestore, batch_sync_users_to_firebase_auth
+from django.db.models.signals import post_save
+from django.dispatch import Signal
+from firebase_admin import firestore
 
 
 # Group Views
@@ -582,7 +586,6 @@ def learner_create(request):
             if learner_name == '' or learner_email == '' or learner_phone == '':
                 pass
             else:
-            
                 user, created = User.objects.get_or_create(
                     email=learner_email,
                     defaults={
@@ -595,10 +598,10 @@ def learner_create(request):
                     default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
                     user.set_password(default_password)
                     user.save()
-                    reset_link = request.build_absolute_uri(reverse('login'))
-                    subject = 'Your Learner Account Created'
-                    body = f"""Dear {learner_name},\n\nYour learner account has been created.\n\nUsername: {learner_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                    send_email(subject, body, [learner_email])
+                    # reset_link = request.build_absolute_uri(reverse('login'))
+                    # subject = 'Your Learner Account Created'
+                    # body = f"""Dear {learner_name},\n\nYour learner account has been created.\n\nUsername: {learner_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
+                    # send_email(subject, body, [learner_email])
                 else:
                     # Update name/phone if changed
                     updated = False
@@ -615,6 +618,10 @@ def learner_create(request):
             if user is not None:
                 learner.learner_user = user
             learner.save()
+            
+            # Create test and exam assignments if skillathon is assigned
+            create_test_and_exam_assignments(learner, learner.skillathon_event)
+            
             messages.success(request, 'Learner created successfully.')
             return redirect('learner_list')
     else:
@@ -646,10 +653,10 @@ def learner_edit(request, pk):
                     default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
                     user.set_password(default_password)
                     user.save()
-                    reset_link = request.build_absolute_uri(reverse('login'))
-                    subject = 'Your Learner Account Created'
-                    body = f"""Dear {learner_name},\n\nYour learner account has been created.\n\nUsername: {learner_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                    send_email(subject, body, [learner_email])
+                    # reset_link = request.build_absolute_uri(reverse('login'))
+                    # subject = 'Your Learner Account Created'
+                    # body = f"""Dear {learner_name},\n\nYour learner account has been created.\n\nUsername: {learner_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
+                    # send_email(subject, body, [learner_email])
                 else:
                     updated = False
                     if user.full_name != learner_name:
@@ -673,6 +680,10 @@ def learner_edit(request, pk):
             
             learner = form.save(commit=False)
             learner.save()
+            
+            # Create test and exam assignments if skillathon is assigned
+            create_test_and_exam_assignments(learner, learner.skillathon_event)
+            
             messages.success(request, 'Learner updated successfully.')
             return redirect('learner_list')
     else:
@@ -748,6 +759,7 @@ def learner_bulk_upload(request):
             update_count = 0
             error_rows = []
             User = get_user_model()
+            users_to_sync = []  # List to store users that need Firebase sync
 
             # Get all rows and filter out empty ones
             all_rows = list(ws.iter_rows(min_row=2, values_only=True))
@@ -756,98 +768,129 @@ def learner_bulk_upload(request):
                 if any(cell is not None and str(cell).strip() for cell in row)
             ]
 
-            for idx, row in non_empty_rows:
-                row_data = dict(zip(headers, row))
-                # Prepare form data
-                form_data = {}
-                for excel_col, form_field in header_map.items():
-                    value = row_data.get(excel_col)
-                    if value is not None:
-                        value = str(value).strip()
-                        if value:  # Only process non-empty values
-                            # Handle ForeignKeys by name
-                            if form_field == 'college' and value:
-                                try:
-                                    form_data['college'] = Institution.objects.get(name=value).id
-                                except Institution.DoesNotExist:
-                                    form_data['college'] = None
-                            elif form_field == 'hospital' and value:
-                                try:
-                                    form_data['hospital'] = Hospital.objects.get(name=value).id
-                                except Hospital.DoesNotExist:
-                                    form_data['hospital'] = None
-                            elif form_field == 'skillathon_event' and value:
-                                try:
-                                    form_data['skillathon_event'] = SkillathonEvent.objects.get(name=value).id
-                                except SkillathonEvent.DoesNotExist:
-                                    form_data['skillathon_event'] = None
+            # Disable the post_save signal during bulk creation
+            with DisableSignals(post_save):
+                for idx, row in non_empty_rows:
+                    row_data = dict(zip(headers, row))
+                    print(row_data)
+                    # Prepare form data
+                    form_data = {}
+                    for excel_col, form_field in header_map.items():
+                        value = row_data.get(excel_col)
+
+                        if value is not None:
+                            value = str(value).strip()
+                            print(form_field)
+                            if value:  # Only process non-empty values
+                                # Handle ForeignKeys by name
+                                if form_field == 'college' and value:
+                                    try:
+                                        form_data['college'] = Institution.objects.get(name=value).id
+                                    except Institution.DoesNotExist:
+                                        form_data['college'] = None
+                                elif form_field == 'hospital' and value:
+                                    try:
+                                        form_data['hospital'] = Hospital.objects.get(name=value).id
+                                    except Hospital.DoesNotExist:
+                                        form_data['hospital'] = None
+                                else:
+                                    form_data[form_field] = value
+                                
+                                if form_field == 'onboarding_type' and value:
+                                    form_data['onboarding_type'] = value.lower()
+                                
+                                if form_field == 'learner_gender' and value:
+                                    form_data['learner_gender'] = value.lower()
+                                
+                                if form_field == 'skillathon_event' and value:
+                                    try:
+                                        print(value)
+                                        print("HEREEEEEEEEEE")
+                                        print(SkillathonEvent.objects.filter(name=value.strip()))
+                                        form_data['skillathon_event'] = SkillathonEvent.objects.get(name=value.strip()).id
+                                    except SkillathonEvent.DoesNotExist:
+                                        form_data['skillathon_event'] = None
+
+                    # Add required user fields for the form
+                    form_data['learner_name'] = row_data.get('Learner Name', '').strip()
+                    form_data['learner_email'] = row_data.get('Learner Email', '').strip()
+                    form_data['learner_phone'] = str(row_data.get('Learner Phone', '')).strip()[:10]
+
+                    # Skip if required fields are empty
+                    if not all([form_data['learner_name'], form_data['learner_email'], form_data['learner_phone']]):
+                        error_rows.append({
+                            'row': idx,
+                            'errors': {'__all__': ['Name, email and phone are required']}
+                        })
+                        continue
+
+                    form = LearnerForm(form_data)
+                    if form.is_valid():
+                        # Check if learner already exists
+                        existing_learner = Learner.objects.filter(
+                            learner_user__email=form_data['learner_email'],
+                            learner_user__full_name=form_data['learner_name'],
+                            learner_user__phone_number=form_data['learner_phone']
+                        ).first()
+
+                        if existing_learner:
+                            # Update existing learner
+                            for field, value in form.cleaned_data.items():
+                                if field != 'learner_user':
+                                    setattr(existing_learner, field, value)
+                            existing_learner.save()
+                            update_count += 1
+                            users_to_sync.append(existing_learner.learner_user)
+                            
+                            # Create test and exam assignments if skillathon is assigned
+                            create_test_and_exam_assignments(existing_learner, existing_learner.skillathon_event)
+                        else:
+                            # Create new learner
+                            email = form.cleaned_data['learner_email']
+                            full_name = form.cleaned_data['learner_name']
+                            phone = form.cleaned_data['learner_phone']
+                            user, created = User.objects.get_or_create(
+                                email=email,
+                                defaults={'full_name': full_name, 'phone_number': phone, 'is_active': True}
+                            )
+                            if not created:
+                                # Update name/phone if changed
+                                updated = False
+                                if user.full_name != full_name:
+                                    user.full_name = full_name
+                                    updated = True
+                                if user.phone_number != phone:
+                                    user.phone_number = phone
+                                    updated = True
+                                if updated:
+                                    user.save()
+                                    users_to_sync.append(user)
                             else:
-                                form_data[form_field] = value
-                            
-                            if form_field == 'onboarding_type' and value:
-                                form_data['onboarding_type'] = value.lower()
-                            
-                            if form_field == 'learner_gender' and value:
-                                form_data['learner_gender'] = value.lower()
-
-                # Add required user fields for the form
-                form_data['learner_name'] = row_data.get('Learner Name', '').strip()
-                form_data['learner_email'] = row_data.get('Learner Email', '').strip()
-                form_data['learner_phone'] = str(row_data.get('Learner Phone', '')).strip()[:10]
-
-                # Skip if required fields are empty
-                if not all([form_data['learner_name'], form_data['learner_email'], form_data['learner_phone']]):
-                    error_rows.append({
-                        'row': idx,
-                        'errors': {'__all__': ['Name, email and phone are required']}
-                    })
-                    continue
-
-                form = LearnerForm(form_data)
-                if form.is_valid():
-                    # Check if learner already exists with same name, email and phone
-                    existing_learner = Learner.objects.filter(
-                        learner_user__email=form_data['learner_email'],
-                        learner_user__full_name=form_data['learner_name'],
-                        learner_user__phone_number=form_data['learner_phone']
-                    ).first()
-
-                    if existing_learner:
-                        # Update existing learner
-                        for field, value in form.cleaned_data.items():
-                            if field != 'learner_user':  # Don't update the user relationship
-                                setattr(existing_learner, field, value)
-                        existing_learner.save()
-                        update_count += 1
-                    else:
-                        # Create new learner
-                        email = form.cleaned_data['learner_email']
-                        full_name = form.cleaned_data['learner_name']
-                        phone = form.cleaned_data['learner_phone']
-                        user, created = User.objects.get_or_create(
-                            email=email,
-                            defaults={'full_name': full_name, 'phone_number': phone, 'is_active': True}
-                        )
-                        if not created:
-                            # Update name/phone if changed
-                            updated = False
-                            if user.full_name != full_name:
-                                user.full_name = full_name
-                                updated = True
-                            if user.phone_number != phone:
-                                user.phone_number = phone
-                                updated = True
-                            if updated:
+                                # Generate password for new users
+                                default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+                                user.set_password(default_password)
                                 user.save()
-                        learner = form.save(commit=False)
-                        learner.learner_user = user
-                        learner.save()
-                        success_count += 1
-                else:
-                    error_rows.append({
-                        'row': idx,
-                        'errors': form.errors
-                    })
+                                users_to_sync.append(user)
+                            
+                            learner = form.save(commit=False)
+                            learner.learner_user = user
+                            learner.save()
+                            success_count += 1
+                            
+                            # Create test and exam assignments if skillathon is assigned
+                            create_test_and_exam_assignments(learner, learner.skillathon_event)
+                    else:
+                        error_rows.append({
+                            'row': idx,
+                            'errors': form.errors
+                        })
+
+            # Batch sync all users to Firebase
+            if users_to_sync:
+                # Batch sync to Firestore
+                batch_sync_users_to_firestore(users_to_sync)
+                # Batch sync to Firebase Auth
+                # batch_sync_users_to_firebase_auth(users_to_sync)
 
             return JsonResponse({
                 'success': True,
@@ -856,6 +899,8 @@ def learner_bulk_upload(request):
             })
 
         except Exception as e:
+            print(e)
+            print(traceback.format_exc())
             return JsonResponse({
                 'success': False,
                 'error': f'Error processing file: {str(e)}'
@@ -1086,3 +1131,93 @@ def skillathon_delete(request, pk):
         messages.success(request, 'Skillathon event deleted successfully.')
         return redirect('skillathon_list')
     return redirect('skillathon_list')
+
+class DisableSignals:
+    def __init__(self, signal):
+        self.signal = signal
+        self.receivers = []
+
+    def __enter__(self):
+        self.receivers = self.signal.receivers
+        self.signal.receivers = []
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.signal.receivers = self.receivers
+
+def create_test_and_exam_assignments(learner, skillathon_event):
+    """Helper function to create test and exam assignments for a learner with a skillathon event"""
+    print("INSIDE CREATE TEST AND EXAM ASSIGNMENTS")
+    print(learner)
+    print(skillathon_event)
+    if not skillathon_event:
+        return
+
+    # Get Firestore client
+    db = firestore.client()
+    
+    # Check if test already exists for this skillathon
+    skillathon_name = skillathon_event.name
+    test_ref = db.collection('Test').where('skillathon', '==', skillathon_name).limit(1).get()
+    print(test_ref)
+    if not test_ref:
+        return
+    
+    test_doc = test_ref[0]
+    test_data = test_doc.to_dict()
+    procedure_assignments = test_data.get('procedureAssignments', [])
+    print(procedure_assignments)
+    
+    # Get the learner's user document reference
+    learner_user_ref = db.collection('Users').where('emailID', '==', learner.learner_user.email).limit(1).get()
+    if not learner_user_ref:
+        return
+    print(learner_user_ref)
+    
+    learner_user_ref = learner_user_ref[0].reference
+    
+    # For each procedure assignment, create an exam assignment for this learner
+    for proc_assignment_ref in procedure_assignments:
+        proc_assignment = proc_assignment_ref.get()
+        if not proc_assignment.exists:
+            continue
+            
+        proc_data = proc_assignment.to_dict()
+        procedure_ref = proc_data.get('procedure')
+        print("INSIDE PROCEDURE REF")
+        print(procedure_ref)
+        if not procedure_ref:
+            continue
+            
+        procedure = procedure_ref.get()
+        if not procedure.exists:
+            continue
+            
+        procedure_data = procedure.to_dict()
+        
+        # Check if exam assignment already exists for this user and procedure
+        existing_exam_assignments = proc_data.get('examAssignmentArray', [])
+        for existing_ref in existing_exam_assignments:
+            existing_exam = existing_ref.get()
+            if existing_exam.exists:
+                existing_data = existing_exam.to_dict()
+                if existing_data.get('user') == learner_user_ref:
+                    # Skip creating new exam assignment if one already exists
+                    continue
+        
+        # Create exam assignment
+        exam_assignment_data = {
+            'user': learner_user_ref,
+            'examMetaData': procedure_data.get('examMetaData', {}),
+            'status': 'Pending',
+            'notes': procedure_data.get('notes', ''),
+            'procedure_name': procedure_data.get('procedureName', ''),
+        }
+        
+        # Add exam assignment to Firestore and get its reference
+        exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
+        
+        # Update procedure assignment with new exam assignment reference
+        proc_assignment_ref.update({
+            'examAssignmentArray': firestore.ArrayUnion([exam_assignment_ref])
+        })

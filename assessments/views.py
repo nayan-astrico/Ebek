@@ -361,20 +361,18 @@ def fetch_cohorts(request):
 def fetch_assessors(request):
     """Fetch assessors from the 'EbekCohort'."""
     try:
-        cohort_ref = db.collection('Cohort').where('cohortName', '==', 'SupervisorCohort').limit(1)
-        assessors = []
-        for doc in cohort_ref.stream():
-            cohort_data = doc.to_dict()
-            user_refs = cohort_data.get('users', [])
-            for user_ref in user_refs:
-                user = db.document(user_ref.path).get()
-                if user.exists:
-                    user_data = user.to_dict()
-                    assessors.append({
-                        'id': user.id,
-                        'name': user_data.get('username', 'Unknown Assessor')
-                    })
+        users_ref = db.collection('Users').where('role', '==', 'ebek_admin')
+        print(users_ref)
 
+        assessors = []
+        for doc in users_ref.stream():
+            print(doc)
+            user_data = doc.to_dict()
+            assessors.append({
+                'id': doc.id,
+                'name': user_data.get('name', 'Unknown Assessor')
+            })
+        print(assessors)
         return JsonResponse({'assessors': assessors}, status=200)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -394,54 +392,125 @@ def fetch_procedures(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
-
+import traceback
 def create_procedure_assignment_and_test(request):
     if request.method == 'POST':
         try:
             data = request.POST
             print(data)
             # Parse required inputs
-            batch_ids = data.getlist('batch_ids')  # Assuming array sent as batch_ids[]
-            procedure_ids = data.getlist('procedure_ids')  # Assuming array sent as procedure_ids[]
-            test_date = data.get('test_date')  # Selected date
-            assessor_ids = data.getlist('assessor_ids')  # List of selected assessors
-
-            # Ensure all required fields are present
-            if not batch_ids or not procedure_ids or not test_date:
-                return JsonResponse({'error': 'All fields are required.'}, status=400)
+            batch_ids = data.getlist('batch_ids')  
+            procedure_ids = data.getlist('procedure_ids')  
+            test_date = data.get('test_date')  
+            assessor_ids = data.getlist('assessor_ids')
 
             # Convert test_date to datetime object
-            test_date_obj = datetime.datetime.strptime(test_date, '%Y-%m-%d')
+            test_date_obj = datetime.strptime(test_date, '%Y-%m-%d')
 
             # Get current user (for now set to null as per your request)
             current_user = None  # Change this as needed based on your auth logic
 
             created_tests = []  # To store references for created tests
 
-            for batch_id in batch_ids:
-                # Fetch cohort document
-                cohort_ref = db.collection('Cohort').document(batch_id)
-                cohort_doc = cohort_ref.get()
-                if not cohort_doc.exists:
-                    return JsonResponse({'error': f'Cohort with ID {batch_id} does not exist.'}, status=404)
+            if batch_ids != []:
+                for batch_id in batch_ids:
+                    # Fetch cohort document
+                    cohort_ref = db.collection('Cohort').document(batch_id)
+                    cohort_doc = cohort_ref.get()
+                    if not cohort_doc.exists:
+                        return JsonResponse({'error': f'Cohort with ID {batch_id} does not exist.'}, status=404)
 
-                cohort_data = cohort_doc.to_dict()
-                users = cohort_data.get('users', [])
+                    cohort_data = cohort_doc.to_dict()
+                    users = cohort_data.get('users', [])
 
-                # Create Test document
+                    # Create Test document
+                    test_data = {
+                        'createdBy': None if current_user is None else current_user,  # Supervisor user reference
+                        'cohort': cohort_ref,
+                        'procedureAssignments': [],
+                        'creationDate': datetime.now(),
+                        'testdate': test_date_obj,
+                        'batchname': cohort_data.get('cohortName', ''),
+                        'status': 'Not Completed',
+                    }
+                    test_ref = db.collection('Test').add(test_data)[1]
+                    created_tests.append(test_ref.id)
+
+                    # Create ProcedureAssignments
+                    procedure_assignment_refs = []
+                    for procedure_id in procedure_ids:
+                        procedure_ref = db.collection('ProcedureTable').document(procedure_id)
+                        procedure_data = procedure_ref.get().to_dict()
+
+                        if not procedure_data:
+                            continue
+
+                        # Create ProcedureAssignment for each assessor
+                        for assessor_id in assessor_ids:
+                            procedure_assignment_data = {
+                                'assignmentToBeDoneDate': test_date_obj,
+                                'cohort': cohort_ref,
+                                'cohortStudentExamTaken': 0,
+                                'creationDate': datetime.now(),
+                                'procedure': procedure_ref,
+                                'status': 'Pending',
+                                'typeOfTest': 'Classroom',
+                                'supervisor': db.collection('Users').document(assessor_id),  # Now using current assessor
+                                'examAssignmentArray': [],
+                                'cohortStudentExamStarted': 0,
+                                'test': test_ref,
+                            }
+                            
+                            procedure_assignment_ref = db.collection('ProcedureAssignment').add(procedure_assignment_data)[1]
+                            procedure_assignment_refs.append(procedure_assignment_ref)
+
+                            # Create ExamAssignments for this procedure assignment
+                            exam_assignment_refs = []
+                            for user_snapshot in users:
+                                exam_meta_data = procedure_data.get('examMetaData', {})
+                                notes = procedure_data.get('notes', '')
+                                procedure_name = procedure_data.get('procedureName', '')
+
+                                exam_assignment_data = {
+                                    'user': user_snapshot.reference,  # Use the document reference instead of snapshot
+                                    'examMetaData': exam_meta_data,
+                                    'status': 'Pending',
+                                    'notes': notes,
+                                    'procedure_name': procedure_name,
+                                }
+                                exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
+                                exam_assignment_refs.append(exam_assignment_ref)
+
+                            # Update ProcedureAssignment with exam assignments
+                            procedure_assignment_ref.update({'examAssignmentArray': firestore.ArrayUnion(exam_assignment_refs)})
+
+                    # Update Test document with all procedure assignments
+                    test_ref.update({'procedureAssignments': firestore.ArrayUnion(procedure_assignment_refs)})
+
+                    # Create CohortProcedureAssignments
+                    for assessor_id in assessor_ids:
+                        db.collection('CohortProcedureAssignments').add({
+                            'test': test_ref,
+                            'user': db.collection('Users').document(assessor_id),
+                            'typeOfTest': 'Classroom',
+                        })
+            else:
+                skillathon_id = data.get('skillathon_id')
+                skillathon_ref = db.collection('Skillathon').document(skillathon_id)
+                skillathon_name = skillathon_ref.get().to_dict()["skillathonName"]
                 test_data = {
-                    'createdBy': None if current_user is None else current_user,  # Supervisor user reference
-                    'cohort': cohort_ref,
-                    'procedureAssignments': [],
-                    'creationDate': datetime.datetime.now(),
-                    'testdate': test_date_obj,
-                    'batchname': cohort_data.get('cohortName', ''),
-                    'status': 'Not Completed',
-                }
+                        'createdBy': None if current_user is None else current_user,  # Supervisor user reference
+                        'procedureAssignments': [],
+                        'creationDate': datetime.now(),
+                        'testdate': test_date_obj,
+                        'status': 'Not Completed',
+                        'skillathon': skillathon_name,
+                    }
+                print(test_data)
+                
                 test_ref = db.collection('Test').add(test_data)[1]
                 created_tests.append(test_ref.id)
 
-                # Create ProcedureAssignments
                 procedure_assignment_refs = []
                 for procedure_id in procedure_ids:
                     procedure_ref = db.collection('ProcedureTable').document(procedure_id)
@@ -449,67 +518,54 @@ def create_procedure_assignment_and_test(request):
 
                     if not procedure_data:
                         continue
-
-                    # Create ProcedureAssignment for each assessor
-                    for assessor_id in assessor_ids:
-                        procedure_assignment_data = {
-                            'assignmentToBeDoneDate': test_date_obj,
-                            'cohort': cohort_ref,
-                            'cohortStudentExamTaken': 0,
-                            'creationDate': datetime.datetime.now(),
-                            'procedure': procedure_ref,
-                            'status': 'Pending',
-                            'typeOfTest': 'Classroom',
-                            'supervisor': db.collection('Users').document(assessor_id),  # Now using current assessor
-                            'examAssignmentArray': [],
-                            'cohortStudentExamStarted': 0,
-                            'test': test_ref,
-                        }
-                        
-                        procedure_assignment_ref = db.collection('ProcedureAssignment').add(procedure_assignment_data)[1]
-                        procedure_assignment_refs.append(procedure_assignment_ref)
-
-                        # Create ExamAssignments for this procedure assignment
-                        exam_assignment_refs = []
-                        for user_ref in users:
-                            exam_meta_data = procedure_data.get('examMetaData', {})
-                            notes = procedure_data.get('notes', '')
-                            procedure_name = procedure_data.get('procedureName', '')
-
-                            user_data = user_ref.get().to_dict()
-                            institute_ref = user_data.get('institute')
-
-                            print(institute_ref)
-                            print("HEREEEE")
-
-                            exam_assignment_data = {
-                                'user': user_ref,
-                                'examMetaData': exam_meta_data,
-                                'status': 'Pending',
-                                'notes': notes,
-                                'procedure_name': procedure_name,
-                                'institute': institute_ref
-                            }
-                            exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
-                            exam_assignment_refs.append(exam_assignment_ref)
-
-                        # Update ProcedureAssignment with exam assignments
-                        procedure_assignment_ref.update({'examAssignmentArray': firestore.ArrayUnion(exam_assignment_refs)})
-
-                # Update Test document with all procedure assignments
-                test_ref.update({'procedureAssignments': firestore.ArrayUnion(procedure_assignment_refs)})
-
-                # Create CohortProcedureAssignments
-                for assessor_id in assessor_ids:
-                    db.collection('CohortProcedureAssignments').add({
-                        'test': test_ref,
-                        'user': db.collection('Users').document(assessor_id),
+                    
+                    procedure_assignment_data = {
+                        'assignmentToBeDoneDate': test_date_obj,
+                        'creationDate': datetime.now(),
+                        'procedure': procedure_ref,
+                        'status': 'Pending',
                         'typeOfTest': 'Classroom',
-                    })
+                        'supervisors': [db.collection('Users').document(aid) for aid in assessor_ids],
+                        'examAssignmentArray': [],
+                        'cohortStudentExamStarted': 0,
+                        'test': test_ref,
+                    }
+
+                    procedure_assignment_ref = db.collection('ProcedureAssignment').add(procedure_assignment_data)[1]
+                    procedure_assignment_refs.append(procedure_assignment_ref)
+
+                    users = db.collection('Users').where("role", "in", ["student", "nurse"]).where("skillathon_event", "==", skillathon_name)
+
+                    exam_assignment_refs = []
+                    for user_snapshot in users.stream():
+                        exam_meta_data = procedure_data.get('examMetaData', {})
+                        notes = procedure_data.get('notes', '')
+                        procedure_name = procedure_data.get('procedureName', '')
+
+                        exam_assignment_data = {
+                            'user': user_snapshot.reference,  # Use the document reference instead of snapshot
+                            'examMetaData': exam_meta_data,
+                            'status': 'Pending',
+                            'notes': notes,
+                            'procedure_name': procedure_name,
+                        }
+                        exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
+                        exam_assignment_refs.append(exam_assignment_ref)
+
+                    # Update ProcedureAssignment with exam assignments
+                    procedure_assignment_ref.update({'examAssignmentArray': firestore.ArrayUnion(exam_assignment_refs)})
+
+                    # Update Test document with all procedure assignments
+                    test_ref.update({'procedureAssignments': firestore.ArrayUnion(procedure_assignment_refs)})
+                
+                    
 
             return JsonResponse({'success': True, 'created_tests': created_tests})
 
         except Exception as e:
+            print(str(e))
+            print(traceback.format_exc())
+            print("HEEEREEEEEE")
             return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method.'}, status=405)
@@ -524,26 +580,42 @@ def assign_assessment(request):
 
     for test in tests:
         test_doc = test.to_dict()
+        skillathon = test_doc.get('skillathon', None)
+        procedure_assignments = []
+        for proc_ref in test_doc.get('procedureAssignments', []):
+            proc_doc = proc_ref.get()
+            if proc_doc.exists:
+                proc_data = proc_doc.to_dict()
+                procedure_ref = proc_data.get('procedure')
+                procedure_name = "Unknown"
+                if procedure_ref:
+                    procedure_doc = procedure_ref.get()
+                    if procedure_doc.exists:
+                        procedure_name = procedure_doc.to_dict().get('procedureName', 'Unknown')
+                procedure_assignments.append({
+                    'id': proc_ref.id,
+                    'procedure_name': procedure_name,
+                    'status': proc_data.get('status', 'Unknown'),
+                })
         test_data.append({
             'id': test.id,
-            'assessment_name': f"{test_doc.get('batchname', 'Unknown')} - {test_doc.get('testdate').strftime('%d %b')}",
-            'institute': test_doc.get('cohort').get().to_dict().get('instituteName', 'Unknown') if test_doc.get('cohort') else 'Unknown',
+            'assessment_name': (
+                f"{test_doc.get('batchname', skillathon or 'Unknown')} - "
+                f"{test_doc.get('testdate').strftime('%d %b') if test_doc.get('testdate') else ''}"
+            ),
+            'skillathon': skillathon,
+            'procedure_assignments': procedure_assignments,
             'status': test_doc.get('status', 'Not Available'),
         })
 
-    query = request.GET.get("query", "")
-    if query:
-        test_data = [test for test in test_data if query.lower() in test["assessment_name"].lower()]
-    
     # Pagination
-    paginator = Paginator(test_data, 10)  # Show 10 procedures per page
+    paginator = Paginator(test_data, 10)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    # Render the template with test data and pagination object
     return render(request, 'assessments/assign_assessment.html', {
         "page_obj": page_obj,
-        "query": query,
+        "query": request.GET.get("query", ""),
     })
 
 def render_exam_reports_page(request):
@@ -638,170 +710,207 @@ def fetch_exam_reports(request):
 @csrf_exempt
 def fetch_exam_metrics(request):
     try:
-        # Create base query
-        base_query = db.collection('ExamAssignment')
-        institute_id = request.GET.get("institute_id")
         skillathon_id = request.GET.get("skillathon_id")
+        institution_id = request.GET.get("institute_id")
+        if not skillathon_id:
+            return JsonResponse({"error": "skillathon_id is required"}, status=400)
 
-        # Add institute filter if specified
-        if institute_id:
-            institute_ref = db.collection('InstituteNames').document(institute_id)
-            base_query = base_query.where("institute", "==", institute_ref)
+        # 1. Find Skillathon name from id
+        skillathon_ref = db.collection('Skillathon').document(skillathon_id)
+        skillathon_doc = skillathon_ref.get()
+        if not skillathon_doc.exists:
+            return JsonResponse({"error": "Skillathon not found"}, status=404)
+        skillathon_name = skillathon_doc.to_dict().get('skillathonName')
+        if not skillathon_name:
+            return JsonResponse({"error": "Skillathon name not found"}, status=404)
 
-        # Add skillathon filter if specified
-        if skillathon_id:
-            base_query = base_query.where("skillathon_id", "==", skillathon_id)
+        # 2. If institution_id is provided, get institution name and user ids
+        institution_user_ids = set()
+        if institution_id:
+            institute_ref = db.collection('InstituteNames').document(institution_id)
+            institute_doc = institute_ref.get()
+            if not institute_doc.exists:
+                return JsonResponse({"error": "Institute not found"}, status=404)
+            institution_name = institute_doc.to_dict().get('instituteName')
+            users_query = db.collection('Users').where('institution', '==', institution_name)
+            user_docs = list(users_query.stream())
+            institution_user_ids = set(doc.id for doc in user_docs)
 
-        # Get all completed exams
-        exam_assignments_ref = base_query.where("status", "==", "Completed")
-        exam_assignments = exam_assignments_ref.stream()
+        # 3. Find all Test docs with this skillathon name
+        test_query = db.collection('Test').where('skillathon', '==', skillathon_name)
+        test_docs = list(test_query.stream())
+        if not test_docs:
+            return JsonResponse({"error": "No tests found for this skillathon"}, status=404)
 
-        # Initialize metrics data
-        metrics = {
-            "total_students": 0,
-            "completed_all_procedures": 0,
-            "procedure_counts": {},
-            "grade_distribution": {
-                "A": 0, "B": 0, "C": 0, "D": 0, "E": 0
-            },
-            "gender_metrics": {
-                "total": {"male": 0, "female": 0, "others": 0},
-                "grade_wise": {
-                    "A": {"male": 0, "female": 0, "others": 0},
-                    "B": {"male": 0, "female": 0, "others": 0},
-                    "C": {"male": 0, "female": 0, "others": 0},
-                    "D": {"male": 0, "female": 0, "others": 0},
-                    "E": {"male": 0, "female": 0, "others": 0}
-                },
-                "procedure_wise": {}
-            },
-            "skill_wise_metrics": {}
-        }
+        # 4. For each Test, get all ProcedureAssignment refs
+        procedure_assignment_refs = []
+        for test_doc in test_docs:
+            test_data = test_doc.to_dict()
+            procedure_assignment_refs.extend(test_data.get('procedureAssignments', []))
 
-        # Track unique students and their procedures
-        student_procedures = {}
-        unique_procedures = set()
-        student_data_cache = {}
-        critical_steps_data = {}
-
-        # Process all exam assignments
-        for exam in exam_assignments:
-            exam_doc = exam.to_dict()
-            student_ref = exam_doc.get('user')
-            procedure_name = exam_doc.get("procedure_name", "Unknown")
-            
-            if not student_ref:
+        # 5. For each ProcedureAssignment, get all ExamAssignment refs
+        exam_assignment_refs = []
+        procedure_to_exam_assignments = {}  # procedure_id -> [exam_assignment_refs]
+        procedure_id_to_name = {}
+        for proc_ref in procedure_assignment_refs:
+            proc_doc = proc_ref.get()
+            if not proc_doc.exists:
                 continue
+            proc_data = proc_doc.to_dict()
+            exam_refs = proc_data.get('examAssignmentArray', [])
+            exam_assignment_refs.extend(exam_refs)
+            procedure_to_exam_assignments[proc_ref.id] = exam_refs
+            # Map procedure_id to procedure_name
+            try:
+                procedure_id_to_name[proc_ref.id] = proc_data.get('procedure').get().to_dict().get('procedureName', proc_ref.id)
+            except Exception:
+                procedure_id_to_name[proc_ref.id] = proc_ref.id
 
-            # Initialize skill-wise metrics if not exists
-            if procedure_name not in metrics["skill_wise_metrics"]:
-                metrics["skill_wise_metrics"][procedure_name] = {
+        # 6. Build sets for metrics, filtering by institution if provided
+        all_students = set()
+        all_procedures = set(procedure_to_exam_assignments.keys())
+        procedure_completed_students = {pid: set() for pid in all_procedures}
+        student_completed_procedures = {}  # student_id -> set of procedure_ids
+        procedure_counts = {procedure_id_to_name.get(pid, pid): 0 for pid in all_procedures}
+        grade_distribution = {"A": 0, "B": 0, "C": 0, "D": 0, "E": 0}
+        gender_metrics = {
+            "total": {"male": 0, "female": 0, "others": 0},
+            "grade_wise": {
+                "A": {"male": 0, "female": 0, "others": 0},
+                "B": {"male": 0, "female": 0, "others": 0},
+                "C": {"male": 0, "female": 0, "others": 0},
+                "D": {"male": 0, "female": 0, "others": 0},
+                "E": {"male": 0, "female": 0, "others": 0}
+            },
+            "procedure_wise": {}
+        }
+        skill_wise_metrics = {}
+        student_data_cache = {}
+
+        for proc_id, exam_refs in procedure_to_exam_assignments.items():
+            proc_name = procedure_id_to_name.get(proc_id, proc_id)
+            completed_exam_count = 0
+            for exam_ref in exam_refs:
+                exam_doc = exam_ref.get()
+                if not exam_doc.exists:
+                    continue
+                exam_data = exam_doc.to_dict()
+                if exam_data.get('status') != 'Completed':
+                    continue
+                if institution_id:
+                    user_ref = exam_data.get('user')
+                    if not user_ref:
+                        continue
+                    student_id = user_ref.id
+                    if student_id not in institution_user_ids:
+                        continue
+                completed_exam_count += 1
+            procedure_counts[proc_name] += completed_exam_count
+            if proc_name not in skill_wise_metrics:
+                skill_wise_metrics[proc_name] = {
                     "grade_distribution": {"A": 0, "B": 0, "C": 0, "D": 0, "E": 0},
                     "critical_steps": {
                         "missed_one": 0,
                         "missed_multiple": 0,
                         "completed_all": 0
                     },
-                    "common_missed_steps": {}
+                    "common_missed_steps": {}  # Will now be all missed critical steps and their counts
                 }
-
-            # Calculate grade for this exam
-            total_score = exam_doc.get("marks", 0)
-            max_marks = sum(
-                question.get('right_marks_for_question', 0) 
-                for section in exam_doc.get('examMetaData', []) 
-                for question in section.get("section_questions", [])
-            )
-            
-            if max_marks > 0:
-                percentage = round((total_score / max_marks) * 100, 2)
-                grade = get_grade_letter(percentage)
-                metrics["skill_wise_metrics"][procedure_name]["grade_distribution"][grade] += 1
-
-            # Process critical steps
-            critical_missed = 0
-            missed_steps = []
-            exam_metadata = exam_doc.get("examMetaData", [])
-            
-            for section in exam_metadata:
-                for question in section.get("section_questions", []):
-                    if question.get("critical") and question.get("answer_scored", 0) == 0:
-                        critical_missed += 1
-                        missed_steps.append(question.get("question"))
-
-            # Update critical steps metrics
-            if critical_missed == 0:
-                metrics["skill_wise_metrics"][procedure_name]["critical_steps"]["completed_all"] += 1
-            elif critical_missed == 1:
-                metrics["skill_wise_metrics"][procedure_name]["critical_steps"]["missed_one"] += 1
-            else:
-                metrics["skill_wise_metrics"][procedure_name]["critical_steps"]["missed_multiple"] += 1
-
-            # Track commonly missed steps
-            for step in missed_steps:
-                if step not in metrics["skill_wise_metrics"][procedure_name]["common_missed_steps"]:
-                    metrics["skill_wise_metrics"][procedure_name]["common_missed_steps"][step] = 0
-                metrics["skill_wise_metrics"][procedure_name]["common_missed_steps"][step] += 1
-
-            # Continue with existing metrics collection...
-            student_id = student_ref.id
-            
-            if student_id not in student_data_cache:
-                student_doc = student_ref.get()
-                student_data = student_doc.to_dict()
-                student_data_cache[student_id] = {
-                    'gender': student_data.get('gender', 'others').lower()
-                }
-            
-            student_gender = student_data_cache[student_id]['gender']
-            
-            # Track unique procedures
-            unique_procedures.add(procedure_name)
-            
-            if student_id not in student_procedures:
-                student_procedures[student_id] = {
-                    'procedures': set(),
-                    'gender': student_gender
-                }
-            student_procedures[student_id]['procedures'].add(procedure_name)
-
-            # Update procedure counts
-            if procedure_name not in metrics["procedure_counts"]:
-                metrics["procedure_counts"][procedure_name] = 0
-            metrics["procedure_counts"][procedure_name] += 1
-
-            # Update gender metrics
-            metrics["gender_metrics"]["total"][student_gender] += 1
-            metrics["gender_metrics"]["grade_wise"][grade][student_gender] += 1
-
-        # Calculate total unique students and completed all procedures
-        metrics["total_students"] = len(student_procedures)
-        total_procedures = len(unique_procedures)
-        metrics["completed_all_procedures"] = sum(
-            1 for info in student_procedures.values()
-            if len(info['procedures']) == total_procedures
+            for exam_ref in exam_refs:
+                exam_doc = exam_ref.get()
+                if not exam_doc.exists:
+                    continue
+                exam_data = exam_doc.to_dict()
+                user_ref = exam_data.get('user')
+                if not user_ref:
+                    continue
+                student_id = user_ref.id
+                # If institution filter is set, skip users not in the institution
+                if institution_id and student_id not in institution_user_ids:
+                    continue
+                all_students.add(student_id)
+                # Gender info
+                if student_id not in student_data_cache:
+                    student_doc = user_ref.get()
+                    student_data = student_doc.to_dict() if student_doc.exists else {}
+                    student_data_cache[student_id] = {
+                        'gender': student_data.get('learner_gender', 'others').lower()
+                    }
+                student_gender = student_data_cache[student_id]['gender']
+                # Only count completed for these metrics
+                if exam_data.get('status') == 'Completed':
+                    procedure_completed_students[proc_id].add(student_id)
+                    if student_id not in student_completed_procedures:
+                        student_completed_procedures[student_id] = set()
+                    student_completed_procedures[student_id].add(proc_id)
+                    # Grade calculation
+                    total_score = exam_data.get("marks", 0)
+                    max_marks = sum(
+                        question.get('right_marks_for_question', 0)
+                        for section in exam_data.get('examMetaData', [])
+                        for question in section.get("section_questions", [])
+                    )
+                    if max_marks > 0:
+                        percentage = round((total_score / max_marks) * 100, 2)
+                        grade = get_grade_letter(percentage)
+                    else:
+                        grade = "E"
+                    grade_distribution[grade] += 1
+                    skill_wise_metrics[proc_name]["grade_distribution"][grade] += 1
+                    gender_metrics["total"][student_gender] += 1
+                    gender_metrics["grade_wise"][grade][student_gender] += 1
+                    # Critical steps
+                    critical_missed = 0
+                    missed_steps = []
+                    exam_metadata = exam_data.get("examMetaData", [])
+                    for section in exam_metadata:
+                        for question in section.get("section_questions", []):
+                            if question.get("critical") and question.get("answer_scored", 0) == 0:
+                                critical_missed += 1
+                                missed_steps.append(question.get("question"))
+                    if critical_missed == 0:
+                        skill_wise_metrics[proc_name]["critical_steps"]["completed_all"] += 1
+                    elif critical_missed == 1:
+                        skill_wise_metrics[proc_name]["critical_steps"]["missed_one"] += 1
+                    else:
+                        skill_wise_metrics[proc_name]["critical_steps"]["missed_multiple"] += 1
+                    for step in missed_steps:
+                        if step not in skill_wise_metrics[proc_name]["common_missed_steps"]:
+                            skill_wise_metrics[proc_name]["common_missed_steps"][step] = 0
+                        skill_wise_metrics[proc_name]["common_missed_steps"][step] += 1
+        # Finalize all missed critical steps for each procedure
+        for proc_name in skill_wise_metrics:
+            common_steps = skill_wise_metrics[proc_name]["common_missed_steps"]
+            # No longer just the most common, return all missed steps and their counts
+            if not common_steps:
+                skill_wise_metrics[proc_name]["common_missed_steps"] = {}
+        # Metrics calculation
+        total_students = len(all_students)
+        number_of_procedures = len(all_procedures)
+        completed_all_procedures = sum(
+            1 for s, completed in student_completed_procedures.items()
+            if len(completed) == number_of_procedures
         )
-
-        # Process common missed steps to get only the most common one for each procedure
-        for procedure in metrics["skill_wise_metrics"]:
-            common_steps = metrics["skill_wise_metrics"][procedure]["common_missed_steps"]
-            if common_steps:
-                most_common_step = max(common_steps.items(), key=lambda x: x[1])
-                metrics["skill_wise_metrics"][procedure]["common_missed_steps"] = {
-                    "step": most_common_step[0],
-                    "count": most_common_step[1]
-                }
-            else:
-                metrics["skill_wise_metrics"][procedure]["common_missed_steps"] = {
-                    "step": "None",
-                    "count": 0
-                }
-
+        procedure_completion_counts = {
+            procedure_id_to_name.get(pid, pid): len(students) for pid, students in procedure_completed_students.items()
+        }
+        # Build response
+        metrics = {
+            "total_students": total_students,
+            "number_of_procedures": number_of_procedures,
+            "completed_all_procedures": completed_all_procedures,
+            "procedure_completion_counts": procedure_completion_counts,
+            "procedure_counts": procedure_counts,
+            "grade_distribution": grade_distribution,
+            "gender_metrics": gender_metrics,
+            "skill_wise_metrics": skill_wise_metrics
+        }
         return JsonResponse(metrics)
-
     except Exception as e:
-        print(str(e))
+        print(f"Error in fetch_student_metrics: {str(e)}")
         return JsonResponse({"error": str(e)}, status=500)
+
+
 
 def get_grade_letter(percentage):
     if percentage >= 90:
@@ -1639,7 +1748,7 @@ def login_page(request):
     if request.user.is_authenticated:
         print(request.user.user_role)
         if request.user.user_role == 'ebek_admin' or request.user.user_role == 'super_admin':
-            return redirect('learner_list')
+            return redirect('exam_reports_page')
         else:
             return redirect('<html>Welcome to EBEK</html>')
     return render(request, 'assessments/login.html')
@@ -1652,7 +1761,7 @@ def login_view(request):
     if user is not None:
         login(request, user)
             # Update last login in Firebase
-        return redirect('learner_list')
+        return redirect('exam_reports_page')
     else:
         messages.error(request, 'User not found')
         return redirect('login_page')
@@ -1746,7 +1855,7 @@ def reset_password(request, token):
 
         # If all validations pass, set new password
         user = reset_token.user
-        user.password = make_password(password1)
+        user.set_password(password1)
         user.save()
         reset_token.is_used = True
         reset_token.save()
@@ -1762,122 +1871,169 @@ def onboarding_dashboard(request):
 @csrf_exempt
 def fetch_student_metrics(request):
     try:
-        institute_id = request.GET.get("institute_id")
+        skillathon_id = request.GET.get("skillathon_id")
+        institution_id = request.GET.get("institute_id")
+        if not skillathon_id:
+            return JsonResponse({"error": "skillathon_id is required"}, status=400)
 
-        # Create base query
-        base_query = db.collection('ExamAssignment')
-        base_query = base_query.where("status", "==", "Completed")
+        # 1. Find Skillathon name from id
+        skillathon_ref = db.collection('Skillathon').document(skillathon_id)
+        skillathon_doc = skillathon_ref.get()
+        if not skillathon_doc.exists:
+            return JsonResponse({"error": "Skillathon not found"}, status=404)
+        skillathon_name = skillathon_doc.to_dict().get('skillathonName')
+        if not skillathon_name:
+            return JsonResponse({"error": "Skillathon name not found"}, status=404)
 
-        # Add institute filter only if institute_id is provided and not empty
-        if institute_id and institute_id.strip():
-            institute_ref = db.collection('InstituteNames').document(institute_id)
-            base_query = base_query.where("institute", "==", institute_ref)
-
-        # Get all exam assignments
-        exam_assignments = base_query.stream()
-
-        # Initialize response data
-        response_data = {
-            "highest_score": 0,
-            "highest_score_student": "-",
-            "highest_score_institute": "-",
-            "lowest_score": 100,
-            "lowest_score_student": "-",
-            "lowest_score_institute": "-",
-            "procedures": set(),
-            "students": []
-        }
-
-        # Track student data to avoid duplicates
-        student_data = {}
-
-        for exam in exam_assignments:
-            exam_doc = exam.to_dict()
-            student_ref = exam_doc.get('user')
-            institute_ref = exam_doc.get('institute')
-            procedure_name = exam_doc.get("procedure_name", "Unknown")
-
-            if not student_ref or not institute_ref:
-                continue
-
-            # Get student info
-            student_doc = student_ref.get()
-            student_data_dict = student_doc.to_dict()
-            student_name = student_data_dict.get('username', 'Unknown')
-            student_id = student_doc.id
-
-            # Get institute info
+        # 2. If institution_id is provided, get institution name and user ids
+        institution_user_ids = set()
+        if institution_id:
+            institute_ref = db.collection('InstituteNames').document(institution_id)
             institute_doc = institute_ref.get()
-            institute_name = institute_doc.to_dict().get('instituteName', 'Unknown') if institute_doc.exists else 'Unknown'
+            if not institute_doc.exists:
+                return JsonResponse({"error": "Institute not found"}, status=404)
+            institution_name = institute_doc.to_dict().get('instituteName')
+            users_query = db.collection('Users').where('institution', '==', institution_name)
+            user_docs = list(users_query.stream())
+            institution_user_ids = set(doc.id for doc in user_docs)
 
-            # Calculate score
-            total_score = exam_doc.get("marks", 0)
-            max_marks = sum(
-                question.get('right_marks_for_question', 0) 
-                for section in exam_doc.get('examMetaData', []) 
-                for question in section.get("section_questions", [])
-            )
-            percentage = round((total_score / max_marks) * 100, 2) if max_marks else 0
-            grade = get_grade_letter(percentage)
+        # 3. Find all Test docs with this skillathon name
+        test_query = db.collection('Test').where('skillathon', '==', skillathon_name)
+        test_docs = list(test_query.stream())
+        if not test_docs:
+            return JsonResponse({"error": "No tests found for this skillathon"}, status=404)
 
-            # Track procedures
-            response_data["procedures"].add(procedure_name)
+        # 4. For each Test, get all ProcedureAssignment refs
+        procedure_assignment_refs = []
+        for test_doc in test_docs:
+            test_data = test_doc.to_dict()
+            procedure_assignment_refs.extend(test_data.get('procedureAssignments', []))
 
-            # Update highest/lowest scores
-            if percentage > response_data["highest_score"]:
-                response_data["highest_score"] = percentage
-                response_data["highest_score_student"] = student_name
-                response_data["highest_score_institute"] = institute_name
+        # 5. For each ProcedureAssignment, get all ExamAssignment refs
+        exam_assignment_refs = []
+        procedure_to_exam_assignments = {}  # procedure_id -> [exam_assignment_refs]
+        procedure_id_to_name = {}
+        for proc_ref in procedure_assignment_refs:
+            proc_doc = proc_ref.get()
+            if not proc_doc.exists:
+                continue
+            proc_data = proc_doc.to_dict()
+            exam_refs = proc_data.get('examAssignmentArray', [])
+            exam_assignment_refs.extend(exam_refs)
+            procedure_to_exam_assignments[proc_ref.id] = exam_refs
+            # Map procedure_id to procedure_name
+            try:
+                procedure_id_to_name[proc_ref.id] = proc_data.get('procedure').get().to_dict().get('procedureName', proc_ref.id)
+            except Exception:
+                procedure_id_to_name[proc_ref.id] = proc_ref.id
 
-            if percentage < response_data["lowest_score"]:
-                response_data["lowest_score"] = percentage
-                response_data["lowest_score_student"] = student_name
-                response_data["lowest_score_institute"] = institute_name
-
-            # Track student data
-            if student_id not in student_data:
-                student_data[student_id] = {
-                    "name": student_name,
-                    "institute": institute_name,
-                    "grades": {}
+        # Build student-wise data
+        student_map = {}  # student_id -> {name, institute, grades, missed_critical_steps, exam_data}
+        all_procedures = [procedure_id_to_name[pid] for pid in procedure_to_exam_assignments.keys()]
+        for proc_id, exam_refs in procedure_to_exam_assignments.items():
+            proc_name = procedure_id_to_name.get(proc_id, proc_id)
+            for exam_ref in exam_refs:
+                exam_doc = exam_ref.get()
+                if not exam_doc.exists:
+                    continue
+                exam_data = exam_doc.to_dict()
+                if exam_data.get('status') != 'Completed':
+                    continue
+                user_ref = exam_data.get('user')
+                if not user_ref:
+                    continue
+                student_id = user_ref.id
+                if institution_id and student_id not in institution_user_ids:
+                    continue
+                # Get student info
+                if student_id not in student_map:
+                    student_doc = user_ref.get()
+                    student_data = student_doc.to_dict() if student_doc.exists else {}
+                    student_map[student_id] = {
+                        'name': student_data.get('username', 'Unknown'),
+                        'institute': student_data.get('institution', student_data.get('institute', 'Unknown')),
+                        'grades': {},
+                        'missed_critical_steps': {},
+                        'exam_data': {}
+                    }
+                # Grade calculation
+                total_score = exam_data.get("marks", 0)
+                max_marks = sum(
+                    question.get('right_marks_for_question', 0)
+                    for section in exam_data.get('examMetaData', [])
+                    for question in section.get("section_questions", [])
+                )
+                percentage = round((total_score / max_marks) * 100, 2) if max_marks else 0
+                grade = get_grade_letter(percentage)
+                # Missed critical steps
+                missed_critical = []
+                steps = []
+                critical_missed = 0
+                exam_metadata = exam_data.get("examMetaData", [])
+                for section in exam_metadata:
+                    for question in section.get("section_questions", []):
+                        step_info = {
+                            'description': question.get('question', ''),
+                            'completed': question.get('answer_scored', 0) > 0,
+                            'critical': question.get('critical', False)
+                        }
+                        steps.append(step_info)
+                        if question.get("critical") and question.get("answer_scored", 0) == 0:
+                            missed_critical.append(question.get('question'))
+                            critical_missed += 1
+                # Store in student map
+                student_map[student_id]['grades'][proc_name] = {
+                    'grade': grade,
+                    'percentage': percentage
                 }
-            
-            # Add grade for this procedure
-            student_data[student_id]["grades"][procedure_name] = {
-                "grade": grade,
-                "percentage": percentage
-            }
+                student_map[student_id]['missed_critical_steps'][proc_name] = missed_critical
+                student_map[student_id]['exam_data'][proc_name] = {
+                    'steps': steps,
+                    'critical_missed': critical_missed
+                }
 
-        # Convert procedures set to sorted list
-        response_data["procedures"] = sorted(list(response_data["procedures"]))
-        
-        # Add student data to response
-        response_data["students"] = list(student_data.values())
+        # Prepare students list
+        students = []
+        for student in student_map.values():
+            students.append(student)
 
-        return JsonResponse(response_data)
+        # Highest/lowest scorecards
+        highest_score = -1
+        highest_score_student = "-"
+        highest_score_institute = "-"
+        lowest_score = 101
+        lowest_score_student = "-"
+        lowest_score_institute = "-"
+        for student in students:
+            for proc in all_procedures:
+                grade_info = student['grades'].get(proc)
+                if grade_info:
+                    pct = grade_info['percentage']
+                    if pct > highest_score:
+                        highest_score = pct
+                        highest_score_student = student['name']
+                        highest_score_institute = student['institute']
+                    if pct < lowest_score:
+                        lowest_score = pct
+                        lowest_score_student = student['name']
+                        lowest_score_institute = student['institute']
 
+        # Response
+        return JsonResponse({
+            'students': students,
+            'procedures': all_procedures,
+            'highest_score': highest_score if highest_score != -1 else 0,
+            'highest_score_student': highest_score_student,
+            'highest_score_institute': highest_score_institute,
+            'lowest_score': lowest_score if lowest_score != 101 else 0,
+            'lowest_score_student': lowest_score_student,
+            'lowest_score_institute': lowest_score_institute
+        })
     except Exception as e:
         print(f"Error in fetch_student_metrics: {str(e)}")
         return JsonResponse({"error": str(e)}, status=500)
 
-@csrf_exempt
-def fetch_skillathons(request):
-    try:
-        # Get all skillathon events ordered by date
-        events = SkillathonEvent.objects.all().order_by('-date')
-        
-        # Convert to list of dictionaries
-        skillathons = [
-            {
-                'id': event.id,
-                'name': event.name,
-                'date': event.date.strftime('%Y-%m-%d'),
-                'status': event.status
-            }
-            for event in events
-        ]
-        
-        return JsonResponse({'skillathons': skillathons})
+
 
 def fetch_skillathons(request):
     """Fetch all skillathons from the Skillathon collection."""
@@ -1886,11 +2042,47 @@ def fetch_skillathons(request):
         skillathons = []
         for doc in skillathons_ref.stream():
             skillathon_data = doc.to_dict()
+            # Parse the full ISO 8601 timestamp
+            created_at = datetime.fromisoformat(skillathon_data.get('created_at').replace('Z', '+00:00'))
             skillathons.append({
                 'id': doc.id,
-                'name': skillathon_data.get('skillathonName', 'Unnamed Skillathon')
+                'name': skillathon_data.get('skillathonName', 'Unnamed Skillathon'),
+                'date': created_at.strftime('%d-%m-%Y')
             })
 
         return JsonResponse({'skillathons': skillathons}, status=200)
     except Exception as e:
+        print(f"Error in fetch_skillathons: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
+
+def exam_to_score_info(exam_doc):
+    exam_data = exam_doc.to_dict()
+    user_ref = exam_data.get('user')
+    student_name = "-"
+    institute_name = "-"
+    if user_ref:
+        student_doc = user_ref.get()
+        if student_doc.exists:
+            student_data = student_doc.to_dict()
+            student_name = student_data.get('name', '-')
+            # Get institute from user document
+            user_institute_ref = student_data.get('institute')
+            if user_institute_ref and hasattr(user_institute_ref, 'get'):
+                user_inst_doc = user_institute_ref.get()
+                if user_inst_doc.exists:
+                    institute_name = user_inst_doc.to_dict().get('instituteName', '-')
+            elif isinstance(student_data.get('institution'), str):
+                institute_name = student_data.get('institution')
+    total_score = exam_data.get("marks", 0)
+    max_marks = sum(
+        question.get('right_marks_for_question', 0)
+        for section in exam_data.get('examMetaData', [])
+        for question in section.get("section_questions", [])
+    )
+    percentage = round((total_score / max_marks) * 100, 2) if max_marks else 0
+    return {
+        "student_name": student_name,
+        "institute_name": institute_name,
+        "percentage": percentage
+    }
+

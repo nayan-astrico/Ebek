@@ -561,6 +561,12 @@
         
 
         {% if request.user.user_role == 'ebek_admin' or request.user.user_role == 'super_admin' %}
+        <div class="nav-item">
+            <a href="{% url 'exam_reports_page' %}" class="nav-link" title="View Assessment Reports">
+        <i class="fas fa-chart-bar"></i>
+                <span>Reports</span>
+            </a>
+        </div>
             <div class="nav-item">
                 <a href="#onboardingSubmenu" class="nav-link" data-toggle="collapse" aria-expanded="false" title="Onboarding and Management">
             <i class="fas fa-university"></i>
@@ -606,12 +612,17 @@
                             <span>Assignments</span>
                     </a>
             </div>
+            {% if request.user.user_role == 'super_admin' %}
+            
                 <div class="nav-item">
                     <a href="{% url 'create_assessment' %}" class="nav-link" title="Create New Assessment">
                 <i class="fas fa-file-medical"></i>
                         <span>Create Assessment</span>
                 </a>
             </div>
+            {% endif %}
+
+            
         {% endif %}
         
         
@@ -650,7 +661,7 @@
                     <div class="sidebar-user-initial mr-2">
                         <span class="user-initial-circle">{{ request.user.email|first|upper }}</span>
                     </div>
-                    <span class="sidebar-user-email">{{ request.user.email }}</span>
+                    <span class="sidebar-user-email">{{ request.user.full_name }}</span>
                 </div>
             </div>
             <div class="nav-item">
