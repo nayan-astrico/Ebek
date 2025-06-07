@@ -30,7 +30,7 @@
                 <select id="instituteFilter" class="select-filter" disabled onchange="onInstituteChange()">
                     <option value="">All Institutes</option>
                 </select>
-                <button id="goButton" class="search-button" onclick="fetchMetrics()" disabled>Go</button>
+                <button id="goButton" class="search-button" onclick="fetchMetricsAuto()" disabled>Go</button>
             </div>
         </div>
 
@@ -1854,86 +1854,6 @@
         // fetchExamReports(true);  // Reset and fetch new reports
     }
 
-    // function fetchExamReports(reset = false) {
-    //     if (reset) {
-    //         offset = 0;
-    //         hasMoreData = true;
-    //         loadedExamIds.clear();
-    //         document.getElementById("examReportsBody").innerHTML = "";
-    //     }
-        
-    //     if (!hasMoreData) return;
-
-    //     showLoading();
-    //     hideEmptyState();
-
-    //     const url = new URL('/fetch-exam-reports/', window.location.origin);
-    //     url.searchParams.append('offset', offset);
-    //     url.searchParams.append('limit', limit);
-    //     if (selectedInstitute) {
-    //         url.searchParams.append('institute_id', selectedInstitute);
-    //     }
-    //     if (selectedSkillathon) {
-    //         url.searchParams.append('skillathon_id', selectedSkillathon);
-    //     }
-
-    //     fetch(url)
-    //         .then(response => response.json())
-    //         .then(data => {
-    //             hideLoading();
-                
-    //             if (!data.exam_reports || !data.exam_reports.length) {
-    //                 hasMoreData = false;
-    //                 document.getElementById("loadMoreBtn").style.display = "none";
-    //                 if (offset === 0) {
-    //                     showEmptyState();
-    //                 }
-    //                 return;
-    //             }
-                
-    //             // Update table with the current page of data
-    //             let tableBody = document.getElementById("examReportsBody");
-    //             data.exam_reports.forEach(report => {
-    //                 if (loadedExamIds.has(report.exam_id)) return;
-    //                 loadedExamIds.add(report.exam_id);
-                    
-    //                 const gradeInfo = calculateGrade(report.percentage);
-    //                 let row = `
-    //                     <tr>
-    //                     <td>${report.student_name}</td>
-    //                     <td>${report.institute_name}</td>
-    //                         <td class="text-center">${report.total_score}</td>
-    //                         <td class="text-center ${gradeInfo.class}">${gradeInfo.grade}</td>
-    //                         <td class="text-center ${gradeInfo.class}">${report.percentage}%</td>
-    //                         <td class="text-center">${report.critical_missed}</td>
-    //                     <td>${report.procedure_name}</td>
-    //                         <td class="text-center">
-    //                             <button class="action-btn" onclick="toggleDetails('${report.exam_id}')">
-    //                             <i class="fas fa-chevron-down" id="icon-${report.exam_id}"></i>
-    //                         </button>
-    //                     </td>
-    //                 </tr>
-    //                     <tr id="details-${report.exam_id}" class="details-row" style="display: none;">
-    //                         <td colspan="8">
-    //                             <div class="details-content">
-    //                                 ${generateFeedback(report.critical_missed, report.critical_points)}
-    //                             </div>
-    //                     </td>
-    //                 </tr>`;
-                    
-    //                 tableBody.insertAdjacentHTML('beforeend', row);
-    //             });
-
-    //             offset += limit;
-    //             document.getElementById("loadMoreBtn").style.display = hasMoreData ? "block" : "none";
-    //         })
-    //         .catch(error => {
-    //             console.error("Error fetching reports:", error);
-    //             hideLoading();
-    //             showEmptyState();
-    //         });
-    // }
-
     function calculateGrade(percentage) {
         if (percentage >= 90) return { grade: 'A', class: 'grade-a' };
         if (percentage >= 80) return { grade: 'B', class: 'grade-b' };
@@ -2470,45 +2390,35 @@
     }
 
     function fetchMetrics() {
-        if (!selectedSkillathon) return;
-        const url = new URL('/fetch-exam-metrics/', window.location.origin);
-        url.searchParams.append('skillathon_id', selectedSkillathon);
-        if (selectedInstitute) {
-            url.searchParams.append('institute_id', selectedInstitute);
-        }
+        const skillathonName = document.getElementById('skillathonFilter').value;
+        const instituteName = document.getElementById('instituteFilter').value;
+        if (!skillathonName) return;
+        let url = `/fetch-exam-metrics/?skillathon_name=${encodeURIComponent(skillathonName)}`;
+        if (instituteName) url += `&institution_name=${encodeURIComponent(instituteName)}`;
         fetch(url)
             .then(response => response.json())
             .then(data => {
-                if (!data.error) {
-                    updateMetricsDisplay(data);
-                }
-            })
-            .catch(error => {
-                console.error("Error fetching metrics:", error);
+                if (!data.error) updateMetricsDisplay(data);
             });
-        // Start interval if not already started
-        if (!fetchMetricsInterval) {
-            fetchMetricsInterval = setInterval(() => {
-        if (selectedSkillathon) {
-                    fetchMetrics();
-                }
-            }, 5000);
-        }
     }
 
-    function fetchStudentMetrics() {
-        const skillathonId = document.getElementById('studentSkillathonFilter').value;
-        const instituteId = document.getElementById('studentInstituteFilter').value;
+    
 
-        if (!skillathonId) {
+    function fetchStudentMetrics() {
+        const skillathonName = document.getElementById('studentSkillathonFilter').value;
+        const instituteName = document.getElementById('studentInstituteFilter').value;
+
+        if (!skillathonName) {
             return;
         }
 
-        const params = new URLSearchParams();
-        if (skillathonId) params.append('skillathon_id', skillathonId);
-        if (instituteId) params.append('institute_id', instituteId);
+        let url = `/fetch-student-metrics/?skillathon_name=${encodeURIComponent(skillathonName)}`;
 
-        fetch(`/fetch-student-metrics/?${params}`)
+        if (instituteName) {
+            url += `&institution_name=${encodeURIComponent(instituteName)}`;
+        }
+
+        fetch(url)
             .then(response => response.json())
             .then(data => {
                 const studentMetrics = document.getElementById('studentMetrics');
@@ -2598,7 +2508,7 @@
                         studentInstituteFilter.innerHTML = '<option value="">All Institutes</option>';
                         data.institutes.forEach(institute => {
                             const option = document.createElement('option');
-                            option.value = institute.id;
+                            option.value = institute.instituteName;
                             option.textContent = institute.instituteName;
                             studentInstituteFilter.appendChild(option);
                         });
@@ -2999,7 +2909,7 @@
                     skillathonFilter.innerHTML = '<option value="">Select Skillathon</option>';
                     data.skillathons.forEach(skillathon => {
                         const option = document.createElement('option');
-                        option.value = skillathon.id;
+                        option.value = skillathon.name;
                         option.textContent = `${skillathon.name} (${skillathon.date})`;
                         skillathonFilter.appendChild(option);
                     });
@@ -3011,7 +2921,7 @@
                     studentSkillathonFilter.innerHTML = '<option value="">Select Skillathon</option>';
                     data.skillathons.forEach(skillathon => {
                         const option = document.createElement('option');
-                        option.value = skillathon.id;
+                        option.value = skillathon.name;
                         option.textContent = `${skillathon.name} (${skillathon.date})`;
                         studentSkillathonFilter.appendChild(option);
                     });
@@ -3031,7 +2941,7 @@
                     instituteFilter.innerHTML = '<option value="">All Institutes</option>';
                     data.institutes.forEach(institute => {
                         const option = document.createElement('option');
-                        option.value = institute.id;
+                        option.value = institute.instituteName;
                         option.textContent = institute.instituteName;
                         instituteFilter.appendChild(option);
                     });
@@ -3043,7 +2953,7 @@
                     studentInstituteFilter.innerHTML = '<option value="">All Institutes</option>';
                     data.institutes.forEach(institute => {
                         const option = document.createElement('option');
-                        option.value = institute.id;
+                        option.value = institute.instituteName;
                         option.textContent = institute.instituteName;
                         studentInstituteFilter.appendChild(option);
                     });
@@ -3084,7 +2994,16 @@
         if (!fetchStudentMetricsInterval) {
             fetchStudentMetricsInterval = setInterval(() => {
                 fetchStudentMetrics();
-            }, 3000); // 5 minutes
+            }, 10000); // 10 seconds
+        }
+    }
+
+    function fetchMetricsAuto() {
+        fetchMetrics();
+        if (!fetchMetricsInterval) {
+            fetchMetricsInterval = setInterval(() => {
+                fetchMetrics();
+            }, 10000); // 10 seconds
         }
     }
 

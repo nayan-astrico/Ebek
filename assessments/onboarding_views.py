@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Q
-from .models import Group, Institution, Hospital, Learner, Assessor, SkillathonEvent
+from .models import Group, Institution, Hospital, Learner, Assessor, SkillathonEvent, EbekUser
 from .onboarding_forms import (
     GroupForm, InstitutionForm, HospitalForm, LearnerForm,
     AssessorForm, SkillathonEventForm, BulkLearnerUploadForm
@@ -23,10 +23,12 @@ from .onboarding_forms import LearnerForm
 from .models import Learner, Institution, Hospital, SkillathonEvent
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
-from .firebase_sync import sync_user_to_firestore, sync_user_to_firebase_auth, batch_sync_users_to_firestore, batch_sync_users_to_firebase_auth
+from .firebase_sync import sync_user_to_firestore, sync_user_to_firebase_auth, batch_sync_users_to_firestore, batch_sync_users_to_firebase_auth, create_test_and_exam_assignments
 from django.db.models.signals import post_save
 from django.dispatch import Signal
 from firebase_admin import firestore
+import traceback
+from .firebase_sync import DisableSignals
 
 
 # Group Views
@@ -769,7 +771,7 @@ def learner_bulk_upload(request):
             ]
 
             # Disable the post_save signal during bulk creation
-            with DisableSignals(post_save):
+            with DisableSignals((post_save, Learner), (post_save, EbekUser)):
                 for idx, row in non_empty_rows:
                     row_data = dict(zip(headers, row))
                     print(row_data)
@@ -804,9 +806,6 @@ def learner_bulk_upload(request):
                                 
                                 if form_field == 'skillathon_event' and value:
                                     try:
-                                        print(value)
-                                        print("HEREEEEEEEEEE")
-                                        print(SkillathonEvent.objects.filter(name=value.strip()))
                                         form_data['skillathon_event'] = SkillathonEvent.objects.get(name=value.strip()).id
                                     except SkillathonEvent.DoesNotExist:
                                         form_data['skillathon_event'] = None
@@ -828,9 +827,9 @@ def learner_bulk_upload(request):
                     if form.is_valid():
                         # Check if learner already exists
                         existing_learner = Learner.objects.filter(
-                            learner_user__email=form_data['learner_email'],
-                            learner_user__full_name=form_data['learner_name'],
-                            learner_user__phone_number=form_data['learner_phone']
+                            learner_user__email=form.cleaned_data['learner_email'],
+                            learner_user__full_name=form.cleaned_data['learner_name'],
+                            learner_user__phone_number=form.cleaned_data['learner_phone']
                         ).first()
 
                         if existing_learner:
@@ -877,8 +876,6 @@ def learner_bulk_upload(request):
                             learner.save()
                             success_count += 1
                             
-                            # Create test and exam assignments if skillathon is assigned
-                            create_test_and_exam_assignments(learner, learner.skillathon_event)
                     else:
                         error_rows.append({
                             'row': idx,
@@ -889,8 +886,8 @@ def learner_bulk_upload(request):
             if users_to_sync:
                 # Batch sync to Firestore
                 batch_sync_users_to_firestore(users_to_sync)
-                # Batch sync to Firebase Auth
-                # batch_sync_users_to_firebase_auth(users_to_sync)
+            
+
 
             return JsonResponse({
                 'success': True,
@@ -1131,93 +1128,3 @@ def skillathon_delete(request, pk):
         messages.success(request, 'Skillathon event deleted successfully.')
         return redirect('skillathon_list')
     return redirect('skillathon_list')
-
-class DisableSignals:
-    def __init__(self, signal):
-        self.signal = signal
-        self.receivers = []
-
-    def __enter__(self):
-        self.receivers = self.signal.receivers
-        self.signal.receivers = []
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.signal.receivers = self.receivers
-
-def create_test_and_exam_assignments(learner, skillathon_event):
-    """Helper function to create test and exam assignments for a learner with a skillathon event"""
-    print("INSIDE CREATE TEST AND EXAM ASSIGNMENTS")
-    print(learner)
-    print(skillathon_event)
-    if not skillathon_event:
-        return
-
-    # Get Firestore client
-    db = firestore.client()
-    
-    # Check if test already exists for this skillathon
-    skillathon_name = skillathon_event.name
-    test_ref = db.collection('Test').where('skillathon', '==', skillathon_name).limit(1).get()
-    print(test_ref)
-    if not test_ref:
-        return
-    
-    test_doc = test_ref[0]
-    test_data = test_doc.to_dict()
-    procedure_assignments = test_data.get('procedureAssignments', [])
-    print(procedure_assignments)
-    
-    # Get the learner's user document reference
-    learner_user_ref = db.collection('Users').where('emailID', '==', learner.learner_user.email).limit(1).get()
-    if not learner_user_ref:
-        return
-    print(learner_user_ref)
-    
-    learner_user_ref = learner_user_ref[0].reference
-    
-    # For each procedure assignment, create an exam assignment for this learner
-    for proc_assignment_ref in procedure_assignments:
-        proc_assignment = proc_assignment_ref.get()
-        if not proc_assignment.exists:
-            continue
-            
-        proc_data = proc_assignment.to_dict()
-        procedure_ref = proc_data.get('procedure')
-        print("INSIDE PROCEDURE REF")
-        print(procedure_ref)
-        if not procedure_ref:
-            continue
-            
-        procedure = procedure_ref.get()
-        if not procedure.exists:
-            continue
-            
-        procedure_data = procedure.to_dict()
-        
-        # Check if exam assignment already exists for this user and procedure
-        existing_exam_assignments = proc_data.get('examAssignmentArray', [])
-        for existing_ref in existing_exam_assignments:
-            existing_exam = existing_ref.get()
-            if existing_exam.exists:
-                existing_data = existing_exam.to_dict()
-                if existing_data.get('user') == learner_user_ref:
-                    # Skip creating new exam assignment if one already exists
-                    continue
-        
-        # Create exam assignment
-        exam_assignment_data = {
-            'user': learner_user_ref,
-            'examMetaData': procedure_data.get('examMetaData', {}),
-            'status': 'Pending',
-            'notes': procedure_data.get('notes', ''),
-            'procedure_name': procedure_data.get('procedureName', ''),
-        }
-        
-        # Add exam assignment to Firestore and get its reference
-        exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
-        
-        # Update procedure assignment with new exam assignment reference
-        proc_assignment_ref.update({
-            'examAssignmentArray': firestore.ArrayUnion([exam_assignment_ref])
-        })

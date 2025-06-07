@@ -200,7 +200,10 @@ class Learner(models.Model):
     skillathon_event = models.ForeignKey('SkillathonEvent', on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
-        return self.learner_user.full_name
+        try:
+            return self.learner_user.full_name
+        except:
+            return "Learner"
     
     def save(self, *args, **kwargs):
         if not self.learner_id:

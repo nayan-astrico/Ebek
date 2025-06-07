@@ -6,22 +6,108 @@ from django.conf import settings
 from .models import EbekUser, Institution, Hospital, Learner, Assessor, SkillathonEvent, Group
 from django.contrib.auth.models import User
 from django.contrib.auth import get_user_model
-
+import traceback
 # Use the default app initialized in settings.py
 db = firestore.client()
 
 class DisableSignals:
-    def __init__(self, signal):
-        self.signal = signal
-        self.receivers = []
+
+    def __init__(self, *signal_sender_pairs):
+        self.signal_sender_pairs = signal_sender_pairs
+        self.receivers = {}
 
     def __enter__(self):
-        self.receivers = self.signal.receivers
-        self.signal.receivers = []
+        for signal, sender in self.signal_sender_pairs:
+            key = (signal, sender)
+            self.receivers[key] = list(signal.receivers)  # Store a copy of the receivers
+            signal.receivers = []
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.signal.receivers = self.receivers
+        print("EXITING DISABLE SIGNALS")
+        print(self.receivers)
+        for signal, sender in self.signal_sender_pairs:
+            key = (signal, sender)
+            if key in self.receivers:
+                signal.receivers = self.receivers[key]  # Restore the original receivers
+
+def create_test_and_exam_assignments(learner, skillathon_event):
+    try:
+        """Helper function to create test and exam assignments for a learner with a skillathon event"""
+        print("INSIDE CREATE TEST AND EXAM ASSIGNMENTS")
+        print(learner)
+        print(skillathon_event)
+        if not skillathon_event:
+            return
+        
+        # Check if test already exists for this skillathon
+        skillathon_name = skillathon_event.name
+        test_ref = db.collection('Test').where('skillathon', '==', skillathon_name).limit(1).get()
+        if not test_ref:
+            print("NO TEST FOUND")
+            return
+        test_doc = test_ref[0]
+        test_data = test_doc.to_dict()
+        procedure_assignments = test_data.get('procedureAssignments', []) or []
+        
+        # Get the learner's user document reference
+        learner_user_ref = db.collection('Users').where('emailID', '==', learner.learner_user.email).limit(1).get()
+        if not learner_user_ref:
+            print("NO LEARNER USER FOUND")
+            return
+        
+        learner_user_ref = learner_user_ref[0].reference
+        
+        # For each procedure assignment, create an exam assignment for this learner
+        for proc_assignment_ref in procedure_assignments:
+            proc_assignment = proc_assignment_ref.get()
+            if not proc_assignment.exists:
+                print("NO PROC ASSIGNMENT FOUND")
+                continue
+                
+            proc_data = proc_assignment.to_dict()
+            procedure_ref = proc_data.get('procedure')
+            
+            if not procedure_ref:
+                print("NO PROCEDURE REF FOUND")
+                continue
+                
+            procedure = procedure_ref.get()
+            if not procedure.exists:
+                print("NO PROCEDURE FOUND")
+                continue
+                
+            procedure_data = procedure.to_dict()
+            
+            # Check if exam assignment already exists for this user and procedure
+            existing_exam_assignments = proc_data.get('examAssignmentArray', [])
+            for existing_ref in existing_exam_assignments:
+                existing_exam = existing_ref.get()
+                if existing_exam.exists:
+                    existing_data = existing_exam.to_dict()
+                    if existing_data.get('user') == learner_user_ref:
+                        # Skip creating new exam assignment if one already exists
+                        continue
+            
+            # Create exam assignment
+            exam_assignment_data = {
+                'user': learner_user_ref,
+                'examMetaData': procedure_data.get('examMetaData', {}),
+                'status': 'Pending',
+                'notes': procedure_data.get('notes', ''),
+                'procedure_name': procedure_data.get('procedureName', ''),
+            }
+            
+            # Add exam assignment to Firestore and get its reference
+            exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
+            
+            # Update procedure assignment with new exam assignment reference
+            proc_assignment_ref.update({
+                'examAssignmentArray': firestore.ArrayUnion([exam_assignment_ref])
+            })
+    except Exception as e:
+        print(e)
+        print(traceback.format_exc())
 
 def sync_user_to_firestore(user):
     user_data = {
@@ -67,6 +153,7 @@ def delete_user_from_firebase_auth(user):
 
 @receiver(post_save, sender=EbekUser)
 def on_user_save(sender, instance, created, **kwargs):
+    print("INSIDE ON USER SAVE")
     # If password is being set, pass it to Firebase Auth
     password = None
     if hasattr(instance, "_raw_password"):
@@ -252,6 +339,10 @@ def on_group_delete(sender, instance, **kwargs):
 # --- Learner Sync ---
 @receiver(post_save, sender=Learner)
 def on_learner_save(sender, instance, created, **kwargs):
+    print("INSIDE ON LEARNER SAVE")
+    print(instance)
+    print(instance.learner_user)
+    print(instance.skillathon_event)
     if instance.learner_user:
         # Find user document by email
         users_ref = db.collection("Users")
@@ -355,20 +446,65 @@ def on_assessor_delete(sender, instance, **kwargs):
             docs[0].reference.delete()
 
 def batch_sync_users_to_firestore(users):
-    batch = db.batch()
-    for user in users:
-        user_data = {
-            "emailID": user.email,
-            "name": user.full_name,
-            "role": user.user_role,
-            "is_active": user.is_active,
-            "date_joined": user.date_joined.isoformat() if user.date_joined else None,
-            "phone_number": user.phone_number,
-            "username": user.email
-        }
-        doc_ref = db.collection("Users").document(str(user.id))
-        batch.set(doc_ref, user_data)
-    batch.commit()
+    try:
+        batch = db.batch()
+        for user in users:
+            user_data = {
+                "emailID": user.email,
+                "name": user.full_name,
+                "role": user.user_role,
+                "is_active": user.is_active,
+                "date_joined": user.date_joined.isoformat() if user.date_joined else None,
+                "phone_number": user.phone_number,
+                "username": user.email
+            }
+            
+            doc_ref = db.collection("Users").document(str(user.id))
+            batch.set(doc_ref, user_data)
+        batch.commit()
+    
+        for user in users:
+            learner = Learner.objects.get(learner_user=user)
+            print("INSIDE CREATE TEST AND EXAM ASSIGNMENTS")
+            print(learner)
+            print(learner.skillathon_event)
+
+            users_ref = db.collection("Users")
+            query = users_ref.where("emailID", "==", learner.learner_user.email).limit(1)
+            docs = query.get()
+        
+            if docs:
+                # Update the first matching document with all learner data
+                user_data = {
+                    "learner_type": learner.learner_type,
+                    "speciality": learner.speciality,
+                    "state": learner.state,
+                    "district": learner.district,
+                    "date_of_birth": learner.date_of_birth.isoformat() if learner.date_of_birth else None,
+                    "certifications": learner.certifications,
+                    "learner_gender": learner.learner_gender,
+                    "skillathon_event": learner.skillathon_event.name if learner.skillathon_event else None
+                }
+                
+                # Add institution/hospital specific data
+                if learner.learner_type == 'student' and learner.college:
+                    user_data["institution"] = learner.college.name
+                    user_data["course"] = learner.course
+                    user_data["stream"] = learner.stream
+                    user_data["year_of_study"] = learner.year_of_study
+                elif learner.learner_type == 'nurse' and learner.hospital:
+                    user_data["hospital"] = learner.hospital.name
+                    user_data["designation"] = learner.designation
+                    user_data["years_of_experience"] = learner.years_of_experience
+                    user_data["educational_qualification"] = learner.educational_qualification
+                    user_data["educational_institution"] = learner.educational_institution
+                
+            docs[0].reference.update(user_data)
+            create_test_and_exam_assignments(learner, learner.skillathon_event)
+        
+    except Exception as e:
+        print(e)
+        print(traceback.format_exc())
 
 def batch_sync_users_to_firebase_auth(users):
     # Firebase Auth doesn't support true batch operations, but we can optimize
