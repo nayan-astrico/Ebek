@@ -479,6 +479,13 @@ def create_procedure_assignment_and_test(request):
                                     'notes': notes,
                                     'procedure_name': procedure_name,
                                 }
+
+                                try:
+                                    user_data = user_snapshot.to_dict()
+                                    exam_assignment_data['institute'] = user_data.get('institution', '')
+                                except (AttributeError, TypeError) as e:
+                                    logger.warning(f"Failed to get institution for user {user_snapshot.id}: {str(e)}")
+                                
                                 exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
                                 exam_assignment_refs.append(exam_assignment_ref)
 
@@ -551,6 +558,13 @@ def create_procedure_assignment_and_test(request):
                                 'notes': notes,
                                 'procedure_name': procedure_name,
                             }
+
+                            try:
+                                user_data = user_snapshot.to_dict()
+                                exam_assignment_data['institute'] = user_data.get('institution', '')
+                            except (AttributeError, TypeError) as e:
+                                print(f"Failed to get institution for user {user_snapshot.id}: {str(e)}")
+                            
                             exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
                             exam_assignment_refs.append(exam_assignment_ref)
 
