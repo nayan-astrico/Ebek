@@ -24,7 +24,7 @@ from .models import Learner, Institution, Hospital, SkillathonEvent
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
 from .firebase_sync import sync_user_to_firestore, sync_user_to_firebase_auth, batch_sync_users_to_firestore, batch_sync_users_to_firebase_auth, create_test_and_exam_assignments, DisableSignals, enable_all_signals
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete
 from django.dispatch import Signal
 from firebase_admin import firestore
 import traceback
