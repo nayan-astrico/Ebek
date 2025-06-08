@@ -12,37 +12,19 @@ db = firestore.client()
 
 def enable_all_signals():
     """
-    Function to enable all Django signals that were previously disabled.
-    This will restore all signal receivers to their original state.
+    Function to enable all Django signals by reloading the signal handlers.
+    This is more reliable than trying to restore the receivers directly.
     """
-    from django.db.models.signals import post_save, post_delete
-    from .models import EbekUser, Institution, Hospital, Learner, Assessor, SkillathonEvent, Group
+    import importlib
+    import sys
     
-    # List of all signal-sender pairs used in the application
-    signal_pairs = [
-        (post_save, EbekUser),
-        (post_delete, EbekUser),
-        (post_save, Institution),
-        (post_delete, Institution),
-        (post_save, Hospital),
-        (post_delete, Hospital),
-        (post_save, Learner),
-        (post_delete, Learner),
-        (post_save, Assessor),
-        (post_delete, Assessor),
-        (post_save, SkillathonEvent),
-        (post_delete, SkillathonEvent),
-        (post_save, Group),
-        (post_delete, Group)
-    ]
+    # Get the current module
+    current_module = sys.modules[__name__]
     
-    # Re-enable all signals
-    for signal, sender in signal_pairs:
-        # Get all receivers for this signal-sender pair
-        receivers = signal.receivers
-        # Re-enable all receivers
-        signal.receivers = receivers
-        print(f"Enabled signals for {sender.__name__}")
+    # Reload the module to re-register all signal handlers
+    importlib.reload(current_module)
+    
+    print("All signals have been re-enabled")
 
 class DisableSignals:
 
