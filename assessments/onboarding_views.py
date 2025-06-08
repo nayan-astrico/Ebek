@@ -28,7 +28,7 @@ from django.db.models.signals import post_save
 from django.dispatch import Signal
 from firebase_admin import firestore
 import traceback
-from .firebase_sync import DisableSignals
+from .firebase_sync import DisableSignals, enable_all_signals
 
 
 # Group Views
@@ -882,6 +882,7 @@ def learner_bulk_upload(request):
                             'errors': form.errors
                         })
 
+            enable_all_signals()
             # Batch sync all users to Firebase
             if users_to_sync:
                 # Batch sync to Firestore
