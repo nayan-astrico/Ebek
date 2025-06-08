@@ -23,12 +23,20 @@ from .onboarding_forms import LearnerForm
 from .models import Learner, Institution, Hospital, SkillathonEvent
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
-from .firebase_sync import sync_user_to_firestore, sync_user_to_firebase_auth, batch_sync_users_to_firestore, batch_sync_users_to_firebase_auth, create_test_and_exam_assignments
+from .firebase_sync import sync_user_to_firestore, sync_user_to_firebase_auth, batch_sync_users_to_firestore, batch_sync_users_to_firebase_auth, create_test_and_exam_assignments, DisableSignals, enable_all_signals
 from django.db.models.signals import post_save
 from django.dispatch import Signal
 from firebase_admin import firestore
 import traceback
-from .firebase_sync import DisableSignals, enable_all_signals
+from .firebase_sync import (
+    on_user_save, on_user_delete,
+    on_institute_save, on_institution_delete,
+    on_hospital_save, on_hospital_delete,
+    on_learner_save, on_learner_delete,
+    on_assessor_save, on_assessor_delete,
+    on_skillathon_save, on_skillathon_delete,
+    on_group_save, on_group_delete,
+)
 
 
 # Group Views
@@ -882,7 +890,7 @@ def learner_bulk_upload(request):
                             'errors': form.errors
                         })
 
-            enable_all_signals()
+            reconnect_all_signals()
             # Batch sync all users to Firebase
             if users_to_sync:
                 # Batch sync to Firestore
@@ -1129,3 +1137,20 @@ def skillathon_delete(request, pk):
         messages.success(request, 'Skillathon event deleted successfully.')
         return redirect('skillathon_list')
     return redirect('skillathon_list')
+
+def reconnect_all_signals():
+    post_save.connect(on_user_save, sender=EbekUser)
+    post_delete.connect(on_user_delete, sender=EbekUser)
+    post_save.connect(on_institute_save, sender=Institution)
+    post_delete.connect(on_institution_delete, sender=Institution)
+    post_save.connect(on_hospital_save, sender=Hospital)
+    post_delete.connect(on_hospital_delete, sender=Hospital)
+    post_save.connect(on_learner_save, sender=Learner)
+    post_delete.connect(on_learner_delete, sender=Learner)
+    post_save.connect(on_assessor_save, sender=Assessor)
+    post_delete.connect(on_assessor_delete, sender=Assessor)
+    post_save.connect(on_skillathon_save, sender=SkillathonEvent)
+    post_delete.connect(on_skillathon_delete, sender=SkillathonEvent)
+    post_save.connect(on_group_save, sender=Group)
+    post_delete.connect(on_group_delete, sender=Group)
+    print("All signals have been reconnected.")
