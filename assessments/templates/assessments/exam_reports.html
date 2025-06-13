@@ -67,11 +67,28 @@
                     </div>
                 </div>
             </div>
+
+            
+
+            <!-- Institute Metrics Section -->
             <div class="chart-container">
                 <h3>Overall Grade Distribution</h3>
                 <div class="chart-wrapper">
                     <canvas id="gradeChart"></canvas>
                 </div>
+            </div>
+        </div>
+
+
+        <div class="gender-analysis-section">
+            <h2 class="section-title">Institute-wise Station Performance</h2>
+            <div class="institute-container">
+                <table class="table">
+                    <thead>
+                        <tr id="stationTableHeader"></tr>
+                    </thead>
+                    <tbody id="instituteTableBody"></tbody>
+                </table>
             </div>
         </div>
 
@@ -664,7 +681,30 @@
         height: 100%;
     }
 
-    .chart-container h3 {
+    
+
+    .institute-container {
+        flex: 2;
+        background: white;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
+        position: relative;
+    }
+
+    .institute-container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(to right, #F16564, #ff8a8a);
+    }
+
+    .institute-container h3 {
         font-size: 16px;
         color: #1a202c;
         margin: 0 0 16px;
@@ -1780,6 +1820,72 @@
     .load-more-btn:hover {
         background: #e45857;
     }
+
+    /* Add to your existing CSS */
+    .station-list {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    .station-item {
+        padding: 8px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .station-item:last-child {
+        border-bottom: none;
+    }
+
+    .table-responsive {
+        margin-top: 20px;
+    }
+
+    .table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .table th {
+        background: #f8fafc;
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 12px;
+        font-weight: 600;
+        color: #4a5568;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .table td {
+        padding: 16px;
+        border-top: 1px solid #e2e8f0;
+        font-size: 16px !important;
+    }
+
+    .card {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        margin-top: 24px;
+    }
+
+    .table th, .table td {
+        vertical-align: middle;
+        text-align: left;
+        font-size: 12px;
+        padding: 12px 8px;
+        max-width: 150px;
+    }
+
+    .table th {
+        background: #f8f9fa;
+        font-weight: 600;
+    }
+
+    .table tr td:first-child {
+        font-weight: 500;
+        background: #fafafa;
+    }
 </style>
 
 <script>
@@ -1841,6 +1947,51 @@
                 // Show error toast or notification here
             });
     }
+
+    function updateInstituteTable(data) {
+        const tableBody = document.getElementById('instituteTableBody');
+        const headerRow = document.getElementById('stationTableHeader');
+        tableBody.innerHTML = '';
+        headerRow.innerHTML = '';
+
+        // 1. Collect all unique station names
+        const allStations = new Set();
+        data.institute_table.forEach(inst => {
+            Object.keys(inst.stations).forEach(station => allStations.add(station));
+        });
+        const stationList = Array.from(allStations);
+
+        // 2. Render table header
+        headerRow.innerHTML = `
+            <th>Institute</th>
+            <th>Overall</th>
+            ${stationList.map(station => `<th>${station}</th>`).join('')}
+        `;
+
+        // 3. Render table body
+        data.institute_table.forEach(inst => {
+            const row = document.createElement('tr');
+            // Institute name
+            row.innerHTML = `
+                <td>${inst.institute}</td>
+                <td>
+                    <div>Students: ${inst.overall.students}</div>
+                    <div>Avg: ${inst.overall.avg_score}%</div>
+                </td>
+                ${stationList.map(station => 
+                    inst.stations[station] 
+                        ? `<td>
+                            <div>Students: ${inst.stations[station].students}</div>
+                            <div>Avg: ${inst.stations[station].avg_score}%</div>
+                          </td>`
+                        : `<td>-</td>`
+                ).join('')}
+            `;
+            tableBody.appendChild(row);
+        });
+    }
+
+    
 
     function handleInstituteChange() {
         selectedInstitute = document.getElementById('instituteFilter').value;
@@ -2398,7 +2549,10 @@
         fetch(url)
             .then(response => response.json())
             .then(data => {
-                if (!data.error) updateMetricsDisplay(data);
+                if (!data.error) {
+                    updateMetricsDisplay(data);
+                    updateInstituteTable(data);
+                }
             });
     }
 

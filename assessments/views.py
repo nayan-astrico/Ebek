@@ -727,135 +727,210 @@ def fetch_exam_reports(request):
 
 @csrf_exempt
 def fetch_exam_metrics(request):
-    try:
-        skillathon_name = request.GET.get("skillathon_name")
-        institution_name = request.GET.get("institution_name")  # Now using name, not ID
+   try:
+       skillathon_name = request.GET.get("skillathon_name")
+       institution_name = request.GET.get("institution_name")  # Now using name, not ID
 
-        if not skillathon_name:
-            return JsonResponse({"error": "skillathon_name is required"}, status=400)
 
-        # Build query
-        base_query = db.collection('ExamAssignment') \
-            .where('status', '==', 'Completed') \
-            .where('skillathon', '==', skillathon_name)
+       if not skillathon_name:
+           return JsonResponse({"error": "skillathon_name is required"}, status=400)
 
-        if institution_name:
-            base_query = base_query.where('institution', '==', institution_name)
 
-        exam_assignments = list(base_query.stream())
+       # Build query
+       base_query = db.collection('ExamAssignment') \
+           .where('status', '==', 'Completed') \
+           .where('skillathon', '==', skillathon_name)
 
-        # --- Analytics Calculation ---
-        total_students = set()
-        procedure_counts = defaultdict(int)
-        grade_distribution = {"A": 0, "B": 0, "C": 0, "D": 0, "E": 0}
-        gender_metrics = {
-            "total": {"male": 0, "female": 0, "others": 0},
-            "grade_wise": {
-                "A": {"male": 0, "female": 0, "others": 0},
-                "B": {"male": 0, "female": 0, "others": 0},
-                "C": {"male": 0, "female": 0, "others": 0},
-                "D": {"male": 0, "female": 0, "others": 0},
-                "E": {"male": 0, "female": 0, "others": 0}
-            }
-        }
-        skill_wise_metrics = {}
-        
-        # Track completed procedures per student
-        student_completed_procedures = defaultdict(set)
 
-        for exam in exam_assignments:
-            exam_doc = exam.to_dict()
-            email = exam_doc.get('emailID')
-            if not email:
-                continue
-            total_students.add(email)
+       if institution_name:
+           base_query = base_query.where('institution', '==', institution_name)
 
-            procedure_name = exam_doc.get('procedureName', 'Unknown')
-            if procedure_name == "Unknown":
-                procedure_name = exam_doc.get('procedure_name', 'Unknown')
-            # Track completed procedure for this student
-            student_completed_procedures[email].add(procedure_name)
-            
-            gender = (exam_doc.get('gender') or 'others').lower()
-            percentage = 0
-            total_score = exam_doc.get("marks", 0)
-            max_marks = sum(
-                question.get('right_marks_for_question', 0)
-                for section in exam_doc.get('examMetaData', [])
-                for question in section.get("section_questions", [])
-            )
-            if max_marks > 0:
-                percentage = round((total_score / max_marks) * 100, 2)
-            grade = get_grade_letter(percentage)
 
-            # Procedure counts
-            procedure_counts[procedure_name] += 1
+       exam_assignments = list(base_query.stream())
 
-            # Grade distribution
-            grade_distribution[grade] += 1
 
-            # Gender metrics
-            gender_metrics["total"][gender] += 1
-            gender_metrics["grade_wise"][grade][gender] += 1
+       # --- Analytics Calculation ---
+       total_students = set()
+       procedure_counts = defaultdict(int)
+       grade_distribution = {"A": 0, "B": 0, "C": 0, "D": 0, "E": 0}
+       gender_metrics = {
+           "total": {"male": 0, "female": 0, "others": 0},
+           "grade_wise": {
+               "A": {"male": 0, "female": 0, "others": 0},
+               "B": {"male": 0, "female": 0, "others": 0},
+               "C": {"male": 0, "female": 0, "others": 0},
+               "D": {"male": 0, "female": 0, "others": 0},
+               "E": {"male": 0, "female": 0, "others": 0}
+           }
+       }
+       skill_wise_metrics = {}
+      
+       # Track completed procedures per student
+       student_completed_procedures = defaultdict(set)
 
-            # Skill-wise metrics
-            if procedure_name not in skill_wise_metrics:
-                skill_wise_metrics[procedure_name] = {
-                    "grade_distribution": {"A": 0, "B": 0, "C": 0, "D": 0, "E": 0},
-                    "critical_steps": {
-                        "missed_one": 0,
-                        "missed_multiple": 0,
-                        "completed_all": 0
-                    },
-                    "common_missed_steps": {}
-                }
-            skill_wise_metrics[procedure_name]["grade_distribution"][grade] += 1
 
-            # Critical steps
-            critical_missed = 0
-            missed_steps = []
-            for section in exam_doc.get("examMetaData", []):
-                for question in section.get("section_questions", []):
-                    if question.get("critical") and question.get("answer_scored", 0) == 0:
-                        critical_missed += 1
-                        missed_steps.append(question.get('question'))
-            if critical_missed == 0:
-                skill_wise_metrics[procedure_name]["critical_steps"]["completed_all"] += 1
-            elif critical_missed == 1:
-                skill_wise_metrics[procedure_name]["critical_steps"]["missed_one"] += 1
-            elif critical_missed > 1:
-                skill_wise_metrics[procedure_name]["critical_steps"]["missed_multiple"] += 1
-            for step in missed_steps:
-                if step not in skill_wise_metrics[procedure_name]["common_missed_steps"]:
-                    skill_wise_metrics[procedure_name]["common_missed_steps"][step] = 0
-                skill_wise_metrics[procedure_name]["common_missed_steps"][step] += 1
+       for exam in exam_assignments:
+           exam_doc = exam.to_dict()
+           email = exam_doc.get('emailID')
+           if not email:
+               continue
+           total_students.add(email)
 
-        # Calculate completed_all_procedures metric
-        all_procedures = set(procedure_counts.keys())
-        completed_all_procedures = sum(
-            1 for student_procedures in student_completed_procedures.values()
-            if student_procedures == all_procedures
-        )
 
-        # Finalize all missed critical steps for each procedure
-        for proc_name in skill_wise_metrics:
-            common_steps = skill_wise_metrics[proc_name]["common_missed_steps"]
-            if not common_steps:
-                skill_wise_metrics[proc_name]["common_missed_steps"] = {}
+           procedure_name = exam_doc.get('procedureName', 'Unknown')
+           if procedure_name == "Unknown":
+               procedure_name = exam_doc.get('procedure_name', 'Unknown')
+           # Track completed procedure for this student
+           student_completed_procedures[email].add(procedure_name)
+          
+           gender = (exam_doc.get('gender') or 'others').lower()
+           percentage = 0
+           total_score = exam_doc.get("marks", 0)
+           max_marks = sum(
+               question.get('right_marks_for_question', 0)
+               for section in exam_doc.get('examMetaData', [])
+               for question in section.get("section_questions", [])
+           )
+           if max_marks > 0:
+               percentage = round((total_score / max_marks) * 100, 2)
+           grade = get_grade_letter(percentage)
 
-        metrics = {
-            "total_students": len(total_students),
-            "procedure_counts": dict(procedure_counts),
-            "grade_distribution": grade_distribution,
-            "gender_metrics": gender_metrics,
-            "skill_wise_metrics": skill_wise_metrics,
-            "completed_all_procedures": completed_all_procedures
-        }
-        return JsonResponse(metrics)
 
-    except Exception as e:
-        print(f"Error in fetch_exam_metrics: {str(e)}")
-        return JsonResponse({"error": str(e)}, status=500)
+           # Procedure counts
+           procedure_counts[procedure_name] += 1
+
+
+           # Grade distribution
+           grade_distribution[grade] += 1
+
+
+           # Gender metrics
+           gender_metrics["total"][gender] += 1
+           gender_metrics["grade_wise"][grade][gender] += 1
+
+
+           # Skill-wise metrics
+           if procedure_name not in skill_wise_metrics:
+               skill_wise_metrics[procedure_name] = {
+                   "grade_distribution": {"A": 0, "B": 0, "C": 0, "D": 0, "E": 0},
+                   "critical_steps": {
+                       "missed_one": 0,
+                       "missed_multiple": 0,
+                       "completed_all": 0
+                   },
+                   "common_missed_steps": {}
+               }
+           skill_wise_metrics[procedure_name]["grade_distribution"][grade] += 1
+
+
+           # Critical steps
+           critical_missed = 0
+           missed_steps = []
+           for section in exam_doc.get("examMetaData", []):
+               for question in section.get("section_questions", []):
+                   if question.get("critical") and question.get("answer_scored", 0) == 0:
+                       critical_missed += 1
+                       missed_steps.append(question.get('question'))
+           if critical_missed == 0:
+               skill_wise_metrics[procedure_name]["critical_steps"]["completed_all"] += 1
+           elif critical_missed == 1:
+               skill_wise_metrics[procedure_name]["critical_steps"]["missed_one"] += 1
+           elif critical_missed > 1:
+               skill_wise_metrics[procedure_name]["critical_steps"]["missed_multiple"] += 1
+           for step in missed_steps:
+               if step not in skill_wise_metrics[procedure_name]["common_missed_steps"]:
+                   skill_wise_metrics[procedure_name]["common_missed_steps"][step] = 0
+               skill_wise_metrics[procedure_name]["common_missed_steps"][step] += 1
+
+
+       # Calculate completed_all_procedures metric
+       all_procedures = set(procedure_counts.keys())
+       completed_all_procedures = sum(
+           1 for student_procedures in student_completed_procedures.values()
+           if student_procedures == all_procedures
+       )
+
+
+       # Finalize all missed critical steps for each procedure
+       for proc_name in skill_wise_metrics:
+           common_steps = skill_wise_metrics[proc_name]["common_missed_steps"]
+           if not common_steps:
+               skill_wise_metrics[proc_name]["common_missed_steps"] = {}
+
+
+       # --- Institute Table Calculation ---
+       institute_metrics = {}
+
+
+       for exam in exam_assignments:
+           exam_doc = exam.to_dict()
+           institute = exam_doc.get('institution', 'Unknown')
+           procedure = exam_doc.get('procedureName', exam_doc.get('procedure_name', 'Unknown'))
+           email = exam_doc.get('emailID')
+           total_score = exam_doc.get("marks", 0)
+           max_marks = sum(
+               question.get('right_marks_for_question', 0)
+               for section in exam_doc.get('examMetaData', [])
+               for question in section.get("section_questions", [])
+           )
+           percentage = (total_score / max_marks) * 100 if max_marks > 0 else 0
+
+
+           if institute not in institute_metrics:
+               institute_metrics[institute] = {
+                   "overall": {"students": set(), "total_score": 0, "count": 0},
+                   "stations": {}
+               }
+           # Overall
+           institute_metrics[institute]["overall"]["students"].add(email)
+           institute_metrics[institute]["overall"]["total_score"] += percentage
+           institute_metrics[institute]["overall"]["count"] += 1
+
+
+           # Per station
+           if procedure not in institute_metrics[institute]["stations"]:
+               institute_metrics[institute]["stations"][procedure] = {"students": set(), "total_score": 0, "count": 0}
+           institute_metrics[institute]["stations"][procedure]["students"].add(email)
+           institute_metrics[institute]["stations"][procedure]["total_score"] += percentage
+           institute_metrics[institute]["stations"][procedure]["count"] += 1
+
+
+       # Prepare for JSON
+       institute_table = []
+       for institute, data in institute_metrics.items():
+           row = {
+               "institute": institute,
+               "overall": {
+                   "students": len(data["overall"]["students"]),
+                   "avg_score": round(data["overall"]["total_score"] / data["overall"]["count"], 2) if data["overall"]["count"] else 0
+               },
+               "stations": {}
+           }
+           for station, sdata in data["stations"].items():
+               row["stations"][station] = {
+                   "students": len(sdata["students"]),
+                   "avg_score": round(sdata["total_score"] / sdata["count"], 2) if sdata["count"] else 0
+               }
+           institute_table.append(row)
+       print("########################################################")
+       print("institute table #########################################################")
+       print(institute_table)
+
+       metrics = {
+           "total_students": len(total_students),
+           "procedure_counts": dict(procedure_counts),
+           "grade_distribution": grade_distribution,
+           "gender_metrics": gender_metrics,
+           "skill_wise_metrics": skill_wise_metrics,
+           "completed_all_procedures": completed_all_procedures,
+           "institute_table": institute_table
+       }
+       return JsonResponse(metrics)
+
+
+   except Exception as e:
+       print(f"Error in fetch_exam_metrics: {str(e)}")
+       return JsonResponse({"error": str(e)}, status=500)
 
 def get_grade_letter(percentage):
     if percentage >= 90:
