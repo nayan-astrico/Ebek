@@ -21,13 +21,9 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-DEBUG = os.getenv("DEBUG")
-print(DEBUG)
+DEBUG = os.getenv("DEBUG", "True") 
 
-if DEBUG == False:
-    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
-else:
-    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
+FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
 
 # Initialize Firebase
 cred = credentials.Certificate(FIREBASE_KEY_PATH)
@@ -40,7 +36,6 @@ firebase_admin.initialize_app(cred)
 SECRET_KEY = 'django-insecure-%6jn6tro)!iq-a%n!#nhxhl$11*%3mnr3jk0-ez!!n!y#c8bs^'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
 
 ALLOWED_HOSTS = ["ebek.astrico.ai", "www.ebek.astrico.ai", "localhost", "127.0.0.1"]
 
