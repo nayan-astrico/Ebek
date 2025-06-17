@@ -912,9 +912,26 @@ def fetch_exam_metrics(request):
                    "avg_score": round(sdata["total_score"] / sdata["count"], 2) if sdata["count"] else 0
                }
            institute_table.append(row)
-       print("########################################################")
-       print("institute table #########################################################")
-       print(institute_table)
+
+       # Calculate overall averages for each procedure across all institutes
+       procedure_averages = {}
+       for institute_data in institute_metrics.values():
+           for procedure, data in institute_data["stations"].items():
+               if data["count"] > 0:
+                   avg_score = data["total_score"] / data["count"]
+                   if procedure not in procedure_averages:
+                       procedure_averages[procedure] = {"total_score": 0, "total_count": 0}
+                   procedure_averages[procedure]["total_score"] += avg_score * data["count"]
+                   procedure_averages[procedure]["total_count"] += data["count"]
+
+       # Calculate final averages and find top/bottom performing skills
+       final_averages = {
+           proc: round(data["total_score"] / data["total_count"], 2)
+           for proc, data in procedure_averages.items()
+       }
+       sorted_procedures = sorted(final_averages.items(), key=lambda x: x[1], reverse=True)
+       top_performing_skill = sorted_procedures[0] if sorted_procedures else None
+       lowest_performing_skill = sorted_procedures[-1] if sorted_procedures else None
 
        metrics = {
            "total_students": len(total_students),
@@ -923,7 +940,9 @@ def fetch_exam_metrics(request):
            "gender_metrics": gender_metrics,
            "skill_wise_metrics": skill_wise_metrics,
            "completed_all_procedures": completed_all_procedures,
-           "institute_table": institute_table
+           "institute_table": institute_table,
+           "top_performing_skill": {"name": top_performing_skill[0], "average_score": top_performing_skill[1]} if top_performing_skill else None,
+           "lowest_performing_skill": {"name": lowest_performing_skill[0], "average_score": lowest_performing_skill[1]} if lowest_performing_skill else None
        }
        return JsonResponse(metrics)
 

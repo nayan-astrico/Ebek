@@ -47,6 +47,7 @@
                             <div class="metric-value" id="totalStudents">0</div>
                         </div>
                     </div>
+                    
                     <div class="metric-card">
                         <div class="metric-icon">
                             <i class="fas fa-check-circle"></i>
@@ -57,6 +58,33 @@
                         </div>
                     </div>
                 </div>
+
+
+                <div class="metrics-row">
+                    <div class="metric-card">
+                        <div class="metric-icon">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <div class="metric-content">
+                            <h3>Highest Scoring Skill</h3>
+                            <div class="metric-value skillscoring" id="highestScoringSkill">-</div>
+                            <div class="metric-value skillpercentage" id="highestScoringSkillPercentage">0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card">
+                        <div class="metric-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="metric-content">
+                            <h3>Lowest Scoring Skill</h3>
+                            <div class="metric-value skillscoring" id="lowestScoringSkill">-</div>
+                            <div class="metric-value skillpercentage" id="lowestScoringSkillPercentage">0</div>
+                        </div>
+                    </div>
+                </div>
+
+
                 <div class="metric-card procedures-card" id="procedureCountsContainer">
                     <div class="metric-icon">
                         <i class="fas fa-clipboard-list"></i>
@@ -280,6 +308,18 @@
 </div>
 
 <style>
+    .skillscoring {
+        font-size: 18px !important;
+        color: #64748b !important;
+    }
+
+    .skillpercentage {
+        font-size: 20px !important;
+        color: #1a202c !important;
+        padding-top: 10px;
+    }
+
+
     .reports-container {
         padding: 24px;
         max-width: 1440px;
@@ -2505,6 +2545,10 @@
         // Update basic metrics
         document.getElementById('totalStudents').textContent = metrics.total_students || 0;
         document.getElementById('completedAllProcedures').textContent = metrics.completed_all_procedures || 0;
+        document.getElementById('highestScoringSkill').textContent = metrics.top_performing_skill?.name || '-';
+        document.getElementById('lowestScoringSkill').textContent = metrics.lowest_performing_skill?.name || '-';
+        document.getElementById('highestScoringSkillPercentage').textContent = metrics.top_performing_skill?.average_score + "%" || 0;
+        document.getElementById('lowestScoringSkillPercentage').textContent = metrics.lowest_performing_skill?.average_score + "%" || 0;
         
         // Update procedure counts
         const procedureCountsDiv = document.getElementById('procedureCounts');
