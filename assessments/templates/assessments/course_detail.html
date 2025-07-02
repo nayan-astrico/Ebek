@@ -1,0 +1,1813 @@
+{% extends 'assessments/base.html' %}
+
+{% block content %}
+<!-- Back Button -->
+<div class="back-button-container">
+    <a href="{% url 'course_management' %}" class="back-button">
+        <i class="fas fa-arrow-left"></i>
+        Back to Courses
+    </a>
+</div>
+
+<!-- Course Header -->
+<div class="course-header">
+    <div class="course-header-left">
+        <h3>{{ course.name }}</h3>
+        <p class="course-description">{{ course.description }}</p>
+    </div>
+    <div class="course-header-right">
+        <button class="btn btn-light" onclick="openEditCoursePanel()">
+            <i class="fas fa-edit"></i>
+            Edit Course
+        </button>
+        <button class="btn btn-danger">
+            <i class="fas fa-trash"></i>
+            Delete Course
+        </button>
+    </div>
+</div>
+
+<!-- Course Overview -->
+<div class="course-overview">
+    <div class="overview-card">
+        <h3>Course Information</h3>
+        <div class="info-grid">
+            <div class="info-item">
+                <label>Total Procedures</label>
+                <span class="info-value">{{ course.total_procedures }}</span>
+            </div>
+            <div class="info-item">
+                <label>Status</label>
+                <span class="status-badge {% if course.status == 'active' %}status-active{% else %}status-inactive{% endif %}">
+                    {{ course.status|title }}
+                </span>
+            </div>
+            <div class="info-item">
+                <label>OSCE Types</label>
+                <div class="osce-types-display">
+                    {% for osce_type in course.osce_types %}
+                        <span class="osce-badge">{{ osce_type }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="info-item">
+                <label>Verification Required</label>
+                <span class="verification-status">
+                    {% if course.verification_required %}
+                        <i class="fas fa-check-circle text-success"></i> Yes
+                    {% else %}
+                        <i class="fas fa-times-circle text-muted"></i> No
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tab Navigation -->
+<div class="tab-navigation">
+    <div class="tab-item active" data-tab="procedures" onclick="switchTab('procedures')">
+        <i class="fas fa-list"></i>
+        Procedures
+    </div>
+    <div class="tab-item" data-tab="students" onclick="switchTab('students')">
+        <i class="fas fa-users"></i>
+        Batches
+    </div>
+</div>
+
+<!-- Tab Content -->
+<div class="tab-content">
+    <!-- Procedures Tab -->
+    <div class="tab-panel active" id="procedures-panel">
+        <div class="procedures-header">
+            <div class="procedures-title">
+                <h3>Course Procedures</h3>
+                <p class="text-muted">Manage procedures assigned to this course</p>
+            </div>
+            <button class="btn btn-primary" onclick="openAddProcedurePanel()">
+                <i class="fas fa-plus"></i>
+                Add Procedure
+            </button>
+        </div>
+
+        <!-- Search and Filter -->
+        <div class="procedures-controls">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Search procedures..." id="procedureSearch">
+            </div>
+            <div class="filter-controls">
+                <select class="form-control" id="statusFilter">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Procedures Table -->
+        <div class="procedures-table">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Procedure Name</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="proceduresTableBody">
+                    {% for procedure in course.procedures %}
+                    <tr data-category="{{ procedure.category }}" data-status="{{ procedure.status }}">
+                        <td>
+                            <div class="procedure-name">
+                                <span>{{ procedure.name }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="status-badge {% if procedure.status == 'active' %}status-active{% else %}status-inactive{% endif %}">
+                                {{ procedure.status|title }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="actions">
+                                <button class="btn btn-danger btn-sm" title="Remove from Course" onclick="removeProcedure({{ procedure.id }})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Batches Tab -->
+    <div class="tab-panel" id="students-panel">
+        <div class="batches-header">
+            <div class="batches-title">
+                <h3>Course Batches</h3>
+                <p class="text-muted">Manage batches assigned to this course</p>
+            </div>
+            <button class="btn btn-primary" onclick="openAddBatchPanel()">
+                <i class="fas fa-plus"></i>
+                Add Batch
+            </button>
+        </div>
+
+        <!-- Search and Filter -->
+        <div class="batches-controls">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Search batches..." id="batchSearch">
+            </div>
+            <div class="filter-controls">
+                <select class="form-control" id="unitTypeFilter">
+                    <option value="">All Unit Types</option>
+                    <option value="hospital">Hospital</option>
+                    <option value="clinic">Clinic</option>
+                    <option value="laboratory">Laboratory</option>
+                    <option value="simulation">Simulation</option>
+                </select>
+                <select class="form-control" id="unitNameFilter">
+                    <option value="">All Unit Names</option>
+                    <option value="emergency">Emergency Department</option>
+                    <option value="icu">ICU</option>
+                    <option value="cardiology">Cardiology</option>
+                    <option value="pediatrics">Pediatrics</option>
+                    <option value="surgery">Surgery</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Batches Table -->
+        <div class="batches-table">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Batch Name</th>
+                        <th>Unit Type</th>
+                        <th>Unit Name</th>
+                        <th>Learner</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="batchesTableBody">
+                    <tr data-unit-type="hospital" data-unit-name="emergency">
+                        <td>
+                            <div class="batch-name">
+                                <span>Emergency Care Batch 2024</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="unit-type-badge">Hospital</span>
+                        </td>
+                        <td>
+                            <span class="unit-name">Emergency Department</span>
+                        </td>
+                        <td>
+                            <span class="learner-count">25 Learners</span>
+                        </td>
+                        <td>
+                            <span class="status-badge status-active">Active</span>
+                        </td>
+                        <td>
+                            <div class="actions">
+                                <button class="btn btn-primary btn-sm" title="View Details" onclick="viewBatchDetails(1)">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-warning btn-sm" title="Edit Batch" onclick="editBatch(1)">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-danger btn-sm" title="Remove from Course" onclick="removeBatch(1)">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr data-unit-type="clinic" data-unit-name="cardiology">
+                        <td>
+                            <div class="batch-name">
+                                <span>Cardiology Training Batch</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="unit-type-badge">Clinic</span>
+                        </td>
+                        <td>
+                            <span class="unit-name">Cardiology</span>
+                        </td>
+                        <td>
+                            <span class="learner-count">18 Learners</span>
+                        </td>
+                        <td>
+                            <span class="status-badge status-active">Active</span>
+                        </td>
+                        <td>
+                            <div class="actions">
+                                <button class="btn btn-primary btn-sm" title="View Details" onclick="viewBatchDetails(2)">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-warning btn-sm" title="Edit Batch" onclick="editBatch(2)">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-danger btn-sm" title="Remove from Course" onclick="removeBatch(2)">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr data-unit-type="simulation" data-unit-name="simulation">
+                        <td>
+                            <div class="batch-name">
+                                <span>Simulation Lab Batch</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="unit-type-badge">Simulation</span>
+                        </td>
+                        <td>
+                            <span class="unit-name">Simulation Center</span>
+                        </td>
+                        <td>
+                            <span class="learner-count">30 Learners</span>
+                        </td>
+                        <td>
+                            <span class="status-badge status-inactive">Inactive</span>
+                        </td>
+                        <td>
+                            <div class="actions">
+                                <button class="btn btn-primary btn-sm" title="View Details" onclick="viewBatchDetails(3)">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-warning btn-sm" title="Edit Batch" onclick="editBatch(3)">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-danger btn-sm" title="Remove from Course" onclick="removeBatch(3)">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add Procedure Side Panel -->
+<div class="side-panel" id="addProcedurePanel">
+    <div class="side-panel-header">
+        <h3>Add Procedures to Course</h3>
+        <button type="button" class="close" onclick="closeAddProcedurePanel()">
+            <span>&times;</span>
+        </button>
+    </div>
+    
+    <form class="side-panel-form" id="addProcedureForm" novalidate>
+        <div class="form-group">
+            <label>Search Procedures</label>
+            <input type="text" class="form-control" placeholder="Search available procedures..." id="modalProcedureSearch" oninput="filterAvailableProcedures(this.value)">
+        </div>
+
+        <div class="form-group">
+            <label>Available Procedures <span class="text-danger">*</span></label>
+            <div class="available-procedures-container" id="availableProcedures">
+                <div class="procedure-item">
+                    <div class="custom-checkbox">
+                        <input type="checkbox" id="proc_7" value="7">
+                        <label for="proc_7">Oxygen Administration</label>
+                    </div>
+                </div>
+                <div class="procedure-item">
+                    <div class="custom-checkbox">
+                        <input type="checkbox" id="proc_8" value="8">
+                        <label for="proc_8">Blood Pressure Measurement</label>
+                    </div>
+                </div>
+                <div class="procedure-item">
+                    <div class="custom-checkbox">
+                        <input type="checkbox" id="proc_9" value="9">
+                        <label for="proc_9">IV Insertion</label>
+                    </div>
+                </div>
+                <div class="procedure-item">
+                    <div class="custom-checkbox">
+                        <input type="checkbox" id="proc_10" value="10">
+                        <label for="proc_10">Wound Care</label>
+                    </div>
+                </div>
+                <div class="procedure-item">
+                    <div class="custom-checkbox">
+                        <input type="checkbox" id="proc_11" value="11">
+                        <label for="proc_11">Medication Administration</label>
+                    </div>
+                </div>
+            </div>
+            <div class="error-message" id="addProceduresError"></div>
+        </div>
+
+        <div class="side-panel-actions">
+            <button type="button" class="btn btn-light" onclick="closeAddProcedurePanel()">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="addProcedureSubmitBtn">
+                <span class="btn-text">Add Procedures</span>
+                <span class="btn-spinner" style="display: none;">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </span>
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Edit Course Side Panel -->
+<div class="side-panel" id="editCoursePanel">
+    <div class="side-panel-header">
+        <h3>Edit Course</h3>
+        <button type="button" class="close" onclick="closeEditCoursePanel()">
+            <span>&times;</span>
+        </button>
+    </div>
+    
+    <form class="side-panel-form" id="editCourseForm" novalidate>
+        <div class="form-group">
+            <label>Course Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="editCourseName" name="courseName" required>
+            <div class="error-message" id="editCourseNameError"></div>
+        </div>
+
+        <div class="form-group">
+            <label>Description</label>
+            <textarea class="form-control" id="editDescription" name="description" rows="3" placeholder="Enter course description (optional)"></textarea>
+            <div class="error-message" id="editDescriptionError"></div>
+        </div>
+
+        <div class="form-group">
+            <label>Procedures <span class="text-danger">*</span></label>
+            <div class="multiselect-container">
+                <div class="multiselect-input" onclick="toggleEditDropdown()" id="editProceduresInput">
+                    <span class="placeholder">Select procedures</span>
+                    <div class="selected-tags" id="editSelectedTags"></div>
+                    <i class="fas fa-chevron-down dropdown-arrow"></i>
+                </div>
+                <div class="multiselect-dropdown" id="editProceduresDropdown">
+                    <div class="search-container">
+                        <input type="text" placeholder="Search procedures..." class="search-input" oninput="filterEditProcedures(this.value)">
+                    </div>
+                    <div class="options-container" id="editProceduresOptions">
+                        <div class="option-item" data-value="1">
+                            <div class="custom-checkbox">
+                                <input type="checkbox" id="editProc1" value="1">
+                                <label for="editProc1"></label>
+                            </div>
+                            <span>CPR Training</span>
+                        </div>
+                        <div class="option-item" data-value="2">
+                            <div class="custom-checkbox">
+                                <input type="checkbox" id="editProc2" value="2">
+                                <label for="editProc2"></label>
+                            </div>
+                            <span>Airway Management</span>
+                        </div>
+                        <div class="option-item" data-value="3">
+                            <div class="custom-checkbox">
+                                <input type="checkbox" id="editProc3" value="3">
+                                <label for="editProc3"></label>
+                            </div>
+                            <span>Defibrillation</span>
+                        </div>
+                        <div class="option-item" data-value="4">
+                            <div class="custom-checkbox">
+                                <input type="checkbox" id="editProc4" value="4">
+                                <label for="editProc4"></label>
+                            </div>
+                            <span>Oxygen Administration</span>
+                        </div>
+                        <div class="option-item" data-value="5">
+                            <div class="custom-checkbox">
+                                <input type="checkbox" id="editProc5" value="5">
+                                <label for="editProc5"></label>
+                            </div>
+                            <span>Chest Compressions</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="error-message" id="editProceduresError"></div>
+        </div>
+
+        <div class="form-group">
+            <label>OSCE Types <span class="text-danger">*</span></label>
+            <div class="checkbox-group" id="editOsceTypesGroup">
+                <div class="custom-checkbox">
+                    <input type="checkbox" id="editClassroom" name="osce_type" value="classroom">
+                    <label for="editClassroom">Classroom</label>
+                </div>
+                <div class="custom-checkbox">
+                    <input type="checkbox" id="editMock" name="osce_type" value="mock">
+                    <label for="editMock">Mock</label>
+                </div>
+                <div class="custom-checkbox">
+                    <input type="checkbox" id="editFinal" name="osce_type" value="final" onchange="toggleEditVerificationField(this)">
+                    <label for="editFinal">Final</label>
+                </div>
+            </div>
+            <div class="error-message" id="editOsceTypesError"></div>
+        </div>
+
+        <div class="form-group verification-field" id="editVerificationField" style="display: none;">
+            <div class="custom-checkbox">
+                <input type="checkbox" id="editVerification" name="verification_required">
+                <label for="editVerification">Verification Required</label>
+            </div>
+        </div>
+
+        <div class="side-panel-actions">
+            <button type="button" class="btn btn-light" onclick="closeEditCoursePanel()">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="editSubmitBtn">
+                <span class="btn-text">Update Course</span>
+                <span class="btn-spinner" style="display: none;">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </span>
+            </button>
+        </div>
+    </form>
+</div>
+
+<style>
+/* Back Button */
+.back-button-container {
+    margin-bottom: 24px;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #4a5568;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.back-button:hover {
+    background-color: #f7fafc;
+    color: #2d3748;
+    text-decoration: none;
+}
+
+.back-button i {
+    font-size: 12px;
+}
+
+/* Course Header */
+.course-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+/* Procedures Table Actions */
+.procedures-table .actions .btn {
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.procedures-table .actions .btn-sm {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+.procedures-table .actions .btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.procedures-table .actions .btn-danger:hover {
+    background: #c82333;
+}
+
+.course-header-left h1 {
+    margin: 0 0 8px 0;
+    font-size: 32px;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.course-description {
+    color: #666;
+    font-size: 16px;
+    line-height: 1.5;
+    margin: 0;
+    max-width: 600px;
+}
+
+.course-header-right {
+    display: flex;
+    gap: 12px;
+}
+
+.course-header-right .btn {
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+}
+
+.course-header-right .btn-light {
+    background: #f8f9fa;
+    color: #495057;
+    border: 1px solid #dee2e6;
+}
+
+.course-header-right .btn-light:hover {
+    background: #e2e6ea;
+    color: #495057;
+}
+
+.course-header-right .btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.course-header-right .btn-danger:hover {
+    background: #c82333;
+}
+
+/* Course Overview */
+.course-overview {
+    margin-bottom: 32px;
+}
+
+.overview-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 24px;
+}
+
+.overview-card h3 {
+    margin: 0 0 20px 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.info-item label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.info-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: #2d3748;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    min-width: fit-content;
+}
+
+.status-active {
+    background: #c6f6d5;
+    color: #22543d;
+}
+
+.status-inactive {
+    background: #fed7d7;
+    color: #c53030;
+}
+
+.osce-types-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.osce-badge {
+    background: #edf2f7;
+    color: #4a5568;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.verification-status {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 14px;
+}
+
+/* Tab Navigation */
+.tab-navigation {
+    display: flex;
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 24px;
+}
+
+.tab-item {
+    padding: 12px 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #4a5568;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.tab-item:hover {
+    color: #F16564;
+    background: #f7fafc;
+}
+
+.tab-item.active {
+    color: #F16564;
+    border-bottom-color: #F16564;
+    background: #f7fafc;
+}
+
+/* Tab Content */
+.tab-content {
+    min-height: 400px;
+}
+
+.tab-panel {
+    display: none;
+}
+
+.tab-panel.active {
+    display: block;
+}
+
+/* Procedures Tab */
+.procedures-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+}
+
+.procedures-title h3 {
+    margin: 0 0 4px 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.procedures-controls {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+    align-items: center;
+}
+
+.search-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    max-width: 400px;
+}
+
+.search-box input {
+    border: none;
+    outline: none;
+    width: 100%;
+    font-size: 14px;
+}
+
+.filter-controls {
+    display: flex;
+    gap: 12px;
+}
+
+.filter-controls select {
+    min-width: 150px;
+}
+
+.procedures-table {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.category-badge {
+    background: #edf2f7;
+    color: #4a5568;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Batches Tab */
+.batches-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+}
+
+.batches-title h3 {
+    margin: 0 0 4px 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.batches-controls {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+    align-items: center;
+}
+
+.batches-table {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.batches-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.batches-table th,
+.batches-table td {
+    padding: 12px 16px;
+    text-align: left;
+}
+
+.batches-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+}
+
+.batches-table tbody tr {
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.batches-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.batch-name {
+    font-weight: 500;
+}
+
+.unit-type-badge {
+    background: #edf2f7;
+    color: #4a5568;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.unit-name {
+    color: #666;
+}
+
+.learner-count {
+    color: #666;
+}
+
+.status-badge {
+    background: #edf2f7;
+    color: #4a5568;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-active {
+    background: #c6f6d5;
+    color: #22543d;
+}
+
+.status-inactive {
+    background: #fed7d7;
+    color: #c53030;
+}
+
+.actions {
+    display: flex;
+    gap: 8px;
+}
+
+.actions .btn {
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.actions .btn-primary {
+    background: #F16564;
+    color: white;
+}
+
+.actions .btn-primary:hover {
+    background: #e45857;
+}
+
+.actions .btn-warning {
+    background: #ffd700;
+    color: white;
+}
+
+.actions .btn-warning:hover {
+    background: #e6c200;
+}
+
+.actions .btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.actions .btn-danger:hover {
+    background: #c82333;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+}
+
+.modal.show {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-dialog {
+    width: 90%;
+    max-width: 600px;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h5 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+.modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.search-procedures {
+    margin-bottom: 20px;
+}
+
+.available-procedures {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+}
+
+.procedure-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.procedure-item:last-child {
+    border-bottom: none;
+}
+
+.procedure-item:hover {
+    background: #f7fafc;
+}
+
+.procedure-category {
+    font-size: 12px;
+    color: #666;
+}
+
+/* Custom Checkbox in Modal */
+.custom-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.custom-checkbox input[type="checkbox"] {
+    display: none;
+}
+
+.custom-checkbox label {
+    position: relative;
+    padding-left: 28px;
+    cursor: pointer;
+    margin: 0;
+}
+
+.custom-checkbox label:before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    border: 2px solid #e2e8f0;
+    border-radius: 4px;
+    background: white;
+}
+
+.custom-checkbox input[type="checkbox"]:checked + label:before {
+    background: #F16564;
+    border-color: #F16564;
+}
+
+.custom-checkbox input[type="checkbox"]:checked + label:after {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-75%) rotate(45deg);
+    width: 6px;
+    height: 11px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+}
+
+/* Side Panel Styles */
+.side-panel {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
+
+.side-panel.active {
+    right: 0;
+}
+
+.side-panel-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.side-panel-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+}
+
+.side-panel-form {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #2d3748;
+}
+
+.form-control {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #F16564;
+    box-shadow: 0 0 0 2px rgba(241, 101, 100, 0.1);
+}
+
+.form-control.error {
+    border-color: #e53e3e;
+}
+
+.form-control.success {
+    border-color: #38a169;
+}
+
+.error-message {
+    color: #e53e3e;
+    font-size: 12px;
+    margin-top: 4px;
+    display: none;
+}
+
+.error-message.show {
+    display: block;
+}
+
+.text-danger {
+    color: #e53e3e;
+}
+
+/* Multiselect Styles */
+.multiselect-container {
+    position: relative;
+}
+
+.multiselect-input {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 40px;
+    background: white;
+}
+
+.multiselect-input.active {
+    border-color: #F16564;
+    box-shadow: 0 0 0 2px rgba(241, 101, 100, 0.1);
+}
+
+.placeholder {
+    color: #a0aec0;
+    font-size: 14px;
+}
+
+.selected-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    flex: 1;
+}
+
+.selected-tag {
+    background: #F16564;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.selected-tag .remove {
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.dropdown-arrow {
+    color: #a0aec0;
+    transition: transform 0.2s;
+}
+
+.multiselect-input.active .dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+.multiselect-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+}
+
+.multiselect-dropdown.active {
+    display: block;
+}
+
+.search-container {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.search-input {
+    width: 100%;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    padding: 4px 0;
+}
+
+.options-container {
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.option-item {
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.option-item:hover {
+    background: #f7fafc;
+}
+
+/* Checkbox Group */
+.checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.verification-field {
+    background: #f7fafc;
+    padding: 16px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+}
+
+/* Side Panel Actions */
+.side-panel-actions {
+    margin-top: auto;
+    padding-top: 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.side-panel-actions .btn {
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.side-panel-actions .btn-light {
+    background: #f8f9fa;
+    color: #495057;
+    border: 1px solid #dee2e6;
+}
+
+.side-panel-actions .btn-primary {
+    background: #F16564;
+    color: white;
+}
+
+.side-panel-actions .btn-primary:hover {
+    background: #e45857;
+}
+
+.btn-spinner {
+    display: none;
+}
+
+/* Available Procedures Container */
+.available-procedures-container {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: white;
+}
+
+.procedure-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+}
+
+.procedure-item:last-child {
+    border-bottom: none;
+}
+
+.procedure-item:hover {
+    background: #f7fafc;
+}
+
+.procedure-item .custom-checkbox {
+    width: 100%;
+}
+
+.procedure-item .custom-checkbox label {
+    margin: 0;
+    padding-left: 28px;
+    cursor: pointer;
+    font-weight: 400;
+    width: 100%;
+}
+
+/* Panel Overlay */
+.panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+</style>
+
+<script>
+function switchTab(tabName) {
+    // Remove active class from all tabs and panels
+    document.querySelectorAll('.tab-item').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.remove('active');
+    });
+    
+    // Add active class to selected tab and panel
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+    document.getElementById(`${tabName}-panel`).classList.add('active');
+}
+
+function openAddProcedurePanel() {
+    const panel = document.getElementById('addProcedurePanel');
+    panel.classList.add('active');
+    
+    // Add overlay
+    if (!document.querySelector('.panel-overlay')) {
+        const overlay = document.createElement('div');
+        overlay.className = 'panel-overlay';
+        overlay.onclick = closeAddProcedurePanel;
+        document.body.appendChild(overlay);
+    }
+    
+    document.body.style.overflow = 'hidden';
+}
+
+function closeAddProcedurePanel() {
+    const panel = document.getElementById('addProcedurePanel');
+    panel.classList.remove('active');
+    
+    // Remove overlay
+    const overlay = document.querySelector('.panel-overlay');
+    if (overlay) {
+        overlay.remove();
+    }
+    
+    document.body.style.overflow = '';
+    
+    // Reset form
+    document.getElementById('addProcedureForm').reset();
+    clearAddProcedureErrors();
+}
+
+function removeProcedure(procedureId) {
+    if (confirm('Are you sure you want to remove this procedure from the course?')) {
+        // Add removal logic here
+        console.log('Remove procedure:', procedureId);
+    }
+}
+
+function filterAvailableProcedures(searchTerm) {
+    const procedureItems = document.querySelectorAll('#availableProcedures .procedure-item');
+    
+    procedureItems.forEach(item => {
+        const procedureName = item.querySelector('label').textContent.toLowerCase();
+        if (procedureName.includes(searchTerm.toLowerCase())) {
+            item.style.display = 'flex';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
+function clearAddProcedureErrors() {
+    document.querySelectorAll('#addProcedureForm .error-message').forEach(error => {
+        error.classList.remove('show');
+    });
+}
+
+// Search and filter functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('procedureSearch');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const statusFilter = document.getElementById('statusFilter');
+    
+    function filterProcedures() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const categoryValue = categoryFilter.value;
+        const statusValue = statusFilter.value;
+        
+        const rows = document.querySelectorAll('#proceduresTableBody tr');
+        
+        rows.forEach(row => {
+            const name = row.querySelector('.procedure-name span').textContent.toLowerCase();
+            const category = row.dataset.category;
+            const status = row.dataset.status;
+            
+            const matchesSearch = name.includes(searchTerm);
+            const matchesCategory = !categoryValue || category === categoryValue;
+            const matchesStatus = !statusValue || status === statusValue;
+            
+            if (matchesSearch && matchesCategory && matchesStatus) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+    
+    searchInput.addEventListener('input', filterProcedures);
+    categoryFilter.addEventListener('change', filterProcedures);
+    statusFilter.addEventListener('change', filterProcedures);
+    
+    // Add Procedure form submission
+    const addProcedureForm = document.getElementById('addProcedureForm');
+    if (addProcedureForm) {
+        addProcedureForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const selectedProcedures = document.querySelectorAll('#availableProcedures input:checked');
+            if (selectedProcedures.length === 0) {
+                showAddProcedureError('addProceduresError', 'Please select at least one procedure to add.');
+                return;
+            }
+            
+            // Show loading state
+            const submitBtn = document.getElementById('addProcedureSubmitBtn');
+            const btnText = submitBtn.querySelector('.btn-text');
+            const btnSpinner = submitBtn.querySelector('.btn-spinner');
+            
+            btnText.style.display = 'none';
+            btnSpinner.style.display = 'inline-block';
+            submitBtn.disabled = true;
+            
+            // Simulate API call
+            setTimeout(() => {
+                btnText.style.display = 'inline-block';
+                btnSpinner.style.display = 'none';
+                submitBtn.disabled = false;
+                
+                alert('Procedures added successfully!');
+                closeAddProcedurePanel();
+            }, 2000);
+        });
+    }
+});
+
+function showAddProcedureError(errorId, message) {
+    const errorElement = document.getElementById(errorId);
+    errorElement.textContent = message;
+    errorElement.classList.add('show');
+}
+
+// Edit Course Panel Functions
+function openEditCoursePanel() {
+    const panel = document.getElementById('editCoursePanel');
+    panel.classList.add('active');
+    
+    // Pre-populate form with current course data
+    populateEditForm();
+    
+    // Add overlay
+    if (!document.querySelector('.panel-overlay')) {
+        const overlay = document.createElement('div');
+        overlay.className = 'panel-overlay';
+        overlay.onclick = closeEditCoursePanel;
+        document.body.appendChild(overlay);
+    }
+    
+    document.body.style.overflow = 'hidden';
+}
+
+function closeEditCoursePanel() {
+    const panel = document.getElementById('editCoursePanel');
+    panel.classList.remove('active');
+    
+    // Remove overlay
+    const overlay = document.querySelector('.panel-overlay');
+    if (overlay) {
+        overlay.remove();
+    }
+    
+    document.body.style.overflow = '';
+    
+    // Reset form
+    document.getElementById('editCourseForm').reset();
+    clearEditFormErrors();
+}
+
+function populateEditForm() {
+    // Get current course data from the page
+    const courseName = document.querySelector('.course-header-left h1').textContent;
+    const courseDescription = document.querySelector('.course-description').textContent;
+    
+    // Populate basic fields
+    document.getElementById('editCourseName').value = courseName;
+    document.getElementById('editDescription').value = courseDescription;
+    
+    // Populate OSCE types based on current course data
+    const osceTypes = ['Classroom', 'Mock', 'Final']; // Mock data for now
+    osceTypes.forEach(type => {
+        const checkbox = document.getElementById('edit' + type);
+        if (checkbox) {
+            checkbox.checked = true;
+        }
+    });
+    
+    // Show verification field if Final is selected
+    const finalCheckbox = document.getElementById('editFinal');
+    if (finalCheckbox && finalCheckbox.checked) {
+        document.getElementById('editVerificationField').style.display = 'block';
+        document.getElementById('editVerification').checked = true;
+    }
+    
+    // Populate selected procedures
+    const selectedProcedures = [
+        {id: 1, name: 'CPR Training'},
+        {id: 2, name: 'Airway Management'},
+        {id: 3, name: 'Defibrillation'}
+    ]; // Mock data for now
+    const editSelectedTags = document.getElementById('editSelectedTags');
+    const editPlaceholder = document.querySelector('#editProceduresInput .placeholder');
+    
+    editSelectedTags.innerHTML = '';
+    selectedProcedures.forEach(procedure => {
+        // Check the corresponding checkbox
+        const checkbox = document.getElementById('editProc' + procedure.id);
+        if (checkbox) {
+            checkbox.checked = true;
+        }
+        
+        // Add tag to display
+        const tag = document.createElement('span');
+        tag.className = 'selected-tag';
+        tag.innerHTML = `
+            ${procedure.name}
+            <span class="remove" onclick="removeEditProcedureTag(${procedure.id}, this)">&times;</span>
+        `;
+        editSelectedTags.appendChild(tag);
+    });
+    
+    // Hide placeholder if procedures are selected
+    if (selectedProcedures.length > 0) {
+        editPlaceholder.style.display = 'none';
+    }
+}
+
+function toggleEditDropdown() {
+    const dropdown = document.getElementById('editProceduresDropdown');
+    const input = document.getElementById('editProceduresInput');
+    
+    dropdown.classList.toggle('active');
+    input.classList.toggle('active');
+}
+
+function filterEditProcedures(searchTerm) {
+    const options = document.querySelectorAll('#editProceduresOptions .option-item');
+    
+    options.forEach(option => {
+        const text = option.querySelector('span').textContent.toLowerCase();
+        if (text.includes(searchTerm.toLowerCase())) {
+            option.style.display = 'flex';
+        } else {
+            option.style.display = 'none';
+        }
+    });
+}
+
+function toggleEditVerificationField(checkbox) {
+    const verificationField = document.getElementById('editVerificationField');
+    if (checkbox.checked) {
+        verificationField.style.display = 'block';
+    } else {
+        verificationField.style.display = 'none';
+        document.getElementById('editVerification').checked = false;
+    }
+}
+
+function removeEditProcedureTag(procedureId, element) {
+    // Remove the tag
+    element.parentElement.remove();
+    
+    // Uncheck the corresponding checkbox
+    const checkbox = document.getElementById('editProc' + procedureId);
+    if (checkbox) {
+        checkbox.checked = false;
+    }
+    
+    // Show placeholder if no tags remain
+    const selectedTags = document.getElementById('editSelectedTags');
+    const placeholder = document.querySelector('#editProceduresInput .placeholder');
+    if (selectedTags.children.length === 0) {
+        placeholder.style.display = 'block';
+    }
+}
+
+function clearEditFormErrors() {
+    document.querySelectorAll('#editCourseForm .error-message').forEach(error => {
+        error.classList.remove('show');
+    });
+    document.querySelectorAll('#editCourseForm .form-control').forEach(input => {
+        input.classList.remove('error', 'success');
+    });
+}
+
+// Handle edit form submission
+document.addEventListener('DOMContentLoaded', function() {
+    const editForm = document.getElementById('editCourseForm');
+    if (editForm) {
+        editForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Validate form
+            if (validateEditForm()) {
+                // Show loading state
+                const submitBtn = document.getElementById('editSubmitBtn');
+                const btnText = submitBtn.querySelector('.btn-text');
+                const btnSpinner = submitBtn.querySelector('.btn-spinner');
+                
+                btnText.style.display = 'none';
+                btnSpinner.style.display = 'inline-block';
+                submitBtn.disabled = true;
+                
+                // Simulate API call
+                setTimeout(() => {
+                    btnText.style.display = 'inline-block';
+                    btnSpinner.style.display = 'none';
+                    submitBtn.disabled = false;
+                    
+                    alert('Course updated successfully!');
+                    closeEditCoursePanel();
+                }, 2000);
+            }
+        });
+    }
+    
+    // Handle procedure selection in edit form
+    document.addEventListener('change', function(e) {
+        if (e.target.matches('#editProceduresOptions input[type="checkbox"]')) {
+            handleEditProcedureSelection(e.target);
+        }
+    });
+});
+
+function handleEditProcedureSelection(checkbox) {
+    const selectedTags = document.getElementById('editSelectedTags');
+    const placeholder = document.querySelector('#editProceduresInput .placeholder');
+    const procedureText = checkbox.parentElement.nextElementSibling.textContent;
+    
+    if (checkbox.checked) {
+        // Add tag
+        const tag = document.createElement('span');
+        tag.className = 'selected-tag';
+        tag.innerHTML = `
+            ${procedureText}
+            <span class="remove" onclick="removeEditProcedureTag(${checkbox.value}, this)">&times;</span>
+        `;
+        selectedTags.appendChild(tag);
+        placeholder.style.display = 'none';
+    } else {
+        // Remove tag
+        const tags = selectedTags.querySelectorAll('.selected-tag');
+        tags.forEach(tag => {
+            if (tag.textContent.trim().startsWith(procedureText)) {
+                tag.remove();
+            }
+        });
+        
+        if (selectedTags.children.length === 0) {
+            placeholder.style.display = 'block';
+        }
+    }
+}
+
+function validateEditForm() {
+    let isValid = true;
+    
+    // Clear previous errors
+    clearEditFormErrors();
+    
+    // Validate course name
+    const courseName = document.getElementById('editCourseName');
+    if (!courseName.value.trim() || courseName.value.trim().length < 3) {
+        showEditError('editCourseNameError', 'Course name must be at least 3 characters long');
+        courseName.classList.add('error');
+        isValid = false;
+    } else {
+        courseName.classList.add('success');
+    }
+    
+    // Validate procedures
+    const selectedProcedures = document.querySelectorAll('#editProceduresOptions input:checked');
+    if (selectedProcedures.length === 0) {
+        showEditError('editProceduresError', 'Please select at least one procedure');
+        isValid = false;
+    }
+    
+    // Validate OSCE types
+    const selectedOsceTypes = document.querySelectorAll('#editOsceTypesGroup input:checked');
+    if (selectedOsceTypes.length === 0) {
+        showEditError('editOsceTypesError', 'Please select at least one OSCE type');
+        isValid = false;
+    }
+    
+    return isValid;
+}
+
+function showEditError(errorId, message) {
+    const errorElement = document.getElementById(errorId);
+    errorElement.textContent = message;
+    errorElement.classList.add('show');
+}
+
+// Batches search and filter functionality
+
+document.addEventListener('DOMContentLoaded', function() {
+    const batchSearchInput = document.getElementById('batchSearch');
+    const unitTypeFilter = document.getElementById('unitTypeFilter');
+    const unitNameFilter = document.getElementById('unitNameFilter');
+
+    function filterBatches() {
+        const searchTerm = batchSearchInput.value.toLowerCase();
+        const unitTypeValue = unitTypeFilter.value;
+        const unitNameValue = unitNameFilter.value;
+
+        const rows = document.querySelectorAll('#batchesTableBody tr');
+
+        rows.forEach(row => {
+            const name = row.querySelector('.batch-name span').textContent.toLowerCase();
+            const unitType = row.dataset.unitType;
+            const unitName = row.dataset.unitName;
+
+            const matchesSearch = name.includes(searchTerm);
+            const matchesUnitType = !unitTypeValue || unitType === unitTypeValue;
+            const matchesUnitName = !unitNameValue || unitName === unitNameValue;
+
+            if (matchesSearch && matchesUnitType && matchesUnitName) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    batchSearchInput.addEventListener('input', filterBatches);
+    unitTypeFilter.addEventListener('change', filterBatches);
+    unitNameFilter.addEventListener('change', filterBatches);
+});
+</script>
+{% endblock %} 

@@ -1,0 +1,1203 @@
+{% extends 'assessments/base.html' %}
+
+{% block content %}
+<!-- Back Button -->
+<div class="back-button-container">
+    <a href="{% url 'batch_management' %}" class="back-button">
+        <i class="fas fa-arrow-left"></i>
+        Back to Batches
+    </a>
+</div>
+
+<!-- Batch Header -->
+<div class="course-header">
+    <div class="course-header-left">
+        <h1>Batch 2024-A</h1>
+        <p class="course-description">City General Hospital</p>
+    </div>
+    <div class="course-header-right">
+        <button class="btn btn-light" onclick="openEditBatchPanel()">
+            <i class="fas fa-edit"></i>
+            Edit Batch
+        </button>
+        <button class="btn btn-danger">
+            <i class="fas fa-trash"></i>
+            Delete Batch
+        </button>
+    </div>
+</div>
+
+<!-- Batch Overview -->
+<div class="course-overview">
+    <div class="overview-card">
+        <h3>Batch Information</h3>
+        <div class="info-grid">
+            <div class="info-item">
+                <label>Batch Name</label>
+                <span class="info-value">Batch 2024-A</span>
+            </div>
+            <div class="info-item">
+                <label>Unit Type</label>
+                <span class="info-value">Hospital</span>
+            </div>
+            <div class="info-item">
+                <label>Unit Name</label>
+                <span class="info-value">City General Hospital</span>
+            </div>
+            <div class="info-item">
+                <label>Learners</label>
+                <span class="info-value">25</span>
+            </div>
+            <div class="info-item">
+                <label>Status</label>
+                <span class="status-badge status-active">Active</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tab Navigation -->
+<div class="tab-navigation">
+    <div class="tab-item active" data-tab="learners" onclick="switchTab('learners')">
+        <i class="fas fa-users"></i>
+        Learners
+    </div>
+    <div class="tab-item" data-tab="courses" onclick="switchTab('courses')">
+        <i class="fas fa-book"></i>
+        Courses
+    </div>
+</div>
+
+<!-- Add Learner Side Panel -->
+<div class="side-panel" id="addLearnerPanel">
+    <div class="side-panel-header">
+        <h3>Add Learners to Batch</h3>
+        <button type="button" class="close" onclick="closeAddLearnerPanel()">
+            <span>&times;</span>
+        </button>
+    </div>
+    
+    <form class="side-panel-form" id="addLearnerForm" novalidate>
+        <div class="form-group">
+            <label>Search Learners</label>
+            <input type="text" class="form-control" placeholder="Search available learners..." id="modalLearnerSearch" oninput="filterAvailableLearners(this.value)">
+        </div>
+
+        <div class="form-group">
+            <label>Available Learners <span class="text-danger">*</span></label>
+            <div class="available-learners-container" id="availableLearners">
+                <div class="learner-item">
+                    <div class="custom-checkbox">
+                        <input type="checkbox" id="learner_1" value="1">
+                        <label for="learner_1">
+                            <div class="learner-info">
+                                <span class="learner-name">Sarah Johnson</span>
+                                <span class="learner-email">sarah.j@example.com</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                <div class="learner-item">
+                    <div class="custom-checkbox">
+                        <input type="checkbox" id="learner_2" value="2">
+                        <label for="learner_2">
+                            <div class="learner-info">
+                                <span class="learner-name">Michael Chen</span>
+                                <span class="learner-email">m.chen@example.com</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                <div class="learner-item">
+                    <div class="custom-checkbox">
+                        <input type="checkbox" id="learner_3" value="3">
+                        <label for="learner_3">
+                            <div class="learner-info">
+                                <span class="learner-name">Emily Davis</span>
+                                <span class="learner-email">emily.d@example.com</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="error-message" id="addLearnersError"></div>
+        </div>
+
+        <div class="side-panel-actions">
+            <button type="button" class="btn btn-light" onclick="closeAddLearnerPanel()">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="addLearnerSubmitBtn">
+                <span class="btn-text">Add Learners</span>
+                <span class="btn-spinner" style="display: none;">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </span>
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Add Course Side Panel -->
+<div class="side-panel" id="addCoursePanel">
+    <div class="side-panel-header">
+        <h3>Add Courses to Batch</h3>
+        <button type="button" class="close" onclick="closeAddCoursePanel()">
+            <span>&times;</span>
+        </button>
+    </div>
+    
+    <form class="side-panel-form" id="addCourseForm" novalidate>
+        <div class="form-group">
+            <label>Search Courses</label>
+            <input type="text" class="form-control" placeholder="Search available courses..." id="modalCourseSearch" oninput="filterAvailableCourses(this.value)">
+        </div>
+
+        <div class="form-group">
+            <label>Available Courses <span class="text-danger">*</span></label>
+            <div class="available-courses-container" id="availableCourses">
+                <div class="course-item">
+                    <div class="custom-checkbox">
+                        <input type="checkbox" id="course_1" value="1">
+                        <label for="course_1">
+                            <div class="course-info">
+                                <span class="course-name">Basic Life Support</span>
+                                <div class="course-details">
+                                    <span class="course-procedures">12 procedures</span>
+                                    <span class="course-osce">Classroom, Mock, Final</span>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                <div class="course-item">
+                    <div class="custom-checkbox">
+                        <input type="checkbox" id="course_2" value="2">
+                        <label for="course_2">
+                            <div class="course-info">
+                                <span class="course-name">Advanced Cardiac Life Support</span>
+                                <div class="course-details">
+                                    <span class="course-procedures">24 procedures</span>
+                                    <span class="course-osce">Classroom, Mock</span>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                <div class="course-item">
+                    <div class="custom-checkbox">
+                        <input type="checkbox" id="course_3" value="3">
+                        <label for="course_3">
+                            <div class="course-info">
+                                <span class="course-name">Pediatric Advanced Life Support</span>
+                                <div class="course-details">
+                                    <span class="course-procedures">18 procedures</span>
+                                    <span class="course-osce">Classroom, Final</span>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                <div class="course-item">
+                    <div class="custom-checkbox">
+                        <input type="checkbox" id="course_4" value="4">
+                        <label for="course_4">
+                            <div class="course-info">
+                                <span class="course-name">Neonatal Resuscitation</span>
+                                <div class="course-details">
+                                    <span class="course-procedures">15 procedures</span>
+                                    <span class="course-osce">Classroom, Mock, Final</span>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="error-message" id="addCoursesError"></div>
+        </div>
+
+        <div class="side-panel-actions">
+            <button type="button" class="btn btn-light" onclick="closeAddCoursePanel()">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="addCourseSubmitBtn">
+                <span class="btn-text">Add Courses</span>
+                <span class="btn-spinner" style="display: none;">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </span>
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Tab Content -->
+<div class="tab-content">
+    <!-- Learners Tab -->
+    <div class="tab-panel active" id="learners-panel">
+        <div class="procedures-header">
+            <div class="procedures-title">
+                <h3>Batch Learners</h3>
+                <p class="text-muted">Manage learners in this batch</p>
+            </div>
+            <button class="btn btn-primary" onclick="openAddLearnerPanel()">
+                <i class="fas fa-plus"></i>
+                Add Learner
+            </button>
+        </div>
+
+        <!-- Search and Filter -->
+        <div class="procedures-controls">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Search learners..." id="learnerSearch">
+            </div>
+            <div class="filter-controls">
+                <select class="form-control" id="statusFilter">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Learners Table -->
+        <div class="procedures-table">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Learner Name</th>
+                        <th>Email</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="learnersTableBody">
+                    <tr>
+                        <td>John Doe</td>
+                        <td>john.doe@example.com</td>
+                        <td>
+                            <span class="status-badge status-active">Active</span>
+                        </td>
+                        <td>
+                            <div class="actions">
+                                <button class="btn-icon">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn-icon btn-danger">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Jane Smith</td>
+                        <td>jane.smith@example.com</td>
+                        <td>
+                            <span class="status-badge status-active">Active</span>
+                        </td>
+                        <td>
+                            <div class="actions">
+                                <button class="btn-icon">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn-icon btn-danger">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Courses Tab -->
+    <div class="tab-panel" id="courses-panel">
+        <div class="procedures-header">
+            <div class="procedures-title">
+                <h3>Batch Courses</h3>
+                <p class="text-muted">Manage courses assigned to this batch</p>
+            </div>
+            <button class="btn btn-primary" onclick="openAddCoursePanel()">
+                <i class="fas fa-plus"></i>
+                Add Course
+            </button>
+        </div>
+
+        <!-- Search and Filter -->
+        <div class="procedures-controls">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Search courses..." id="courseSearch">
+            </div>
+            <div class="filter-controls">
+                <select class="form-control" id="courseStatusFilter">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Courses Table -->
+        <div class="procedures-table">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Course Name</th>
+                        <th>No. of Procedures</th>
+                        <th>OSCE Types</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="coursesTableBody">
+                    <tr>
+                        <td>Basic Life Support</td>
+                        <td>12</td>
+                        <td>
+                            <div class="osce-types-display">
+                                <span class="osce-badge">Classroom</span>
+                                <span class="osce-badge">Mock</span>
+                                <span class="osce-badge">Final</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="status-badge status-active">Active</span>
+                        </td>
+                        <td>
+                            <div class="actions">
+                                <button class="btn-icon">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn-icon btn-danger">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Advanced Cardiac Life Support</td>
+                        <td>24</td>
+                        <td>
+                            <div class="osce-types-display">
+                                <span class="osce-badge">Classroom</span>
+                                <span class="osce-badge">Mock</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="status-badge status-active">Active</span>
+                        </td>
+                        <td>
+                            <div class="actions">
+                                <button class="btn-icon">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn-icon btn-danger">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Reuse all styles from course_detail.html */
+.back-button-container {
+    margin-bottom: 24px;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #4a5568;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.back-button:hover {
+    background-color: #f7fafc;
+    color: #2d3748;
+    text-decoration: none;
+}
+
+.back-button i {
+    font-size: 12px;
+}
+
+/* Course Header */
+.course-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.course-header-left h1 {
+    margin: 0 0 8px 0;
+    font-size: 32px;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.course-description {
+    color: #666;
+    font-size: 16px;
+    line-height: 1.5;
+    margin: 0;
+    max-width: 600px;
+}
+
+.course-header-right {
+    display: flex;
+    gap: 12px;
+}
+
+.course-header-right .btn {
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.course-header-right .btn-light {
+    background: #f8f9fa;
+    color: #495057;
+    border: 1px solid #dee2e6;
+}
+
+.course-header-right .btn-light:hover {
+    background: #e2e6ea;
+}
+
+.course-header-right .btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.course-header-right .btn-danger:hover {
+    background: #c82333;
+}
+
+/* Course Overview */
+.course-overview {
+    margin-bottom: 32px;
+}
+
+.overview-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 24px;
+}
+
+.overview-card h3 {
+    margin: 0 0 20px 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.info-item label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.info-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: #2d3748;
+}
+
+/* Status Badge */
+.status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.status-active {
+    background: #c6f6d5;
+    color: #22543d;
+}
+
+.status-inactive {
+    background: #fed7d7;
+    color: #c53030;
+}
+
+/* OSCE Types Display */
+.osce-types-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.osce-badge {
+    background: #edf2f7;
+    color: #4a5568;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Tab Navigation */
+.tab-navigation {
+    display: flex;
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 24px;
+}
+
+.tab-item {
+    padding: 12px 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #4a5568;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.tab-item:hover {
+    color: #F16564;
+    background: #f7fafc;
+}
+
+.tab-item.active {
+    color: #F16564;
+    border-bottom-color: #F16564;
+    background: #f7fafc;
+}
+
+/* Tab Content */
+.tab-content {
+    min-height: 400px;
+}
+
+.tab-panel {
+    display: none;
+}
+
+.tab-panel.active {
+    display: block;
+}
+
+/* Procedures Header */
+.procedures-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+}
+
+.procedures-title h3 {
+    margin: 0 0 4px 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.procedures-controls {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+    align-items: center;
+}
+
+.search-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    max-width: 400px;
+}
+
+.search-box input {
+    border: none;
+    outline: none;
+    width: 100%;
+    font-size: 14px;
+}
+
+.filter-controls {
+    display: flex;
+    gap: 12px;
+}
+
+.filter-controls select {
+    min-width: 150px;
+}
+
+/* Table Styles */
+.procedures-table {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table th {
+    background: #f8fafc;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5568;
+    text-transform: uppercase;
+}
+
+.table td {
+    padding: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+/* Action Buttons */
+.actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    background: #edf2f7;
+    color: #4a5568;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.btn-icon:hover {
+    background: #e2e8f0;
+}
+
+.btn-icon.btn-danger {
+    color: #c53030;
+    background: #fff5f5;
+}
+
+.btn-icon.btn-danger:hover {
+    background: #fed7d7;
+}
+
+/* Button Styles */
+.btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: #F16564;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #e45857;
+}
+
+.btn-light {
+    background: #f8f9fa;
+    color: #495057;
+    border: 1px solid #dee2e6;
+}
+
+.text-muted {
+    color: #666;
+}
+
+/* Side Panel Styles */
+.side-panel {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
+
+.side-panel.active {
+    right: 0;
+}
+
+.side-panel-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.side-panel-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+}
+
+.side-panel-form {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Available Learners Container */
+.available-learners-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: white;
+}
+
+.learner-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.learner-item:last-child {
+    border-bottom: none;
+}
+
+.learner-item:hover {
+    background: #f7fafc;
+}
+
+.learner-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.learner-name {
+    font-weight: 500;
+    color: #2d3748;
+}
+
+.learner-email {
+    font-size: 12px;
+    color: #718096;
+}
+
+/* Custom Checkbox */
+.custom-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.custom-checkbox input[type="checkbox"] {
+    display: none;
+}
+
+.custom-checkbox label {
+    position: relative;
+    padding-left: 28px;
+    cursor: pointer;
+    margin: 0;
+    width: 100%;
+}
+
+.custom-checkbox label:before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    border: 2px solid #e2e8f0;
+    border-radius: 4px;
+    background: white;
+}
+
+.custom-checkbox input[type="checkbox"]:checked + label:before {
+    background: #F16564;
+    border-color: #F16564;
+}
+
+.custom-checkbox input[type="checkbox"]:checked + label:after {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-75%) rotate(45deg);
+    width: 6px;
+    height: 11px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+}
+
+/* Form Elements */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #2d3748;
+}
+
+.form-control {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #F16564;
+    box-shadow: 0 0 0 2px rgba(241, 101, 100, 0.1);
+}
+
+.text-danger {
+    color: #e53e3e;
+}
+
+.error-message {
+    color: #e53e3e;
+    font-size: 12px;
+    margin-top: 4px;
+    display: none;
+}
+
+.error-message.show {
+    display: block;
+}
+
+/* Side Panel Actions */
+.side-panel-actions {
+    margin-top: auto;
+    padding-top: 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+/* Panel Overlay */
+.panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+}
+
+.panel-overlay.active {
+    display: block;
+}
+
+/* Available Courses Container */
+.available-courses-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: white;
+}
+
+.course-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.course-item:last-child {
+    border-bottom: none;
+}
+
+.course-item:hover {
+    background: #f7fafc;
+}
+
+.course-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.course-name {
+    font-weight: 500;
+    color: #2d3748;
+}
+
+.course-details {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: #718096;
+}
+
+.course-procedures {
+    color: #4a5568;
+}
+
+.course-osce {
+    color: #718096;
+}
+</style>
+
+<script>
+function switchTab(tabName) {
+    // Remove active class from all tabs and panels
+    document.querySelectorAll('.tab-item').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.remove('active');
+    });
+    
+    // Add active class to selected tab and panel
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+    document.getElementById(`${tabName}-panel`).classList.add('active');
+}
+
+function openAddLearnerPanel() {
+    const panel = document.getElementById('addLearnerPanel');
+    panel.classList.add('active');
+    
+    // Add overlay
+    if (!document.querySelector('.panel-overlay')) {
+        const overlay = document.createElement('div');
+        overlay.className = 'panel-overlay active';
+        overlay.onclick = closeAddLearnerPanel;
+        document.body.appendChild(overlay);
+    }
+    
+    document.body.style.overflow = 'hidden';
+}
+
+function closeAddLearnerPanel() {
+    const panel = document.getElementById('addLearnerPanel');
+    panel.classList.remove('active');
+    
+    // Remove overlay
+    const overlay = document.querySelector('.panel-overlay');
+    if (overlay) {
+        overlay.remove();
+    }
+    
+    document.body.style.overflow = '';
+    
+    // Reset form
+    document.getElementById('addLearnerForm').reset();
+    clearAddLearnerErrors();
+}
+
+function filterAvailableLearners(searchTerm) {
+    const learnerItems = document.querySelectorAll('#availableLearners .learner-item');
+    
+    learnerItems.forEach(item => {
+        const learnerName = item.querySelector('.learner-name').textContent.toLowerCase();
+        const learnerEmail = item.querySelector('.learner-email').textContent.toLowerCase();
+        
+        if (learnerName.includes(searchTerm.toLowerCase()) || learnerEmail.includes(searchTerm.toLowerCase())) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
+function clearAddLearnerErrors() {
+    document.querySelectorAll('#addLearnerForm .error-message').forEach(error => {
+        error.classList.remove('show');
+    });
+}
+
+// Handle form submission
+document.addEventListener('DOMContentLoaded', function() {
+    const addLearnerForm = document.getElementById('addLearnerForm');
+    if (addLearnerForm) {
+        addLearnerForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const selectedLearners = document.querySelectorAll('#availableLearners input:checked');
+            if (selectedLearners.length === 0) {
+                const errorElement = document.getElementById('addLearnersError');
+                errorElement.textContent = 'Please select at least one learner to add.';
+                errorElement.classList.add('show');
+                return;
+            }
+            
+            // Show loading state
+            const submitBtn = document.getElementById('addLearnerSubmitBtn');
+            const btnText = submitBtn.querySelector('.btn-text');
+            const btnSpinner = submitBtn.querySelector('.btn-spinner');
+            
+            btnText.style.display = 'none';
+            btnSpinner.style.display = 'inline-block';
+            submitBtn.disabled = true;
+            
+            // Simulate API call
+            setTimeout(() => {
+                btnText.style.display = 'inline-block';
+                btnSpinner.style.display = 'none';
+                submitBtn.disabled = false;
+                
+                alert('Learners added successfully!');
+                closeAddLearnerPanel();
+            }, 2000);
+        });
+    }
+});
+
+function openAddCoursePanel() {
+    const panel = document.getElementById('addCoursePanel');
+    panel.classList.add('active');
+    
+    // Add overlay
+    if (!document.querySelector('.panel-overlay')) {
+        const overlay = document.createElement('div');
+        overlay.className = 'panel-overlay active';
+        overlay.onclick = closeAddCoursePanel;
+        document.body.appendChild(overlay);
+    }
+    
+    document.body.style.overflow = 'hidden';
+}
+
+function closeAddCoursePanel() {
+    const panel = document.getElementById('addCoursePanel');
+    panel.classList.remove('active');
+    
+    // Remove overlay
+    const overlay = document.querySelector('.panel-overlay');
+    if (overlay) {
+        overlay.remove();
+    }
+    
+    document.body.style.overflow = '';
+    
+    // Reset form
+    document.getElementById('addCourseForm').reset();
+    clearAddCourseErrors();
+}
+
+function filterAvailableCourses(searchTerm) {
+    const courseItems = document.querySelectorAll('#availableCourses .course-item');
+    
+    courseItems.forEach(item => {
+        const courseName = item.querySelector('.course-name').textContent.toLowerCase();
+        
+        if (courseName.includes(searchTerm.toLowerCase())) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
+function clearAddCourseErrors() {
+    document.querySelectorAll('#addCourseForm .error-message').forEach(error => {
+        error.classList.remove('show');
+    });
+}
+
+// Handle form submission
+document.addEventListener('DOMContentLoaded', function() {
+    const addCourseForm = document.getElementById('addCourseForm');
+    if (addCourseForm) {
+        addCourseForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const selectedCourses = document.querySelectorAll('#availableCourses input:checked');
+            if (selectedCourses.length === 0) {
+                const errorElement = document.getElementById('addCoursesError');
+                errorElement.textContent = 'Please select at least one course to add.';
+                errorElement.classList.add('show');
+                return;
+            }
+            
+            // Show loading state
+            const submitBtn = document.getElementById('addCourseSubmitBtn');
+            const btnText = submitBtn.querySelector('.btn-text');
+            const btnSpinner = submitBtn.querySelector('.btn-spinner');
+            
+            btnText.style.display = 'none';
+            btnSpinner.style.display = 'inline-block';
+            submitBtn.disabled = true;
+            
+            // Simulate API call
+            setTimeout(() => {
+                btnText.style.display = 'inline-block';
+                btnSpinner.style.display = 'none';
+                submitBtn.disabled = false;
+                
+                alert('Courses added successfully!');
+                closeAddCoursePanel();
+            }, 2000);
+        });
+    }
+});
+</script>
+{% endblock %} 

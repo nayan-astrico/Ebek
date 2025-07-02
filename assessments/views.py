@@ -2078,3 +2078,52 @@ def reset_password(request, token):
 def onboarding_dashboard(request):
     return render(request, 'assessments/onboarding/onboarding_dashboard.html')
 
+def course_management(request):
+    """
+    View function for the course management page.
+    """
+    return render(request, 'assessments/course_management.html')
+
+def course_detail(request, course_id):
+    """
+    View function for individual course detail page.
+    """
+    # Mock course data - replace with actual database query
+    course_data = {
+        'id': course_id,
+        'name': 'Basic Life Support',
+        'description': 'Comprehensive training program for basic life support techniques and emergency response procedures.',
+        'status': 'active',
+        'total_procedures': 12,
+        'osce_types': ['Classroom', 'Mock', 'Final'],
+        'verification_required': True,
+        'created_date': '2024-01-15',
+        'last_modified': '2024-01-20',
+        'procedures': [
+            {'id': 1, 'name': 'CPR Adult', 'category': 'Cardiopulmonary', 'status': 'active'},
+            {'id': 2, 'name': 'AED Usage', 'category': 'Equipment', 'status': 'active'},
+            {'id': 3, 'name': 'Airway Management', 'category': 'Respiratory', 'status': 'active'},
+            {'id': 4, 'name': 'Chest Compressions', 'category': 'Cardiopulmonary', 'status': 'active'},
+            {'id': 5, 'name': 'Pulse Check', 'category': 'Assessment', 'status': 'active'},
+            {'id': 6, 'name': 'Recovery Position', 'category': 'Positioning', 'status': 'active'},
+        ]
+    }
+    
+    return render(request, 'assessments/course_detail.html', {'course': course_data})
+
+@login_required
+def batch_management(request):
+    """
+    View for managing batches. Displays a list of all batches and provides functionality
+    to create, edit, and delete batches.
+    """
+    return render(request, 'assessments/batch_management.html')
+
+@login_required
+def batch_detail(request, batch_id):
+    """
+    View for displaying and managing details of a specific batch.
+    """
+    # This will be implemented later when we create the batch detail template
+    return render(request, 'assessments/batch_detail.html', {'batch_id': batch_id})
+

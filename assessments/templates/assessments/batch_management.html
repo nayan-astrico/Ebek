@@ -1,0 +1,1143 @@
+{% extends 'assessments/base.html' %}
+
+{% block content %}
+<!-- Header -->
+<div class="header">
+    <div class="header-left">
+        <h1>Batches</h1>
+        <p class="text-muted">Manage your training batches</p>
+    </div>
+    <div class="header-right">
+        <button class="btn btn-primary" onclick="toggleAddBatchPanel()">
+            <i class="fas fa-plus"></i>
+            Add Batch
+        </button>
+    </div>
+</div>
+
+<div class="main-content">
+    <!-- Search and Filter Bar -->
+    <div class="search-filter-bar">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" placeholder="Search batches...">
+        </div>
+        <button class="btn-filter" onclick="toggleFilterPanel()">
+            <i class="fas fa-filter"></i>
+            Filters
+        </button>
+    </div>
+
+    <!-- Table Container -->
+    <div class="table-container">
+        <!-- Add Batch Side Panel -->
+        <div class="side-panel" id="addBatchPanel">
+            <div class="side-panel-header">
+                <h3>Add New Batch</h3>
+                <button type="button" class="close" onclick="toggleAddBatchPanel()">
+                    <span>&times;</span>
+                </button>
+            </div>
+            
+            <form class="side-panel-form" id="batchForm" novalidate>
+                <div class="form-group">
+                    <label>Batch Name <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="batchName" name="batchName" required>
+                    <div class="error-message" id="batchNameError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label>Unit Type <span class="text-danger">*</span></label>
+                    <select class="form-control" id="unitType" name="unitType" onchange="handleUnitTypeChange()" required>
+                        <option value="">Select Unit Type</option>
+                        <option value="hospital">Hospital</option>
+                        <option value="institution">Institution</option>
+                    </select>
+                    <div class="error-message" id="unitTypeError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label>Unit Name <span class="text-danger">*</span></label>
+                    <select class="form-control" id="unitName" name="unitName" required disabled>
+                        <option value="">Select Unit Name</option>
+                    </select>
+                    <div class="error-message" id="unitNameError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label>Learners <span class="text-danger">*</span></label>
+                    <div class="multiselect-container">
+                        <div class="multiselect-input" onclick="toggleDropdown()" id="learnersInput">
+                            <span class="placeholder">Select learners</span>
+                            <div class="selected-tags" id="selectedTags"></div>
+                            <i class="fas fa-chevron-down dropdown-arrow"></i>
+                        </div>
+                        <div class="multiselect-dropdown" id="learnersDropdown">
+                            <div class="search-container">
+                                <input type="text" placeholder="Search learners..." class="search-input" oninput="filterLearners(this.value)">
+                            </div>
+                            <div class="options-container" id="learnersOptions">
+                                <!-- Learners will be populated dynamically based on unit selection -->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="error-message" id="learnersError"></div>
+                </div>
+
+                <div class="side-panel-actions">
+                    <button type="button" class="btn btn-light" onclick="toggleAddBatchPanel()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <span class="btn-text">Create Batch</span>
+                        <span class="btn-spinner" style="display: none;">
+                            <i class="fas fa-spinner fa-spin"></i>
+                        </span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Filter Side Panel -->
+        <div class="filter-panel" id="filterPanel">
+            <div class="filter-header">
+                <h3>Filter Batches</h3>
+                <button type="button" class="close" onclick="toggleFilterPanel()">
+                    <span>&times;</span>
+                </button>
+            </div>
+            
+            <form class="filter-form">
+                <div class="filter-layout">
+                    <!-- Main Filter Types (30%) -->
+                    <div class="filter-types">
+                        <div class="filter-type active" data-filter="unit" onclick="switchFilter('unit')">
+                            <span>Unit Type</span>
+                        </div>
+                        <div class="filter-type" data-filter="status" onclick="switchFilter('status')">
+                            <span>Status</span>
+                        </div>
+                    </div>
+
+                    <!-- Filter Content (70%) -->
+                    <div class="filter-content-wrapper">
+                        <!-- Unit Type Content -->
+                        <div class="filter-content active" id="unit-content">
+                            <div class="filter-search">
+                                <input type="text" placeholder="Search unit types">
+                                <div class="selection-count">0 Unit selected</div>
+                            </div>
+                            <div class="options-list">
+                                <label class="option-item">
+                                    <input type="checkbox" name="unit" value="hospital">
+                                    <span>Hospital</span>
+                                </label>
+                                <label class="option-item">
+                                    <input type="checkbox" name="unit" value="institution">
+                                    <span>Institution</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Status Content -->
+                        <div class="filter-content" id="status-content">
+                            <div class="filter-search">
+                                <input type="text" placeholder="Search status">
+                                <div class="selection-count">0 Status selected</div>
+                            </div>
+                            <div class="options-list">
+                                <label class="option-item">
+                                    <input type="checkbox" name="status" value="active">
+                                    <span>Active</span>
+                                </label>
+                                <label class="option-item">
+                                    <input type="checkbox" name="status" value="inactive">
+                                    <span>Inactive</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filter Actions -->
+                <div class="filter-actions">
+                    <button type="button" class="btn btn-light" onclick="toggleFilterPanel()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Apply filter</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Table -->
+        <div class="card">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Batch Name</th>
+                        <th>Unit Type</th>
+                        <th>Unit Name</th>
+                        <th>Learners</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="batch-row" onclick="window.location.href='{% url 'batch_detail' 1 %}'">
+                        <td>Batch 2024-A</td>
+                        <td>Hospital</td>
+                        <td>City General Hospital</td>
+                        <td>25</td>
+                        <td>
+                            <label class="switch">
+                                <input type="checkbox" checked>
+                                <span class="slider round"></span>
+                            </label>
+                        </td>
+                        <td>
+                            <div class="actions">
+                                <button class="btn-icon">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn-icon btn-danger">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr class="batch-row" onclick="window.location.href='{% url 'batch_detail' 2 %}'">
+                        <td>Batch 2024-B</td>
+                        <td>Institution</td>
+                        <td>Medical College</td>
+                        <td>30</td>
+                        <td>
+                            <label class="switch">
+                                <input type="checkbox" checked>
+                                <span class="slider round"></span>
+                            </label>
+                        </td>
+                        <td>
+                            <div class="actions">
+                                <button class="btn-icon">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn-icon btn-danger">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Main Content Layout */
+.main-content {
+    padding: 0;
+    margin-top: 24px;
+}
+
+/* Search and Filter Bar */
+.search-filter-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.search-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 16px;
+}
+
+.search-box input {
+    border: none;
+    outline: none;
+    width: 100%;
+    font-size: 14px;
+}
+
+.btn-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #4a5568;
+    cursor: pointer;
+}
+
+.btn-filter:hover {
+    background: #F8FAFC;
+    border-color: #CBD5E0;
+}
+
+/* Update header styles */
+.header {
+    margin-bottom: 0;
+}
+
+.btn.btn-primary {
+    background: #F16564;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 6px;
+}
+
+.btn.btn-primary:hover {
+    background: #e45857;
+}
+
+/* Table container */
+.table-container {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Reusing existing styles from course_management.html */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.header-left h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.header-left p {
+    margin: 4px 0 0;
+    color: #666;
+}
+
+.btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: #F16564;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #e45857;
+}
+
+.btn-light {
+    background: #f8f9fa;
+    color: #495057;
+    border: 1px solid #dee2e6;
+}
+
+.side-panel {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
+
+.side-panel.active {
+    right: 0;
+}
+
+.side-panel-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.side-panel-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+}
+
+.side-panel-form {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #2d3748;
+}
+
+.form-control {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #F16564;
+    box-shadow: 0 0 0 2px rgba(241, 101, 100, 0.1);
+}
+
+.form-control:disabled {
+    background-color: #f8f9fa;
+    cursor: not-allowed;
+}
+
+.error-message {
+    color: #e53e3e;
+    font-size: 12px;
+    margin-top: 4px;
+    display: none;
+}
+
+.multiselect-container {
+    position: relative;
+}
+
+.multiselect-input {
+    min-height: 38px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: white;
+}
+
+.multiselect-input.active {
+    border-color: #F16564;
+}
+
+.placeholder {
+    color: #a0aec0;
+}
+
+.selected-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.tag {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.multiselect-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin-top: 4px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    display: none;
+}
+
+.multiselect-dropdown.active {
+    display: block;
+}
+
+.search-container {
+    padding: 8px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.search-input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    outline: none;
+}
+
+.options-container {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.option-item {
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.option-item:hover {
+    background: #f7fafc;
+}
+
+.side-panel-actions {
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: auto;
+}
+
+.search-filter-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.search-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 16px;
+}
+
+.search-box i {
+    color: #a0aec0;
+}
+
+.search-box input {
+    border: none;
+    outline: none;
+    width: 100%;
+    font-size: 14px;
+    background: transparent;
+}
+
+.btn-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #4a5568;
+    cursor: pointer;
+}
+
+.btn-filter:hover {
+    background: #f7fafc;
+    border-color: #cbd5e0;
+}
+
+.btn-filter i {
+    font-size: 14px;
+}
+
+.card {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table th {
+    background: #f8fafc;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5568;
+    text-transform: uppercase;
+}
+
+.table td {
+    padding: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.batch-row {
+    cursor: pointer;
+}
+
+.batch-row:hover {
+    background-color: #f7fafc;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: #1AA09A;
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+.actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    background: #edf2f7;
+    color: #4a5568;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.btn-icon:hover {
+    background: #e2e8f0;
+}
+
+.btn-icon.btn-danger {
+    color: #c53030;
+    background: #fff5f5;
+}
+
+.btn-icon.btn-danger:hover {
+    background: #fed7d7;
+}
+
+.side-panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+}
+
+.side-panel-overlay.active {
+    display: block;
+}
+
+/* Filter Panel Styles */
+.filter-panel {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+}
+
+.filter-panel.active {
+    right: 0;
+}
+
+.filter-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.filter-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.filter-layout {
+    display: flex;
+    height: calc(100vh - 140px);
+}
+
+.filter-types {
+    width: 30%;
+    border-right: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.filter-type {
+    padding: 16px 20px;
+    cursor: pointer;
+    border-bottom: 1px solid #e2e8f0;
+    font-weight: 500;
+    color: #4a5568;
+}
+
+.filter-type.active {
+    background: white;
+    color: #F16564;
+    border-right: 2px solid #F16564;
+}
+
+.filter-content-wrapper {
+    width: 70%;
+    position: relative;
+}
+
+.filter-content {
+    display: none;
+    height: 100%;
+    flex-direction: column;
+}
+
+.filter-content.active {
+    display: flex;
+}
+
+.filter-search {
+    padding: 20px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.filter-search input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin-bottom: 12px;
+}
+
+.selection-count {
+    font-size: 12px;
+    color: #666;
+}
+
+.options-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 20px;
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    cursor: pointer;
+}
+
+.option-item input[type="checkbox"] {
+    margin: 0;
+}
+
+.filter-actions {
+    padding: 16px 20px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+/* Add the overlay styles */
+.side-panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+}
+
+.side-panel-overlay.active {
+    display: block;
+}
+</style>
+
+<script>
+let selectedLearners = [];
+
+function toggleAddBatchPanel() {
+    const panel = document.getElementById('addBatchPanel');
+    panel.classList.toggle('active');
+    
+    if (panel.classList.contains('active')) {
+        document.body.style.overflow = 'hidden';
+        if (!document.querySelector('.side-panel-overlay')) {
+            const overlay = document.createElement('div');
+            overlay.className = 'side-panel-overlay active';
+            overlay.onclick = toggleAddBatchPanel;
+            document.body.appendChild(overlay);
+        }
+    } else {
+        document.body.style.overflow = '';
+        const overlay = document.querySelector('.side-panel-overlay');
+        if (overlay) {
+            overlay.remove();
+        }
+    }
+}
+
+function handleUnitTypeChange() {
+    const unitType = document.getElementById('unitType').value;
+    const unitNameSelect = document.getElementById('unitName');
+    
+    // Clear current options
+    unitNameSelect.innerHTML = '<option value="">Select Unit Name</option>';
+    
+    if (unitType) {
+        unitNameSelect.disabled = false;
+        
+        // Populate unit names based on type
+        if (unitType === 'hospital') {
+            const hospitals = [
+                { id: 1, name: 'City General Hospital' },
+                { id: 2, name: 'Central Hospital' },
+                { id: 3, name: 'Community Medical Center' }
+            ];
+            
+            hospitals.forEach(hospital => {
+                const option = document.createElement('option');
+                option.value = hospital.id;
+                option.textContent = hospital.name;
+                unitNameSelect.appendChild(option);
+            });
+        } else {
+            const institutions = [
+                { id: 1, name: 'Medical College' },
+                { id: 2, name: 'Nursing School' },
+                { id: 3, name: 'Health Institute' }
+            ];
+            
+            institutions.forEach(institution => {
+                const option = document.createElement('option');
+                option.value = institution.id;
+                option.textContent = institution.name;
+                unitNameSelect.appendChild(option);
+            });
+        }
+    } else {
+        unitNameSelect.disabled = true;
+    }
+}
+
+function toggleDropdown() {
+    const dropdown = document.getElementById('learnersDropdown');
+    const input = document.querySelector('.multiselect-input');
+    
+    dropdown.classList.toggle('active');
+    input.classList.toggle('active');
+}
+
+function filterLearners(searchText) {
+    const options = document.querySelectorAll('#learnersOptions .option-item');
+    options.forEach(option => {
+        const text = option.textContent.toLowerCase();
+        option.style.display = text.includes(searchText.toLowerCase()) ? 'flex' : 'none';
+    });
+}
+
+function updateSelectedLearners() {
+    const checkboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]:checked');
+    const selectedTags = document.getElementById('selectedTags');
+    const placeholder = document.querySelector('.placeholder');
+    
+    selectedTags.innerHTML = '';
+    selectedLearners = Array.from(checkboxes).map(cb => cb.value);
+    
+    if (selectedLearners.length > 0) {
+        placeholder.style.display = 'none';
+        checkboxes.forEach(checkbox => {
+            const optionText = checkbox.closest('.option-item').querySelector('span').textContent;
+            const tag = document.createElement('div');
+            tag.className = 'tag';
+            tag.innerHTML = `
+                ${optionText}
+                <span class="tag-remove" onclick="removeLearner('${checkbox.value}')">&times;</span>
+            `;
+            selectedTags.appendChild(tag);
+        });
+    } else {
+        placeholder.style.display = 'block';
+    }
+}
+
+function removeLearner(value) {
+    const checkbox = document.querySelector(`#learnersOptions input[value="${value}"]`);
+    if (checkbox) {
+        checkbox.checked = false;
+        updateSelectedLearners();
+    }
+}
+
+function toggleFilterPanel() {
+    const panel = document.getElementById('filterPanel');
+    panel.classList.toggle('active');
+    
+    if (panel.classList.contains('active')) {
+        document.body.style.overflow = 'hidden';
+        if (!document.querySelector('.filter-overlay')) {
+            const overlay = document.createElement('div');
+            overlay.className = 'side-panel-overlay filter-overlay active';
+            overlay.onclick = toggleFilterPanel;
+            document.body.appendChild(overlay);
+        }
+    } else {
+        document.body.style.overflow = '';
+        const overlay = document.querySelector('.filter-overlay');
+        if (overlay) {
+            overlay.remove();
+        }
+    }
+}
+
+function switchFilter(filterType) {
+    document.querySelectorAll('.filter-type').forEach(type => {
+        type.classList.remove('active');
+    });
+    
+    document.querySelectorAll('.filter-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    document.querySelector(`[data-filter="${filterType}"]`).classList.add('active');
+    document.getElementById(`${filterType}-content`).classList.add('active');
+}
+
+// Form Validation
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('batchForm');
+    
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        if (validateForm()) {
+            submitForm();
+        }
+    });
+    
+    // Real-time validation
+    document.getElementById('batchName').addEventListener('input', function() {
+        validateField('batchName', this.value.trim() !== '', 'Batch name is required');
+    });
+    
+    document.getElementById('unitType').addEventListener('change', function() {
+        validateField('unitType', this.value !== '', 'Unit type is required');
+    });
+    
+    document.getElementById('unitName').addEventListener('change', function() {
+        validateField('unitName', this.value !== '', 'Unit name is required');
+    });
+});
+
+function validateField(fieldName, condition, errorMessage) {
+    const field = document.getElementById(fieldName);
+    const errorElement = document.getElementById(`${fieldName}Error`);
+    
+    if (!condition) {
+        field.classList.add('error');
+        field.classList.remove('success');
+        errorElement.textContent = errorMessage;
+        errorElement.style.display = 'block';
+        return false;
+    } else {
+        field.classList.remove('error');
+        field.classList.add('success');
+        errorElement.style.display = 'none';
+        return true;
+    }
+}
+
+function validateForm() {
+    let isValid = true;
+    
+    isValid = validateField('batchName', 
+        document.getElementById('batchName').value.trim() !== '', 
+        'Batch name is required') && isValid;
+    
+    isValid = validateField('unitType',
+        document.getElementById('unitType').value !== '',
+        'Unit type is required') && isValid;
+    
+    isValid = validateField('unitName',
+        document.getElementById('unitName').value !== '',
+        'Unit name is required') && isValid;
+    
+    isValid = validateField('learnersInput',
+        selectedLearners.length > 0,
+        'Please select at least one learner') && isValid;
+    
+    return isValid;
+}
+
+function submitForm() {
+    const submitBtn = document.getElementById('submitBtn');
+    const btnText = submitBtn.querySelector('.btn-text');
+    const btnSpinner = submitBtn.querySelector('.btn-spinner');
+    
+    submitBtn.disabled = true;
+    btnText.style.display = 'none';
+    btnSpinner.style.display = 'inline-flex';
+    
+    const formData = {
+        batchName: document.getElementById('batchName').value.trim(),
+        unitType: document.getElementById('unitType').value,
+        unitName: document.getElementById('unitName').value,
+        learners: selectedLearners
+    };
+    
+    // Simulate API call
+    setTimeout(() => {
+        submitBtn.disabled = false;
+        btnText.style.display = 'inline';
+        btnSpinner.style.display = 'none';
+        
+        alert('Batch created successfully!');
+        resetForm();
+        toggleAddBatchPanel();
+    }, 2000);
+}
+
+function resetForm() {
+    document.getElementById('batchForm').reset();
+    document.getElementById('selectedTags').innerHTML = '';
+    document.querySelector('.placeholder').style.display = 'block';
+    document.getElementById('unitName').disabled = true;
+    selectedLearners = [];
+    
+    // Remove all validation states
+    const fields = ['batchName', 'unitType', 'unitName', 'learnersInput'];
+    fields.forEach(field => {
+        const element = document.getElementById(field);
+        if (element) {
+            element.classList.remove('error', 'success');
+            const errorElement = document.getElementById(`${field}Error`);
+            if (errorElement) {
+                errorElement.style.display = 'none';
+            }
+        }
+    });
+}
+
+function filterOptions(type) {
+    const searchInput = document.querySelector(`input[placeholder="Search ${type === 'unit' ? 'unit types' : 'status'}"]`);
+    const options = document.querySelectorAll(`input[name="${type}"]`);
+    const searchText = searchInput.value.toLowerCase();
+    
+    options.forEach(option => {
+        const label = option.closest('.option-item');
+        const text = label.querySelector('span').textContent.toLowerCase();
+        label.style.display = text.includes(searchText) ? 'flex' : 'none';
+    });
+}
+
+function updateSelectionCount(type) {
+    const checkedCount = document.querySelectorAll(`input[name="${type}"]:checked`).length;
+    const countElement = document.querySelector(`.filter-section:has(input[name="${type}"]) .selection-count`);
+    countElement.textContent = `${checkedCount} ${type.charAt(0).toUpperCase() + type.slice(1)} selected`;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    ['unit', 'status'].forEach(type => {
+        const checkboxes = document.querySelectorAll(`input[name="${type}"]`);
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', () => updateSelectionCount(type));
+        });
+    });
+});
+</script>
+{% endblock %}
