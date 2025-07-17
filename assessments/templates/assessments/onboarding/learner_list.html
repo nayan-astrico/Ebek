@@ -1,6 +1,9 @@
 {% extends 'assessments/base.html' %}
-
+{% load static %}
 {% block content %}
+
+<link href="{% static 'assessments/css/list.css' %}" rel="stylesheet">
+
 <!-- Header -->
 <div class="header">
     <div class="header-left">
@@ -12,10 +15,10 @@
             <i class="fas fa-upload"></i>
             Bulk Upload
         </button>
-        <a href="{% url 'learner_create' %}" class="btn btn-add">
-            <i class="fas fa-plus"></i>
-            Add Learner
-            </a>
+        <a href="javascript:void(0);" class="btn btn-primary"
+           onclick="openLearnerFormPanel('{% url 'learner_create' %}', 'Add Learner')">
+            <i class="fas fa-plus"></i> Add Learner
+        </a>
         </div>
     </div>
 
@@ -175,7 +178,8 @@
                             </td>
                             <td>
                     <div class="actions">
-                        <a href="{% url 'learner_edit' learner.pk %}" class="btn-icon">
+                        <a href="javascript:void(0);" class="btn-icon"
+                        onclick="openLearnerFormPanel('{% url 'learner_edit' learner.pk %}', 'Edit Learner')">
                                         <i class="fas fa-edit"></i>
                                     </a>
                         <button type="button" 
@@ -194,9 +198,9 @@
                 <td colspan="8" class="empty">
                     <i class="fas fa-user-graduate"></i>
                     <p>No learners found</p>
-                    <a href="{% url 'learner_create' %}" class="btn btn-add">
-                        <i class="fas fa-plus"></i>
-                        Add Learner
+                    <a href="javascript:void(0);" class="btn btn-primary"
+           onclick="openLearnerFormPanel('{% url 'learner_create' %}', 'Add Learner')">
+            Add Learner
                     </a>
                 </td>
                         </tr>
@@ -352,19 +356,77 @@
                 <!-- Results will be dynamically populated -->
             </div>
         </div>
+
+        <!-- Progress Section -->
+        <div class="upload-section" id="progressSection" style="display: none;">
+            <div class="section-header">
+                <i class="fas fa-spinner fa-spin"></i>
+                <h4>Upload Progress</h4>
+            </div>
+            <div class="progress-container">
+                <div class="progress-bar-wrapper">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">0%</div>
+                </div>
+                <div class="progress-status" id="progressStatus">Preparing upload...</div>
+                <div class="progress-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Rows:</span>
+                        <span class="stat-value" id="totalRows">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Processed:</span>
+                        <span class="stat-value" id="processedRows">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Success:</span>
+                        <span class="stat-value success" id="successCount">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Updated:</span>
+                        <span class="stat-value updated" id="updateCount">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Errors:</span>
+                        <span class="stat-value error" id="errorCount">0</span>
+                    </div>
+                </div>
+                <div class="progress-details" id="progressDetails">
+                    <!-- Detailed progress information will be shown here -->
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Actions -->
     <div class="upload-actions">
         <button type="button" class="btn btn-light" onclick="toggleUploadPanel()">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="submitUpload()">
+        <button type="button" class="btn btn-primary" id="uploadButton" onclick="submitUpload()">
             <i class="fas fa-upload"></i>
             Upload
+        </button>
+        <button type="button" class="btn btn-success" id="doneButton" onclick="completeUpload()" style="display: none;">
+            <i class="fas fa-check"></i>
+            Done
         </button>
     </div>
 </div>
 
+<div id="learnerFormPanel" class="side-panel">
+    <div class="side-panel-header">
+        <h3 id="formPanelTitle">Add Learner</h3>
+        <button type="button" class="close" onclick="closeLearnerFormPanel()">&times;</button>
+    </div>
+    <div class="side-panel-body" id="learnerFormContainer">
+    </div>
+</div>
+<div id="sidePanelOverlay" class="side-panel-overlay" onclick="closeLearnerFormPanel()"></div>
+
+
 <style>
+    
 /* Basic Layout */
 .header {
     display: flex;
@@ -382,32 +444,6 @@
 .header-left p {
     margin: 4px 0 0;
     color: #666;
-}
-
-.btn-primary {
-    background: #F16564;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
-    color: white;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    transition: background-color 0.2s;
-    text-decoration: none;
-}
-
-.btn-primary:hover,
-.btn-primary:active,
-.btn-primary:focus,
-.btn-primary:visited {
-    background: #e45857;
-    text-decoration: none;
-    color: white;
-    outline: none;
-    box-shadow: none;
 }
 
 .btn-success {
@@ -851,19 +887,6 @@
     margin-top: auto;
 }
 
-.btn-primary {
-    background: #F16564;
-    border: none;
-    padding: 8px 24px;
-    border-radius: 6px;
-    color: white;
-    font-weight: 500;
-    cursor: pointer;
-}
-
-.btn-primary:hover {
-    background: #e45857;
-}
 
 .btn-light {
     background: #f1f5f9;
@@ -1212,22 +1235,7 @@
     background: white;
 }
 
-.btn {
-    padding: 8px 24px;
-    border-radius: 6px;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
 
-.btn-primary {
-    background: #F16564;
-    border: none;
-    color: white;
-}
 
 .btn-primary:hover {
     background: #e45857;
@@ -1315,11 +1323,259 @@
     font-size: 32px;
     color: white;
 }
+
+/* Progress Loader Styles */
+.progress-container {
+    padding: 20px 0;
+}
+
+.progress-bar-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 12px;
+    background: #e2e8f0;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #F16564, #e45857);
+    border-radius: 6px;
+    width: 0%;
+    transition: width 0.3s ease;
+    position: relative;
+}
+
+.progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+.progress-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a202c;
+    min-width: 40px;
+    text-align: right;
+}
+
+.progress-status {
+    font-size: 14px;
+    color: #4a5568;
+    margin-bottom: 16px;
+    font-weight: 500;
+}
+
+.progress-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+    padding: 16px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.stat-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1a202c;
+}
+
+.stat-value.success {
+    color: #2f855a;
+}
+
+.stat-value.updated {
+    color: #3182ce;
+}
+
+.stat-value.error {
+    color: #c53030;
+}
+
+.progress-details {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: white;
+}
+
+.progress-detail-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.progress-detail-item:last-child {
+    border-bottom: none;
+}
+
+.progress-detail-item.success {
+    background: #f0fff4;
+    border-left: 4px solid #48bb78;
+}
+
+.progress-detail-item.error {
+    background: #fff5f5;
+    border-left: 4px solid #f56565;
+}
+
+.progress-detail-item.updated {
+    background: #ebf8ff;
+    border-left: 4px solid #4299e1;
+}
+
+.progress-detail-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.progress-detail-icon.success {
+    background: #48bb78;
+    color: white;
+}
+
+.progress-detail-icon.error {
+    background: #f56565;
+    color: white;
+}
+
+.progress-detail-icon.updated {
+    background: #4299e1;
+    color: white;
+}
+
+.progress-detail-content {
+    flex: 1;
+}
+
+.progress-detail-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #1a202c;
+    margin-bottom: 2px;
+}
+
+.progress-detail-message {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.progress-detail-row {
+    font-size: 11px;
+    color: #a0aec0;
+    font-weight: 500;
+}
+
+/* Loading animation for the header icon */
+.section-header i.fa-spinner {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Overlay for blocking interaction during upload */
+.upload-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+}
+
+.upload-overlay.active {
+    display: block;
+}
 </style>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <script>
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            // Does this cookie string begin with the name we want?
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function openLearnerFormPanel(url, title) {
+    document.getElementById('formPanelTitle').textContent = title;
+    document.getElementById('learnerFormPanel').classList.add('active');
+    document.getElementById('sidePanelOverlay').classList.add('active');
+    fetch(url)
+        .then(response => response.text())
+        .then(html => {
+            console.log(html);
+            document.getElementById('learnerFormContainer').innerHTML = html;
+        });
+}
+
+function closeLearnerFormPanel() {
+    document.getElementById('learnerFormPanel').classList.remove('active');
+    document.getElementById('sidePanelOverlay').classList.remove('active');
+    document.getElementById('learnerFormContainer').innerHTML = '';
+}
+
 function confirmDelete(button) {
     const name = button.dataset.name;
     const url = button.dataset.url;
@@ -1442,6 +1698,9 @@ function toggleUploadPanel() {
         setTimeout(() => {
             document.querySelector('.overlay').classList.add('active');
         }, 10);
+        
+        // Reset upload panel state
+        resetUploadPanel();
     } else {
         document.body.style.overflow = '';
         const overlay = document.querySelector('.overlay');
@@ -1452,6 +1711,38 @@ function toggleUploadPanel() {
             }, 300);
         }
     }
+}
+
+function resetUploadPanel() {
+    // Reset file input
+    const fileInput = document.getElementById('fileInput');
+    fileInput.value = '';
+    
+    // Reset file preview
+    const placeholder = document.querySelector('.upload-placeholder');
+    const preview = document.querySelector('.upload-preview');
+    if (placeholder && preview) {
+        placeholder.style.display = 'block';
+        preview.style.display = 'none';
+    }
+    
+    // Clear preview and validation
+    const tableWrapper = document.querySelector('.table-wrapper');
+    const validationResults = document.querySelector('.validation-results');
+    if (tableWrapper) tableWrapper.innerHTML = '';
+    if (validationResults) validationResults.innerHTML = '';
+    
+    // Hide progress section and show validation section
+    const progressSection = document.getElementById('progressSection');
+    const validationSection = document.querySelector('.upload-section:nth-child(4)');
+    if (progressSection) progressSection.style.display = 'none';
+    if (validationSection) validationSection.style.display = 'block';
+    
+    // Reset button states
+    const uploadButton = document.getElementById('uploadButton');
+    const doneButton = document.getElementById('doneButton');
+    if (uploadButton) uploadButton.style.display = 'inline-flex';
+    if (doneButton) doneButton.style.display = 'none';
 }
 
 // File Upload Handling
@@ -1528,6 +1819,14 @@ function validateAndPreviewExcel(file) {
             const nonEmptyRows = jsonData.slice(1).filter(row => 
                 row.some(cell => cell !== null && cell !== undefined && cell.toString().trim() !== '')
             ).slice(0, 5); // Get up to 5 non-empty rows
+            
+            // Get total non-empty rows for progress tracking
+            const allNonEmptyRows = jsonData.slice(1).filter(row => 
+                row.some(cell => cell !== null && cell !== undefined && cell.toString().trim() !== '')
+            );
+            
+            // Store total rows for progress tracking
+            window.totalRowsToProcess = allNonEmptyRows.length;
             
             // Validate headers
             const validationResults = validateHeaders(headers);
@@ -1742,6 +2041,13 @@ function submitUpload() {
         return;
     }
     
+    // Show progress section and hide validation section
+    document.getElementById('progressSection').style.display = 'block';
+    document.querySelector('.upload-section:nth-child(4)').style.display = 'none'; // Hide validation section
+    
+    // Initialize progress tracking
+    initializeProgress();
+    
     // Add the file to formData with the correct field name
     formData.append('file', fileInput.files[0]);
     
@@ -1765,21 +2071,314 @@ function submitUpload() {
         return response.json();
     })
     .then(data => {
-        if (data.success) {
-            alert('Upload successful!');
-            toggleUploadPanel();
-            location.reload(); // Refresh the page to show new data
+        if (data.success && data.session_key) {
+            console.log("Hereee")
+            // Start real-time progress tracking
+            startProgressTracking(data.session_key);
         } else {
-            alert('Upload failed: ' + (data.error || 'Unknown error'));
+            updateProgress(100, 'Upload failed: ' + (data.error || 'Unknown error'));
+            showUploadError(data.error || 'Unknown error');
         }
     })
     .catch(error => {
-        alert('Upload failed: ' + error.message);
+        updateProgress(100, 'Upload failed: ' + error.message);
+        showUploadError(error.message);
     })
     .finally(() => {
         uploadButton.innerHTML = originalText;
         uploadButton.disabled = false;
     });
 }
+
+function startProgressTracking(sessionKey) {
+    console.log(`[DEBUG] Starting SSE connection for session: ${sessionKey}`);
+    const sseUrl = `/onboarding/learners/upload-progress/${sessionKey}/`;
+    console.log(`[DEBUG] SSE URL: ${sseUrl}`);
+    
+    const eventSource = new EventSource(sseUrl);
+    
+    eventSource.onopen = function(event) {
+        console.log('[DEBUG] SSE connection opened');
+    };
+    
+    eventSource.onmessage = function(event) {
+        console.log(`[DEBUG] Received SSE message:`, event.data);
+        try {
+            const data = JSON.parse(event.data);
+            console.log(`[DEBUG] Parsed data:`, data);
+            
+            if (data.error) {
+                console.log(`[DEBUG] SSE error:`, data.error);
+                showUploadError(data.error);
+                eventSource.close();
+                return;
+            }
+            
+            // Update progress
+            console.log(`[DEBUG] Updating progress to ${data.progress}%`);
+            updateProgress(data.progress, data.message);
+            
+            // Update statistics
+            if (data.total_rows) document.getElementById('totalRows').textContent = data.total_rows;
+            if (data.processed_rows) document.getElementById('processedRows').textContent = data.processed_rows;
+            if (data.success_count) document.getElementById('successCount').textContent = data.success_count;
+            if (data.update_count) document.getElementById('updateCount').textContent = data.update_count;
+            if (data.error_count) document.getElementById('errorCount').textContent = data.error_count;
+            
+            // Handle completion
+            if (data.status === 'completed') {
+                console.log('[DEBUG] Upload completed');
+                showUploadResult(data);
+                eventSource.close();
+                // Hide progress section after completion
+                setTimeout(() => {
+                    document.getElementById('progressSection').style.display = 'none';
+                }, 3000); // Hide after 3 seconds to show completion message
+            } else if (data.status === 'error') {
+                console.log('[DEBUG] Upload error:', data.message);
+                showUploadError(data.message);
+                eventSource.close();
+                // Hide progress section after error
+                setTimeout(() => {
+                    document.getElementById('progressSection').style.display = 'none';
+                }, 3000); // Hide after 3 seconds to show error message
+            }
+            
+        } catch (error) {
+            console.error('[DEBUG] Error parsing SSE data:', error);
+        }
+    };
+    
+    eventSource.onerror = function(error) {
+        console.error('[DEBUG] SSE connection error:', error);
+        console.error('[DEBUG] Error details:', {
+            readyState: eventSource.readyState,
+            url: eventSource.url
+        });
+        eventSource.close();
+        showUploadError('Connection lost. Please check the upload status.');
+    };
+    
+    // Add timeout to check if connection is working
+    setTimeout(() => {
+        if (eventSource.readyState === 0) { // CONNECTING
+            console.log('[DEBUG] SSE still connecting after 5 seconds...');
+        } else if (eventSource.readyState === 1) { // OPEN
+            console.log('[DEBUG] SSE connection is open');
+        } else if (eventSource.readyState === 2) { // CLOSED
+            console.log('[DEBUG] SSE connection is closed');
+        }
+    }, 5000);
+}
+
+function initializeProgress() {
+    // Reset all progress elements
+    document.getElementById('progressFill').style.width = '0%';
+    document.getElementById('progressText').textContent = '0%';
+    document.getElementById('progressStatus').textContent = 'Preparing upload...';
+    
+    // Set total rows if available from file validation
+    const totalRows = window.totalRowsToProcess || 0;
+    document.getElementById('totalRows').textContent = totalRows;
+    document.getElementById('processedRows').textContent = '0';
+    document.getElementById('successCount').textContent = '0';
+    document.getElementById('updateCount').textContent = '0';
+    document.getElementById('errorCount').textContent = '0';
+    document.getElementById('progressDetails').innerHTML = '';
+    
+    // Show file name if available
+    const fileInput = document.getElementById('fileInput');
+    if (fileInput.files.length > 0) {
+        const fileName = fileInput.files[0].name;
+        const progressStatus = document.getElementById('progressStatus');
+        progressStatus.textContent = `Preparing upload for: ${fileName}`;
+    }
+}
+
+
+
+function updateProgress(percentage, status) {
+    console.log(`[DEBUG] updateProgress called with: ${percentage}%, "${status}"`);
+    
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    const progressStatus = document.getElementById('progressStatus');
+    
+    if (!progressFill || !progressText || !progressStatus) {
+        console.error('[DEBUG] Progress elements not found!');
+        return;
+    }
+    
+    progressFill.style.width = percentage + '%';
+    progressText.textContent = Math.round(percentage) + '%';
+    progressStatus.textContent = status;
+    
+    console.log(`[DEBUG] Progress updated: ${percentage}%, "${status}"`);
+}
+
+
+
+function showUploadResult(data) {
+    const progressDetails = document.getElementById('progressDetails');
+    let html = '';
+    
+    // Add success summary
+    html += `
+        <div class="progress-detail-item success">
+            <div class="progress-detail-icon success">
+                <i class="fas fa-check"></i>
+            </div>
+            <div class="progress-detail-content">
+                <div class="progress-detail-title">Upload Completed Successfully</div>
+                <div class="progress-detail-message">${data.message}</div>
+            </div>
+        </div>
+    `;
+    
+    // Add summary statistics
+    const stats = data.stats || {};
+    const totalRows = stats.total_rows || 0;
+    const successCount = stats.success_count || 0;
+    const updateCount = stats.update_count || 0;
+    const errorCount = stats.error_count || 0;
+    
+    if (totalRows > 0) {
+        html += `
+            <div class="progress-detail-item success">
+                <div class="progress-detail-icon success">
+                    <i class="fas fa-chart-bar"></i>
+                </div>
+                <div class="progress-detail-content">
+                    <div class="progress-detail-title">Upload Summary</div>
+                    <div class="progress-detail-message">
+                        Processed ${totalRows} rows: ${successCount} new learners created, ${updateCount} existing learners updated, ${errorCount} errors encountered.
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Add error details if any
+    if (data.errors && data.errors.length > 0) {
+        html += `
+            <div class="progress-detail-item error">
+                <div class="progress-detail-icon error">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div class="progress-detail-content">
+                    <div class="progress-detail-title">Errors Found (${data.errors.length})</div>
+                    <div class="progress-detail-message">Please review the errors below and fix them in your Excel file if needed.</div>
+                </div>
+            </div>
+        `;
+        
+        data.errors.forEach(error => {
+            html += `
+                <div class="progress-detail-item error">
+                    <div class="progress-detail-icon error">
+                        <i class="fas fa-exclamation"></i>
+                    </div>
+                    <div class="progress-detail-content">
+                        <div class="progress-detail-title">Row ${error.row}</div>
+                        <div class="progress-detail-message">
+                            ${Object.values(error.errors).flat().join(', ')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+    
+    progressDetails.innerHTML = html;
+    
+    // Show Done button
+    document.getElementById('uploadButton').style.display = 'none';
+    document.getElementById('doneButton').style.display = 'inline-flex';
+    
+    // Show completion message
+    setTimeout(() => {
+        const message = errorCount > 0 
+            ? `Upload completed with ${errorCount} errors. Check the details below.`
+            : 'Upload completed successfully! All learners have been processed.';
+        alert(message);
+    }, 500);
+    
+    // Add completion notice
+    html += `
+        <div class="progress-detail-item success" style="background: #f0fff4; border-left: 4px solid #48bb78;">
+            <div class="progress-detail-icon success">
+                <i class="fas fa-info-circle"></i>
+            </div>
+            <div class="progress-detail-content">
+                <div class="progress-detail-title">Upload Complete</div>
+                <div class="progress-detail-message">This progress panel will automatically close in a few seconds.</div>
+            </div>
+        </div>
+    `;
+    progressDetails.innerHTML = html;
+}
+
+function showUploadError(error) {
+    const progressDetails = document.getElementById('progressDetails');
+    progressDetails.innerHTML = `
+        <div class="progress-detail-item error">
+            <div class="progress-detail-icon error">
+                <i class="fas fa-times"></i>
+            </div>
+            <div class="progress-detail-content">
+                <div class="progress-detail-title">Upload Failed</div>
+                <div class="progress-detail-message">${error}</div>
+            </div>
+        </div>
+        <div class="progress-detail-item error" style="background: #fff5f5; border-left: 4px solid #f56565;">
+            <div class="progress-detail-icon error">
+                <i class="fas fa-info-circle"></i>
+            </div>
+            <div class="progress-detail-content">
+                <div class="progress-detail-title">Upload Failed</div>
+                <div class="progress-detail-message">This progress panel will automatically close in a few seconds.</div>
+            </div>
+        </div>
+    `;
+    
+    // Show Done button
+    document.getElementById('uploadButton').style.display = 'none';
+    document.getElementById('doneButton').style.display = 'inline-flex';
+    
+    alert('Upload failed: ' + error);
+}
+
+function completeUpload() {
+    // Reload the page to show updated data
+    location.reload();
+}
+
+document.addEventListener('submit', function(e) {
+    if (e.target.closest('#learnerFormPanel form')) {
+        e.preventDefault();
+        const form = e.target;
+        const url = form.action;
+        const formData = new FormData(form);
+        fetch(url, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        })
+        .then(response => response.text())
+        .then(html => {
+            if (html.includes('form-group')) {
+                // Form has errors, re-render it
+                document.getElementById('learnerFormContainer').innerHTML = html;
+            } else {
+                // Success: close panel and reload page
+                closeLearnerFormPanel();
+                location.reload(); // <--- This reloads the page
+            }
+        });
+    }
+});
 </script>
 {% endblock %} 

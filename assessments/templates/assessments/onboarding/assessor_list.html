@@ -1,6 +1,10 @@
 {% extends 'assessments/base.html' %}
-
+{% load static %}
 {% block content %}
+
+<link href="{% static 'assessments/css/list.css' %}" rel="stylesheet">
+
+
 <!-- Header -->
 <div class="header">
     <div class="header-left">
@@ -8,9 +12,9 @@
         <p class="text-muted">Manage your assessment experts</p>
     </div>
     <div class="header-right">
-        <a href="{% url 'assessor_create' %}" class="btn btn-primary">
-            <i class="fas fa-plus"></i>
-            Add Assessor
+        <a href="javascript:void(0);" class="btn btn-primary"
+           onclick="openAssessorFormPanel('{% url 'assessor_create' %}', 'Add Assessor')">
+            <i class="fas fa-plus"></i> Add Assessor
         </a>
     </div>
 </div>
@@ -134,7 +138,8 @@
                             </td>
                             <td>
                     <div class="actions">
-                        <a href="{% url 'assessor_edit' assessor.id %}" class="btn-icon">
+                        <a href="javascript:void(0);" class="btn-icon"
+                        onclick="openAssessorFormPanel('{% url 'assessor_edit' assessor.id %}', 'Edit Assessor')">
                                     <i class="fas fa-edit"></i>
                                 </a>
                         <button type="button" 
@@ -153,7 +158,10 @@
                 <td colspan="7" class="empty">
                     <i class="fas fa-user-tie"></i>
                     <p>No assessors found</p>
-                    <a href="{% url 'assessor_create' %}" class="btn btn-primary">Add Assessor</a>
+                    <a href="javascript:void(0);" class="btn btn-primary"
+           onclick="openAssessorFormPanel('{% url 'assessor_create' %}', 'Add Assessor')">
+            Add Assessor
+        </a>
                 </td>
                         </tr>
                         {% endfor %}
@@ -208,8 +216,17 @@
         </div>
     </div>
 </div>
+<div id="assessorFormPanel" class="side-panel">
+    <div class="side-panel-header">
+        <h3 id="formPanelTitle">Add Assessor</h3>
+        <button type="button" class="close" onclick="closeAssessorFormPanel()">&times;</button>
+    </div>
+    <div class="side-panel-body" id="assessorFormContainer">
+    </div>
+</div>
+<div id="sidePanelOverlay" class="side-panel-overlay" onclick="closeAssessorFormPanel()"></div>
 
-<style>
+<!-- <style>
 /* Basic Layout */
 .header {
     display: flex;
@@ -644,9 +661,44 @@
         right: -100%;
     }
 }
-</style>
+</style> -->
 
 <script>
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            // Does this cookie string begin with the name we want?
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function openAssessorFormPanel(url, title) {
+    document.getElementById('formPanelTitle').textContent = title;
+    document.getElementById('assessorFormPanel').classList.add('active');
+    document.getElementById('sidePanelOverlay').classList.add('active');
+    fetch(url)
+        .then(response => response.text())
+        .then(html => {
+            console.log(html);
+            document.getElementById('assessorFormContainer').innerHTML = html;
+        });
+}
+
+function closeAssessorFormPanel() {
+    document.getElementById('assessorFormPanel').classList.remove('active');
+    document.getElementById('sidePanelOverlay').classList.remove('active');
+    document.getElementById('assessorFormContainer').innerHTML = '';
+}
+
 function confirmDelete(button) {
     const name = button.dataset.name;
     const url = button.dataset.url;

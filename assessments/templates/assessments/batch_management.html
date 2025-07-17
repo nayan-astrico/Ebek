@@ -1,0 +1,1153 @@
+{% extends 'assessments/base.html' %}
+
+{% block content %}
+<!-- Header -->
+<div class="header">
+    <div class="header-left">
+        <h1>Batches</h1>
+        <p class="text-muted">Manage your training batches</p>
+    </div>
+    <div class="header-right">
+        <button class="btn btn-primary" onclick="toggleAddBatchPanel()">
+            <i class="fas fa-plus"></i>
+            Add Batch
+        </button>
+    </div>
+</div>
+
+<div class="main-content">
+    <!-- Search and Filter Bar -->
+    <div class="search-filter-bar">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchInput" placeholder="Search batches...">
+        </div>
+        <button class="btn-filter" onclick="toggleFilterPanel()">
+            <i class="fas fa-filter"></i>
+            Filters
+        </button>
+    </div>
+
+    <!-- Table Container -->
+    <div class="table-container">
+        <!-- Add Batch Side Panel -->
+        <div class="side-panel" id="addBatchPanel">
+            <div class="side-panel-header">
+                <h3>Add New Batch</h3>
+                <button type="button" class="close" onclick="toggleAddBatchPanel()">
+                    <span>&times;</span>
+                </button>
+            </div>
+            
+            <form class="side-panel-form" id="batchForm" novalidate>
+                <div class="form-group">
+                    <label>Batch Name <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="batchName" name="batchName" required>
+                    <div class="error-message" id="batchNameError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label>Unit Type <span class="text-danger">*</span></label>
+                    <select class="form-control" id="unitType" name="unitType" onchange="handleUnitTypeChange()" required>
+                        <option value="">Select Unit Type</option>
+                        <option value="hospital">Hospital</option>
+                        <option value="institution">Institution</option>
+                    </select>
+                    <div class="error-message" id="unitTypeError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label>Unit <span class="text-danger">*</span></label>
+                    <select class="form-control" id="unitSelect" name="unitId" required disabled>
+                        <option value="">Select Unit</option>
+                    </select>
+                    <div class="error-message" id="unitError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label>Learners <span class="text-danger" id="learnersRequired">*</span></label>
+                    <div class="multiselect-container">
+                        <div class="multiselect-input" onclick="toggleLearnersDropdown()" id="learnersInput">
+                            <span class="placeholder">Select learners</span>
+                            <div class="selected-tags" id="selectedLearners"></div>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <div class="multiselect-dropdown" id="learnersDropdown">
+                            <div class="search-container">
+                                <input type="text" placeholder="Search learners..." oninput="filterLearners(this.value)">
+                            </div>
+                            <div class="options-container" id="learnersOptions">
+                                <!-- Learners will be loaded here -->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="error-message" id="learnersError"></div>
+                </div>
+
+                <div class="side-panel-actions">
+                    <button type="button" class="btn btn-light" onclick="toggleAddBatchPanel()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <span class="btn-text">Create Batch</span>
+                        <span class="btn-spinner" style="display: none;">
+                            <i class="fas fa-spinner fa-spin"></i>
+                        </span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Filter Side Panel -->
+        <div class="filter-panel" id="filterPanel">
+            <div class="filter-header">
+                <h3>Filter Batches</h3>
+                <button type="button" class="close" onclick="toggleFilterPanel()">
+                    <span>&times;</span>
+                </button>
+            </div>
+            
+            <form class="filter-form">
+                <div class="filter-layout">
+                    <!-- Main Filter Types (30%) -->
+                    <div class="filter-types">
+                        <div class="filter-type active" data-filter="unit" onclick="switchFilter('unit')">
+                            <span>Unit Type</span>
+                        </div>
+                    </div>
+
+                    <!-- Filter Content (70%) -->
+                    <div class="filter-content-wrapper">
+                        <!-- Unit Type Content -->
+                        <div class="filter-content active" id="unit-content">
+                            <div class="filter-search">
+                                <input type="text" placeholder="Search unit types">
+                                <div class="selection-count">0 Unit selected</div>
+                            </div>
+                            <div class="options-list">
+                                <label class="option-item">
+                                    <input type="checkbox" name="unit" value="hospital">
+                                    <span>Hospital</span>
+                                </label>
+                                <label class="option-item">
+                                    <input type="checkbox" name="unit" value="institution">
+                                    <span>Institution</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filter Actions -->
+                <div class="filter-actions">
+                    <button type="button" class="btn btn-light" onclick="toggleFilterPanel()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Apply filter</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Table -->
+        <div class="card">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Batch Name</th>
+                        <th>Unit Type</th>
+                        <th>Unit Name</th>
+                        <th>Learners</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="batchesTableBody">
+                    <!-- Batches will be loaded here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Main Content Layout */
+.main-content {
+    padding: 0;
+    margin-top: 24px;
+}
+
+/* Search and Filter Bar */
+.search-filter-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.search-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 16px;
+}
+
+.search-box input {
+    border: none;
+    outline: none;
+    width: 100%;
+    font-size: 14px;
+}
+
+.btn-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #4a5568;
+    cursor: pointer;
+}
+
+.btn-filter:hover {
+    background: #F8FAFC;
+    border-color: #CBD5E0;
+}
+
+/* Update header styles */
+.header {
+    margin-bottom: 0;
+}
+
+.btn.btn-primary {
+    background: #F16564;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 6px;
+}
+
+.btn.btn-primary:hover {
+    background: #e45857;
+}
+
+/* Table container */
+.table-container {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Reusing existing styles from course_management.html */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.header-left h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.header-left p {
+    margin: 4px 0 0;
+    color: #666;
+}
+
+.btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: #F16564;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #e45857;
+}
+
+.btn-light {
+    background: #f8f9fa;
+    color: #495057;
+    border: 1px solid #dee2e6;
+}
+
+.side-panel {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
+
+.side-panel.active {
+    right: 0;
+}
+
+.side-panel-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.side-panel-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+}
+
+.side-panel-form {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #2d3748;
+}
+
+.form-control {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #F16564;
+    box-shadow: 0 0 0 2px rgba(241, 101, 100, 0.1);
+}
+
+.form-control:disabled {
+    background-color: #f8f9fa;
+    cursor: not-allowed;
+}
+
+.text-danger {
+    color: #e53e3e;
+}
+
+.error-message {
+    color: #e53e3e;
+    font-size: 12px;
+    margin-top: 4px;
+    display: none;
+}
+
+.error-message.show {
+    display: block;
+}
+
+/* Multiselect Styles */
+.multiselect-container {
+    position: relative;
+}
+
+.multiselect-input {
+    min-height: 38px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: white;
+}
+
+.multiselect-input.active {
+    border-color: #F16564;
+}
+
+.placeholder {
+    color: #a0aec0;
+}
+
+.selected-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.tag {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.tag-remove {
+    cursor: pointer;
+    color: #666;
+}
+
+.multiselect-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin-top: 4px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    display: none;
+}
+
+.multiselect-dropdown.active {
+    display: block;
+}
+
+.search-container {
+    padding: 8px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.search-container input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    outline: none;
+}
+
+.options-container {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.option-item {
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.option-item:hover {
+    background: #f7fafc;
+}
+
+.option-item input[type="checkbox"] {
+    margin: 0;
+}
+
+.side-panel-actions {
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: auto;
+}
+
+.search-filter-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.search-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 16px;
+}
+
+.search-box i {
+    color: #a0aec0;
+}
+
+.search-box input {
+    border: none;
+    outline: none;
+    width: 100%;
+    font-size: 14px;
+    background: transparent;
+}
+
+.btn-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #4a5568;
+    cursor: pointer;
+}
+
+.btn-filter:hover {
+    background: #f7fafc;
+    border-color: #cbd5e0;
+}
+
+.btn-filter i {
+    font-size: 14px;
+}
+
+.card {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table th {
+    background: #f8fafc;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5568;
+    text-transform: uppercase;
+}
+
+.table td {
+    padding: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.table tbody tr:hover {
+    background-color: #f7fafc;
+}
+
+.actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    background: #edf2f7;
+    color: #4a5568;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.btn-icon:hover {
+    background: #e2e8f0;
+}
+
+.btn-icon.btn-danger {
+    color: #c53030;
+    background: #fff5f5;
+}
+
+.btn-icon.btn-danger:hover {
+    background: #fed7d7;
+}
+
+.side-panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+}
+
+.side-panel-overlay.active {
+    display: block;
+}
+
+/* Filter Panel Styles */
+.filter-panel {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+}
+
+.filter-panel.active {
+    right: 0;
+}
+
+.filter-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.filter-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.filter-layout {
+    display: flex;
+    height: calc(100vh - 140px);
+}
+
+.filter-types {
+    width: 30%;
+    border-right: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.filter-type {
+    padding: 16px 20px;
+    cursor: pointer;
+    border-bottom: 1px solid #e2e8f0;
+    font-weight: 500;
+    color: #4a5568;
+}
+
+.filter-type.active {
+    background: white;
+    color: #F16564;
+    border-right: 2px solid #F16564;
+}
+
+.filter-content-wrapper {
+    width: 70%;
+    position: relative;
+}
+
+.filter-content {
+    display: none;
+    height: 100%;
+    flex-direction: column;
+}
+
+.filter-content.active {
+    display: flex;
+}
+
+.filter-search {
+    padding: 20px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.filter-search input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin-bottom: 12px;
+}
+
+.selection-count {
+    font-size: 12px;
+    color: #666;
+}
+
+.options-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 20px;
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    cursor: pointer;
+}
+
+.option-item input[type="checkbox"] {
+    margin: 0;
+}
+
+.filter-actions {
+    padding: 16px 20px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+</style>
+
+<script>
+let selectedLearners = [];
+let availableLearners = [];
+
+// Load batches on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadBatches();
+    
+    // Add event listener for unit selection
+    document.getElementById('unitSelect').addEventListener('change', function() {
+        loadAvailableLearners();
+    });
+});
+
+function loadBatches() {
+    const filters = getBatchFilters();
+    let url = '/api/batches/?';
+    if (filters.unitTypes.length > 0) {
+        url += 'unitType=' + filters.unitTypes.join(',') + '&';
+    }
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayBatches(data.batches);
+            } else {
+                console.error('Error loading batches:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+}
+
+function displayBatches(batches) {
+    const tbody = document.getElementById('batchesTableBody');
+    tbody.innerHTML = '';
+    
+    if (batches.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #666;">No batches found</td></tr>';
+        return;
+    }
+    
+    batches.forEach(batch => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${batch.batchName}</td>
+            <td>${batch.unitType}</td>
+            <td>${batch.unitName}</td>
+            <td>${batch.learnerCount}</td>
+            <td>
+                <div class="actions">
+                    <button class="btn-icon" onclick="editBatch('${batch.id}')">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-icon btn-danger" onclick="deleteBatch('${batch.id}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function toggleAddBatchPanel() {
+    const panel = document.getElementById('addBatchPanel');
+    panel.classList.toggle('active');
+    
+    if (panel.classList.contains('active')) {
+        document.body.style.overflow = 'hidden';
+        if (!document.querySelector('.side-panel-overlay')) {
+            const overlay = document.createElement('div');
+            overlay.className = 'side-panel-overlay active';
+            overlay.onclick = toggleAddBatchPanel;
+            document.body.appendChild(overlay);
+        }
+        loadAvailableLearners();
+    } else {
+        document.body.style.overflow = '';
+        const overlay = document.querySelector('.side-panel-overlay');
+        if (overlay) {
+            overlay.remove();
+        }
+        resetForm();
+    }
+}
+
+function handleUnitTypeChange() {
+    const unitType = document.getElementById('unitType').value;
+    const unitSelect = document.getElementById('unitSelect');
+    const learnersInput = document.getElementById('learnersInput');
+    const learnersRequired = document.getElementById('learnersRequired');
+    
+    unitSelect.innerHTML = '<option value="">Select Unit</option>';
+    
+    if (unitType) {
+        unitSelect.disabled = false;
+        loadUnits(unitType);
+        learnersInput.style.pointerEvents = 'auto';
+        learnersInput.style.opacity = '1';
+        learnersRequired.style.display = 'inline';
+    } else {
+        unitSelect.disabled = true;
+        learnersInput.style.pointerEvents = 'none';
+        learnersInput.style.opacity = '0.5';
+        learnersRequired.style.display = 'none';
+    }
+    
+    // Clear learners when unit type changes
+    availableLearners = [];
+    document.getElementById('learnersOptions').innerHTML = '';
+    document.getElementById('selectedLearners').innerHTML = '';
+    document.querySelector('.placeholder').style.display = 'block';
+    selectedLearners = [];
+}
+
+function loadUnits(unitType) {
+    const endpoint = unitType === 'hospital' ? '/api/fetch-hospitals/' : '/fetch-institutes/';
+    
+    fetch(endpoint)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success || data.institutes) {
+                const unitSelect = document.getElementById('unitSelect');
+                const units = data.units || data.institutes;
+                units.forEach(unit => {
+                    const option = document.createElement('option');
+                    option.value = unit.id;
+                    option.textContent = unit.name || unit.instituteName;
+                    unitSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading units:', error);
+        });
+}
+
+function loadAvailableLearners() {
+    const unitSelect = document.getElementById('unitSelect');
+    const unitType = document.getElementById('unitType').value;
+    
+    if (!unitSelect.value) {
+        console.log('No unit selected');
+        return;
+    }
+    
+    const unitId = unitSelect.value;
+    fetch(`/api/fetch-learners/${unitType}/${unitId}/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                availableLearners = data.learners;
+                displayLearners(availableLearners);
+            } else {
+                console.error('Error loading learners:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading learners:', error);
+        });
+}
+
+function displayLearners(learners) {
+    const container = document.getElementById('learnersOptions');
+    container.innerHTML = '';
+    
+    learners.forEach(learner => {
+        const option = document.createElement('div');
+        option.className = 'option-item';
+        option.style.display = 'flex';
+        option.style.alignItems = 'center';
+        option.style.cursor = 'pointer';
+        option.innerHTML = `
+            <input type="checkbox" id="learner_${learner.id}" value="${learner.id}" onchange="updateSelectedLearners()" style="margin-left: 12px; margin-right: 12px;">
+            <div>
+                <div style="font-weight: 500;">${learner.name}</div>
+                <div style="font-size: 12px; color: #666;">${learner.email}</div>
+            </div>
+        `;
+        // Toggle checkbox when clicking anywhere except the checkbox itself
+        option.addEventListener('click', function(e) {
+            if (e.target.tagName !== 'INPUT') {
+                const checkbox = option.querySelector('input[type="checkbox"]');
+                checkbox.checked = !checkbox.checked;
+                updateSelectedLearners();
+            }
+        });
+        container.appendChild(option);
+    });
+}
+
+function toggleLearnersDropdown() {
+    const unitType = document.getElementById('unitType').value;
+    
+    const dropdown = document.getElementById('learnersDropdown');
+    const input = document.querySelector('.multiselect-input');
+    
+    dropdown.classList.toggle('active');
+    input.classList.toggle('active');
+}
+
+function filterLearners(searchText) {
+    const filtered = availableLearners.filter(learner => 
+        learner.name.toLowerCase().includes(searchText.toLowerCase()) ||
+        learner.email.toLowerCase().includes(searchText.toLowerCase())
+    );
+    displayLearners(filtered);
+}
+
+function updateSelectedLearners() {
+    const checkboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]:checked');
+    const selectedTags = document.getElementById('selectedLearners');
+    const placeholder = document.querySelector('.placeholder');
+    
+    selectedTags.innerHTML = '';
+    selectedLearners = Array.from(checkboxes).map(cb => cb.value);
+    
+    if (selectedLearners.length > 0) {
+        placeholder.style.display = 'none';
+        checkboxes.forEach(checkbox => {
+            const learner = availableLearners.find(l => l.id === checkbox.value);
+            if (learner) {
+                const tag = document.createElement('div');
+                tag.className = 'tag';
+                tag.innerHTML = `
+                    ${learner.name}
+                    <span class="tag-remove" onclick="removeLearner('${checkbox.value}')">&times;</span>
+                `;
+                selectedTags.appendChild(tag);
+            }
+        });
+    } else {
+        placeholder.style.display = 'block';
+    }
+}
+
+function removeLearner(value) {
+    const checkbox = document.querySelector(`#learnersOptions input[value="${value}"]`);
+    if (checkbox) {
+        checkbox.checked = false;
+        updateSelectedLearners();
+    }
+}
+
+function clearErrors() {
+    document.querySelectorAll('.error-message').forEach(error => {
+        error.classList.remove('show');
+    });
+}
+
+function resetForm() {
+    document.getElementById('batchForm').reset();
+    document.getElementById('selectedLearners').innerHTML = '';
+    document.querySelector('.placeholder').style.display = 'block';
+    document.getElementById('unitSelect').disabled = true;
+    selectedLearners = [];
+    clearErrors();
+}
+
+function toggleFilterPanel() {
+    const panel = document.getElementById('filterPanel');
+    panel.classList.toggle('active');
+    
+    if (panel.classList.contains('active')) {
+        document.body.style.overflow = 'hidden';
+        if (!document.querySelector('.filter-overlay')) {
+            const overlay = document.createElement('div');
+            overlay.className = 'side-panel-overlay filter-overlay active';
+            overlay.onclick = toggleFilterPanel;
+            document.body.appendChild(overlay);
+        }
+    } else {
+        document.body.style.overflow = '';
+        const overlay = document.querySelector('.filter-overlay');
+        if (overlay) {
+            overlay.remove();
+        }
+    }
+}
+
+function switchFilter(filterType) {
+    document.querySelectorAll('.filter-type').forEach(type => {
+        type.classList.remove('active');
+    });
+    
+    document.querySelectorAll('.filter-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    document.querySelector(`[data-filter="${filterType}"]`).classList.add('active');
+    document.getElementById(`${filterType}-content`).classList.add('active');
+}
+
+// Form submission
+document.getElementById('batchForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = {
+        batchName: document.getElementById('batchName').value.trim(),
+        unitType: document.getElementById('unitType').value,
+        unitId: document.getElementById('unitSelect').value,
+        learnerIds: selectedLearners
+    };
+    
+    // Validate form
+    if (!formData.batchName) {
+        showError('batchNameError', 'Batch name is required');
+        return;
+    }
+    if (!formData.unitType) {
+        showError('unitTypeError', 'Unit type is required');
+        return;
+    }
+    if (!formData.unitId) {
+        showError('unitError', 'Unit is required');
+        return;
+    }
+    // Only require learners for institutions
+    if (formData.unitType === 'institution' && formData.learnerIds.length === 0) {
+        showError('learnersError', 'Please select at least one learner');
+        return;
+    }
+    
+    // Show loading state
+    const submitBtn = document.getElementById('submitBtn');
+    const btnText = submitBtn.querySelector('.btn-text');
+    const btnSpinner = submitBtn.querySelector('.btn-spinner');
+    
+    btnText.style.display = 'none';
+    btnSpinner.style.display = 'inline-block';
+    submitBtn.disabled = true;
+    
+    // Submit form
+    fetch('/api/batches/create/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Batch created successfully!');
+            toggleAddBatchPanel();
+            loadBatches();
+        } else {
+            alert('Error creating batch: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error creating batch');
+    })
+    .finally(() => {
+        btnText.style.display = 'inline-block';
+        btnSpinner.style.display = 'none';
+        submitBtn.disabled = false;
+    });
+});
+
+document.querySelector('.filter-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    toggleFilterPanel();
+    loadBatches();
+});
+
+function showError(elementId, message) {
+    const errorElement = document.getElementById(elementId);
+    errorElement.textContent = message;
+    errorElement.classList.add('show');
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function editBatch(batchId) {
+    // Redirect to batch detail page for editing
+    window.location.href = `/batch-management/${batchId}/`;
+}
+
+function deleteBatch(batchId) {
+    if (confirm('Are you sure you want to delete this batch?')) {
+        // TODO: Implement delete functionality
+        console.log('Delete batch:', batchId);
+    }
+}
+
+function getBatchFilters() {
+    const unitTypes = Array.from(document.querySelectorAll('input[name="unit"]:checked')).map(cb => cb.value);
+    return {
+        unitTypes
+    };
+}
+
+document.addEventListener('click', function(event) {
+    const dropdown = document.getElementById('learnersDropdown');
+    const input = document.getElementById('learnersInput');
+    if (!dropdown.contains(event.target) && !input.contains(event.target)) {
+        dropdown.classList.remove('active');
+        input.classList.remove('active');
+    }
+});
+</script>
+{% endblock %}

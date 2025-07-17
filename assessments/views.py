@@ -1205,6 +1205,197 @@ def calculate_exam_score(exam_metadata):
     return critical_missed, critical_points
 
 @csrf_exempt
+def fetch_student_metrics(request):
+    try:
+        skillathon_name = request.GET.get("skillathon_name")
+        institution_name = request.GET.get("institution_name")  # Now using name, not ID
+
+        if not skillathon_name:
+            return JsonResponse({"error": "skillathon_name is required"}, status=400)
+
+        # Build query
+        base_query = db.collection('ExamAssignment') \
+            .where('status', '==', 'Completed') \
+            .where('skillathon', '==', skillathon_name)
+
+        if institution_name:
+            base_query = base_query.where('institution', '==', institution_name)
+
+        exam_assignments = list(base_query.stream())
+
+        # Group by emailID
+        students = defaultdict(lambda: {
+            'name': None,
+            'institute': None,
+            'grades': {},
+            'missed_critical_steps': {},
+            'exam_data': {}
+        })
+        all_procedures = set()
+
+        for exam in exam_assignments:
+            exam_doc = exam.to_dict()
+            email = exam_doc.get('emailID')
+            if not email:
+                continue
+            procedure_name = exam_doc.get('procedureName', 'Unknown')
+            if procedure_name == "Unknown":
+                procedure_name = exam_doc.get('procedure_name', 'Unknown')
+            all_procedures.add(procedure_name)
+
+            # Student info
+            students[email]['name'] = exam_doc.get('name') or exam_doc.get('username') or email
+            students[email]['institute'] = exam_doc.get('institution', 'Unknown')
+
+            # Grade calculation
+            total_score = exam_doc.get("marks", 0)
+            max_marks = sum(
+                question.get('right_marks_for_question', 0)
+                for section in exam_doc.get('examMetaData', [])
+                for question in section.get("section_questions", [])
+            )
+            percentage = round((total_score / max_marks) * 100, 2) if max_marks else 0
+            grade = get_grade_letter(percentage)
+
+            # Missed critical steps and steps info
+            missed_critical = []
+            steps = []
+            critical_missed = 0
+            for section in exam_doc.get("examMetaData", []):
+                for question in section.get("section_questions", []):
+                    step_info = {
+                        'description': question.get('question', ''),
+                        'completed': question.get('answer_scored', 0) > 0,
+                        'critical': question.get('critical', False)
+                    }
+                    steps.append(step_info)
+                    if question.get("critical") and question.get("answer_scored", 0) == 0:
+                        missed_critical.append(question.get('question'))
+                        critical_missed += 1
+
+            # Store per procedure
+            students[email]['grades'][procedure_name] = {
+                'grade': grade,
+                'percentage': percentage
+            }
+            students[email]['missed_critical_steps'][procedure_name] = missed_critical
+            students[email]['exam_data'][procedure_name] = {
+                'steps': steps,
+                'critical_missed': critical_missed
+            }
+
+        # Prepare students list
+        students_list = list(students.values())
+        all_procedures = list(all_procedures)
+
+        # Highest/lowest scorecards
+        highest_score = -1
+        highest_score_student = "-"
+        highest_score_institute = "-"
+        lowest_score = 101
+        lowest_score_student = "-"
+        lowest_score_institute = "-"
+        for student in students_list:
+            for proc in all_procedures:
+                grade_info = student['grades'].get(proc)
+                if grade_info:
+                    pct = grade_info['percentage']
+                    if pct > highest_score:
+                        highest_score = pct
+                        highest_score_student = student['name']
+                        highest_score_institute = student['institute']
+                    if pct < lowest_score:
+                        lowest_score = pct
+                        lowest_score_student = student['name']
+                        lowest_score_institute = student['institute']
+
+        # Response
+        return JsonResponse({
+            'students': students_list,
+            'procedures': all_procedures,
+            'highest_score': highest_score if highest_score != -1 else 0,
+            'highest_score_student': highest_score_student,
+            'highest_score_institute': highest_score_institute,
+            'lowest_score': lowest_score if lowest_score != 101 else 0,
+            'lowest_score_student': lowest_score_student,
+            'lowest_score_institute': lowest_score_institute
+        })
+    except Exception as e:
+        print(f"Error in fetch_student_metrics: {str(e)}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+@csrf_exempt
+def fetch_particular_student(request):
+    try:
+        exam_reports = []
+        username = request.GET.get("username")
+
+        if not username:
+            return JsonResponse({"error": "Username parameter is required"}, status=400)
+
+        # Fetch user reference from Firestore
+        user_query = db.collection('Users').where("username", "==", username).limit(1).stream()
+        user_doc = next(user_query, None)
+
+        if not user_doc:
+            return JsonResponse({"error": "User not found"}, status=404)
+
+        user_ref = user_doc.reference  # Get the Firestore document reference
+
+        # Fetch exams where user matches and status is "Completed"
+        exam_assignments_ref = (
+            db.collection('ExamAssignment')
+            .where("status", "==", "Completed")
+            .where("user", "==", user_ref)  # Filter exams for the specific user
+            .order_by("completed_date", direction=firestore.Query.DESCENDING)
+        )
+
+        exam_assignments = exam_assignments_ref.stream()
+
+        for exam in exam_assignments:
+            exam_doc = exam.to_dict()
+            
+            total_score = exam_doc.get("marks", 0)
+            max_marks = sum(
+                question.get('right_marks_for_question', 0) 
+                for section in exam_doc.get('examMetaData', []) 
+                for question in section.get("section_questions", [])
+            )
+
+            percentage = round((total_score / max_marks) * 100, 2) if max_marks else 0
+            critical_missed, critical_points = calculate_exam_score(exam_doc.get("examMetaData", []))
+            procedure_name = exam_doc.get("procedure_name", "Unknown")
+
+            exam_reports.append({
+                "exam_id": exam.id,
+                "student_id": user_doc.id,
+                "student_name": username,
+                "total_score": total_score,
+                "percentage": percentage,
+                "critical_missed": critical_missed,
+                "procedure_name": procedure_name,
+                "critical_points": critical_points,
+            })
+
+        return render(request, 'assessments/particular_student_report.html', {"exam_reports": exam_reports})
+       
+    except Exception as e:
+        print(str(e))
+        return JsonResponse({"error": str(e)}, status=500)
+
+def calculate_exam_score(exam_metadata):
+    critical_missed = 0
+    critical_points = []
+    
+    for section in exam_metadata:
+        for question in section.get("section_questions", []):
+            if question.get("critical") and question.get("answer_scored", 0) == 0:
+                critical_missed += 1
+                critical_points.append(question.get('question'))
+    
+    return critical_missed, critical_points
+
+@csrf_exempt
 def institute_list(request):
     """View to list all institutes and handle creation."""
     try:
@@ -2078,3 +2269,1294 @@ def reset_password(request, token):
 def onboarding_dashboard(request):
     return render(request, 'assessments/onboarding/onboarding_dashboard.html')
 
+def course_management(request):
+    """
+    View function for the course management page.
+    """
+    return render(request, 'assessments/course_management.html')
+
+def course_detail(request, course_id):
+    """
+    View function for individual course detail page.
+    """
+    try:
+        # Fetch course data from Firebase
+        course_ref = db.collection('Courses').document(course_id)
+        course_doc = course_ref.get()
+        
+        if not course_doc.exists:
+            # Course not found, redirect to course management
+            return redirect('course_management')
+        
+        course_data = course_doc.to_dict()
+        procedure_refs = course_data.get('procedures', [])
+        
+        # Get procedure details
+        procedures = []
+        for proc_ref in procedure_refs:
+            proc_doc = proc_ref.get()
+            if proc_doc.exists:
+                proc_data = proc_doc.to_dict()
+                procedures.append({
+                    'id': proc_ref.id,
+                    'name': proc_data.get('procedureName', 'Unknown'),
+                    'category': 'General',  # Default category
+                    'status': 'active'  # Default status
+                })
+        
+        # Prepare course data for template
+        course_context = {
+            'id': course_id,
+            'name': course_data.get('courseName', 'N/A'),
+            'description': course_data.get('description', ''),
+            'total_procedures': len(procedures),
+            'osce_types': course_data.get('osceTypes', []),
+            'verification_required': course_data.get('verificationRequired', False),
+            'created_date': course_data.get('createdAt'),
+            'last_modified': course_data.get('updatedAt'),
+            'procedures': procedures
+        }
+        
+        return render(request, 'assessments/course_detail.html', {'course': course_context})
+        
+    except Exception as e:
+        print(f"Error fetching course details: {str(e)}")
+        # Redirect to course management on error
+        return redirect('course_management')
+
+@login_required
+def batch_management(request):
+    """
+    View for managing batches. Displays a list of all batches and provides functionality
+    to create, edit, and delete batches.
+    """
+    return render(request, 'assessments/batch_management.html')
+
+@login_required
+def batch_detail(request, batch_id):
+    """
+    View for displaying and managing details of a specific batch.
+    """
+    try:
+        # Fetch batch data from Firebase
+        batch_ref = db.collection('Batches').document(batch_id)
+        batch_doc = batch_ref.get()
+        
+        if not batch_doc.exists:
+            # Batch not found, redirect to batch management
+            return redirect('batch_management')
+        
+        batch_data = batch_doc.to_dict()
+        
+        # Get unit details
+        unit_name = "Unknown"
+        unit_id = None
+        unit_ref = batch_data.get('unit')
+        if unit_ref:
+            unit_doc = unit_ref.get()
+            if unit_doc.exists:
+                unit_id = unit_doc.id
+                if batch_data.get('unitType') == 'institution':
+                    unit_name = unit_doc.to_dict().get('instituteName', 'Unknown')
+                else:
+                    unit_name = unit_doc.to_dict().get('hospitalName', 'Unknown')
+        
+        # Get learner details
+        learners = []
+        learner_refs = batch_data.get('learners', [])
+        for learner_ref in learner_refs:
+            learner_doc = learner_ref.get()
+            if learner_doc.exists:
+                learner_data = learner_doc.to_dict()
+                learners.append({
+                    'id': learner_doc.id,
+                    'name': learner_data.get('username', 'N/A'),
+                    'email': learner_data.get('emailID', 'N/A')
+                })
+        
+        # Get course details
+        courses = []
+        course_refs = batch_data.get('courses', [])
+        for course_ref in course_refs:
+            course_doc = course_ref.get()
+            if course_doc.exists:
+                course_data = course_doc.to_dict()
+                procedure_refs = course_data.get('procedures', [])
+                
+                # Get procedure names
+                procedure_names = []
+                for proc_ref in procedure_refs:
+                    proc_doc = proc_ref.get()
+                    if proc_doc.exists:
+                        procedure_names.append(proc_doc.to_dict().get('procedureName', 'Unknown'))
+                
+                courses.append({
+                    'id': course_ref.id,
+                    'name': course_data.get('courseName', 'N/A'),
+                    'description': course_data.get('description', ''),
+                    'procedures': procedure_names,
+                    'procedure_count': len(procedure_names),
+                    'osce_types': course_data.get('osceTypes', []),
+                    'verification_required': course_data.get('verificationRequired', False),
+                    'status': course_data.get('status', 'active')
+                })
+        
+        # Prepare batch context for template
+        batch_context = {
+            'id': batch_id,
+            'name': batch_data.get('batchName', 'N/A'),
+            'unit_type': batch_data.get('unitType', 'N/A'),
+            'unit_name': unit_name,
+            'unit_id': unit_id,
+            'learners': learners,
+            'learner_count': len(learners),
+            'courses': courses,
+            'course_count': len(courses),
+            'status': batch_data.get('status', 'active'),
+            'created_at': batch_data.get('createdAt')
+        }
+        
+        return render(request, 'assessments/batch_detail.html', {'batch': batch_context})
+        
+    except Exception as e:
+        print(f"Error fetching batch details: {str(e)}")
+        # Redirect to batch management on error
+        return redirect('batch_management')
+
+@csrf_exempt
+def create_course(request):
+    """API endpoint to create a new course."""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            course_name = data.get('courseName', '').strip()
+            description = data.get('description', '').strip()
+            procedure_ids = data.get('procedures', [])
+            osce_types = data.get('osceTypes', [])
+            verification_required = data.get('verificationRequired', False)
+            
+            if not course_name:
+                return JsonResponse({'error': 'Course name is required'}, status=400)
+            
+            if not procedure_ids:
+                return JsonResponse({'error': 'At least one procedure is required'}, status=400)
+            
+            if not osce_types:
+                return JsonResponse({'error': 'At least one OSCE type is required'}, status=400)
+            
+            # Check if course already exists
+            existing_course = db.collection('Courses')\
+                .where('courseName', '==', course_name)\
+                .limit(1)\
+                .stream()
+            
+            if list(existing_course):
+                return JsonResponse({'error': 'Course with this name already exists'}, status=400)
+            
+            # Create procedure references
+            procedure_refs = [db.collection('ProcedureTable').document(pid) for pid in procedure_ids]
+            
+            # Create new course
+            new_course = {
+                'courseName': course_name,
+                'description': description,
+                'procedures': procedure_refs,
+                'osceTypes': osce_types,
+                'verificationRequired': verification_required,
+                'status': 'active',
+                'createdAt': firestore.SERVER_TIMESTAMP,
+                'updatedAt': firestore.SERVER_TIMESTAMP
+            }
+            
+            # Add to Firebase
+            course_ref = db.collection('Courses').add(new_course)
+            
+            return JsonResponse({
+                'success': True,
+                'id': course_ref[1].id,
+                'message': 'Course created successfully'
+            })
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@csrf_exempt
+def fetch_courses(request):
+    """API endpoint to fetch all courses."""
+    try:
+        courses_ref = db.collection('Courses')
+        courses = []
+        
+        for doc in courses_ref.stream():
+            course_data = doc.to_dict()
+            procedure_refs = course_data.get('procedures', [])
+            
+            # Get procedure names
+            procedure_names = []
+            for proc_ref in procedure_refs:
+                proc_doc = proc_ref.get()
+                if proc_doc.exists:
+                    procedure_names.append(proc_doc.to_dict().get('procedureName', 'Unknown'))
+            
+            courses.append({
+                'id': doc.id,
+                'name': course_data.get('courseName', 'N/A'),
+                'description': course_data.get('description', ''),
+                'procedures': procedure_names,
+                'procedure_count': len(procedure_names),
+                'osce_types': course_data.get('osceTypes', []),
+                'verification_required': course_data.get('verificationRequired', False),
+                'status': course_data.get('status', 'active'),
+                'created_at': course_data.get('createdAt'),
+                'updated_at': course_data.get('updatedAt')
+            })
+        
+        return JsonResponse({'courses': courses}, status=200)
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+def delete_course(request, course_id):
+    """API endpoint to delete a course."""
+    if request.method == 'POST':
+        try:
+            course_ref = db.collection('Courses').document(course_id)
+            course_doc = course_ref.get()
+            
+            if not course_doc.exists:
+                return JsonResponse({'error': 'Course not found'}, status=404)
+            
+            # Delete the course
+            course_ref.delete()
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Course deleted successfully'
+            }, status=200)
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@csrf_exempt
+def toggle_course_status(request, course_id):
+    """API endpoint to toggle course status."""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            new_status = data.get('status', 'active')
+            
+            course_ref = db.collection('Courses').document(course_id)
+            course_doc = course_ref.get()
+            
+            if not course_doc.exists:
+                return JsonResponse({'error': 'Course not found'}, status=404)
+            
+            # Update the course status
+            course_ref.update({
+                'status': new_status,
+                'updatedAt': firestore.SERVER_TIMESTAMP
+            })
+            
+            return JsonResponse({
+                'success': True,
+                'status': new_status,
+                'message': 'Course status updated successfully'
+            }, status=200)
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@csrf_exempt
+def update_course(request, course_id):
+    """API endpoint to update a course."""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            course_name = data.get('courseName', '').strip()
+            description = data.get('description', '').strip()
+            procedure_ids = data.get('procedures', [])
+            osce_types = data.get('osceTypes', [])
+            verification_required = data.get('verificationRequired', False)
+            
+            if not course_name:
+                return JsonResponse({'error': 'Course name is required'}, status=400)
+            
+            if not procedure_ids:
+                return JsonResponse({'error': 'At least one procedure is required'}, status=400)
+            
+            if not osce_types:
+                return JsonResponse({'error': 'At least one OSCE type is required'}, status=400)
+            
+            # Check if course exists
+            course_ref = db.collection('Courses').document(course_id)
+            course_doc = course_ref.get()
+            
+            if not course_doc.exists:
+                return JsonResponse({'error': 'Course not found'}, status=404)
+            
+            # Check if another course already exists with the same name (excluding current course)
+            existing_course = db.collection('Courses')\
+                .where('courseName', '==', course_name)\
+                .stream()
+            
+            for doc in existing_course:
+                if doc.id != course_id:
+                    return JsonResponse({'error': 'Another course with this name already exists'}, status=400)
+            
+            # Create procedure references
+            procedure_refs = [db.collection('ProcedureTable').document(pid) for pid in procedure_ids]
+            
+            # Update course
+            course_ref.update({
+                'courseName': course_name,
+                'description': description,
+                'procedures': procedure_refs,
+                'osceTypes': osce_types,
+                'verificationRequired': verification_required,
+                'updatedAt': firestore.SERVER_TIMESTAMP
+            })
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Course updated successfully'
+            }, status=200)
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@csrf_exempt
+def add_procedures_to_course(request, course_id):
+    """API endpoint to add procedures to a course."""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            procedure_ids = data.get('procedureIds', [])
+            
+            if not procedure_ids:
+                return JsonResponse({'error': 'At least one procedure is required'}, status=400)
+            
+            # Check if course exists
+            course_ref = db.collection('Courses').document(course_id)
+            course_doc = course_ref.get()
+            
+            if not course_doc.exists:
+                return JsonResponse({'error': 'Course not found'}, status=404)
+            
+            # Get current course data
+            course_data = course_doc.to_dict()
+            current_procedures = course_data.get('procedures', [])
+            
+            # Create new procedure references
+            new_procedure_refs = [db.collection('ProcedureTable').document(pid) for pid in procedure_ids]
+            
+            # Check if procedures already exist in the course
+            existing_procedure_ids = [ref.id for ref in current_procedures]
+            procedures_to_add = []
+            
+            for proc_ref in new_procedure_refs:
+                if proc_ref.id not in existing_procedure_ids:
+                    procedures_to_add.append(proc_ref)
+            
+            if not procedures_to_add:
+                return JsonResponse({
+                    'success': True,
+                    'message': 'All selected procedures are already in the course'
+                }, status=200)
+            
+            # Add new procedures to the course
+            course_ref.update({
+                'procedures': firestore.ArrayUnion(procedures_to_add),
+                'updatedAt': firestore.SERVER_TIMESTAMP
+            })
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'{len(procedures_to_add)} procedure(s) added successfully'
+            }, status=200)
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@csrf_exempt
+def remove_procedure_from_course(request, course_id):
+    """API endpoint to remove a procedure from a course."""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            procedure_id = data.get('procedureId')
+            
+            if not procedure_id:
+                return JsonResponse({'error': 'Procedure ID is required'}, status=400)
+            
+            # Check if course exists
+            course_ref = db.collection('Courses').document(course_id)
+            course_doc = course_ref.get()
+            
+            if not course_doc.exists:
+                return JsonResponse({'error': 'Course not found'}, status=404)
+            
+            # Get current course data
+            course_data = course_doc.to_dict()
+            current_procedures = course_data.get('procedures', [])
+            
+            # Find the procedure to remove
+            procedure_to_remove = None
+            for proc_ref in current_procedures:
+                if proc_ref.id == procedure_id:
+                    procedure_to_remove = proc_ref
+                    break
+            
+            if not procedure_to_remove:
+                return JsonResponse({'error': 'Procedure not found in course'}, status=404)
+            
+            # Remove the procedure from the course
+            course_ref.update({
+                'procedures': firestore.ArrayRemove([procedure_to_remove]),
+                'updatedAt': firestore.SERVER_TIMESTAMP
+            })
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Procedure removed successfully'
+            }, status=200)
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+# Batch API endpoints
+@csrf_exempt
+def fetch_batches(request):
+    """API endpoint to fetch all batches, with optional filtering by unitType and status."""
+    try:
+        # Get filter parameters from query string
+        unit_type_param = request.GET.get('unitType', '').strip()
+        status_param = request.GET.get('status', '').strip()
+        unit_types = [u.strip().lower() for u in unit_type_param.split(',') if u.strip()] if unit_type_param else []
+        statuses = [s.strip().lower() for s in status_param.split(',') if s.strip()] if status_param else []
+
+        batches_ref = db.collection('Batches')
+        batches = []
+        for doc in batches_ref.stream():
+            batch_data = doc.to_dict()
+
+            # Filtering logic
+            batch_unit_type = batch_data.get('unitType', '').lower()
+            batch_status = batch_data.get('status', 'active').lower()
+            if unit_types and batch_unit_type not in unit_types:
+                continue
+            if statuses and batch_status not in statuses:
+                continue
+
+            # Get unit name
+            unit_name = "Unknown"
+            unit_ref = batch_data.get('unit')
+            if unit_ref:
+                unit_doc = unit_ref.get()
+                if unit_doc.exists:
+                    if batch_data.get('unitType') == 'institution':
+                        unit_name = unit_doc.to_dict().get('instituteName', 'Unknown')
+                    else:
+                        unit_name = unit_doc.to_dict().get('hospitalName', 'Unknown')
+
+            # Get learner count
+            learners = batch_data.get('learners', [])
+            learner_count = len(learners)
+
+            batches.append({
+                'id': doc.id,
+                'batchName': batch_data.get('batchName', 'N/A'),
+                'unitType': batch_data.get('unitType', 'N/A'),
+                'unitName': unit_name,
+                'learnerCount': learner_count,
+                'status': batch_data.get('status', 'active'),
+                'createdAt': batch_data.get('createdAt')
+            })
+
+        return JsonResponse({
+            'success': True,
+            'batches': batches
+        }, status=200)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@csrf_exempt
+def create_batch(request):
+    """API endpoint to create a new batch."""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            batch_name = data.get('batchName', '').strip()
+            unit_type = data.get('unitType')
+            unit_id = data.get('unitId')
+            learner_ids = data.get('learnerIds', [])
+            
+            if not batch_name:
+                return JsonResponse({'error': 'Batch name is required'}, status=400)
+            
+            if not unit_type:
+                return JsonResponse({'error': 'Unit type is required'}, status=400)
+            
+            if not unit_id:
+                return JsonResponse({'error': 'Unit is required'}, status=400)
+            
+            # Only require learners for institutions
+            if unit_type == 'institution' and not learner_ids:
+                return JsonResponse({'error': 'At least one learner is required for institutions'}, status=400)
+            
+            # Check if batch already exists
+            existing_batch = db.collection('Batches')\
+                .where('batchName', '==', batch_name)\
+                .limit(1)\
+                .stream()
+            
+            if list(existing_batch):
+                return JsonResponse({'error': 'Batch with this name already exists'}, status=400)
+            
+            # Get unit reference based on type
+            if unit_type == 'hospital':
+                unit_ref = db.collection('HospitalNames').document(unit_id)
+            else:
+                unit_ref = db.collection('InstituteNames').document(unit_id)
+            
+            if not unit_ref.get().exists:
+                return JsonResponse({'error': 'Unit not found'}, status=404)
+            
+            # Get learner references (only for institutions)
+            learner_refs = []
+            for learner_id in learner_ids:
+                learner_ref = db.collection('Users').document(learner_id)
+                if learner_ref.get().exists:
+                    learner_refs.append(learner_ref)
+            
+            if not learner_refs:
+                return JsonResponse({'error': 'No valid learners found'}, status=400)
+            
+            # Create new batch
+            new_batch = {
+                'batchName': batch_name,
+                'unitType': unit_type,
+                'unit': unit_ref,
+                'learners': learner_refs,
+                'status': 'active',
+                'createdAt': firestore.SERVER_TIMESTAMP
+            }
+            
+            # Add to Firebase
+            batch_ref = db.collection('Batches').add(new_batch)
+            
+            return JsonResponse({
+                'success': True,
+                'id': batch_ref[1].id,
+                'message': 'Batch created successfully'
+            }, status=201)
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@csrf_exempt
+def fetch_hospitals(request):
+    """API endpoint to fetch all hospitals."""
+    try:
+        hospitals_ref = db.collection('HospitalNames')
+        hospitals = []
+        
+        for doc in hospitals_ref.stream():
+            hospital_data = doc.to_dict()
+            hospitals.append({
+                'id': doc.id,
+                'name': hospital_data.get('hospitalName', 'N/A')
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'units': hospitals
+        }, status=200)
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+
+@csrf_exempt
+def fetch_learners(request, unit_type, unit_id):
+    """API endpoint to fetch learners (students and nurses) from a specific institution or hospital by name (string)."""
+    try:
+        # Get the unit name from the relevant collection
+        if unit_type == 'institution':
+            unit_ref = db.collection('InstituteNames').document(unit_id)
+            unit_doc = unit_ref.get()
+            if not unit_doc.exists:
+                return JsonResponse({'success': False, 'error': 'Institute not found'}, status=404)
+            unit_name = unit_doc.to_dict().get('instituteName', '')
+            user_field = 'institution'
+        elif unit_type == 'hospital':
+            unit_ref = db.collection('HospitalNames').document(unit_id)
+            unit_doc = unit_ref.get()
+            if not unit_doc.exists:
+                return JsonResponse({'success': False, 'error': 'Hospital not found'}, status=404)
+            unit_name = unit_doc.to_dict().get('hospitalName', '')
+            user_field = 'hospital'
+        else:
+            return JsonResponse({'success': False, 'error': 'Invalid unit type'}, status=400)
+
+        # Query users by string field
+        learners_ref = db.collection('Users').where(user_field, '==', unit_name).where('role', 'in', ['student', 'nurse'])
+        learners = []
+        for doc in learners_ref.stream():
+            learner_data = doc.to_dict()
+            learners.append({
+                'id': doc.id,
+                'name': learner_data.get('name', 'N/A'),
+                'email': learner_data.get('emailID', 'N/A')
+            })
+        return JsonResponse({'success': True, 'learners': learners, 'unit_name': unit_name}, status=200)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@csrf_exempt
+def fetch_batch_details(request, batch_id):
+    """API endpoint to fetch detailed information about a specific batch."""
+    try:
+        batch_ref = db.collection('Batches').document(batch_id)
+        batch_doc = batch_ref.get()
+        
+        if not batch_doc.exists:
+            return JsonResponse({'success': False, 'error': 'Batch not found'}, status=404)
+        
+        batch_data = batch_doc.to_dict()
+        
+        # Get unit details
+        unit_name = "Unknown"
+        unit_id = None
+        unit_ref = batch_data.get('unit')
+        if unit_ref:
+            unit_doc = unit_ref.get()
+            if unit_doc.exists:
+                unit_id = unit_doc.id
+                if batch_data.get('unitType') == 'institution':
+                    unit_name = unit_doc.to_dict().get('instituteName', 'Unknown')
+                else:
+                    unit_name = unit_doc.to_dict().get('hospitalName', 'Unknown')
+        
+        # Get learner details
+        learners = []
+        learner_refs = batch_data.get('learners', [])
+        for learner_ref in learner_refs:
+            learner_doc = learner_ref.get()
+            if learner_doc.exists:
+                learner_data = learner_doc.to_dict()
+                learners.append({
+                    'id': learner_doc.id,
+                    'name': learner_data.get('username', 'N/A'),
+                    'email': learner_data.get('emailID', 'N/A')
+                })
+        
+        batch_details = {
+            'id': batch_id,
+            'batchName': batch_data.get('batchName', 'N/A'),
+            'unitType': batch_data.get('unitType', 'N/A'),
+            'unitName': unit_name,
+            'unitId': unit_id,
+            'learners': learners,
+            'learnerCount': len(learners),
+            'status': batch_data.get('status', 'active'),
+            'createdAt': batch_data.get('createdAt')
+        }
+        
+        return JsonResponse({'success': True, 'batch': batch_details}, status=200)
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@csrf_exempt
+def update_batch(request, batch_id):
+    """API endpoint to update a batch."""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            batch_name = data.get('batchName', '').strip()
+            unit_type = data.get('unitType', None)
+            unit_id = data.get('unitId', None)
+            learner_ids = data.get('learnerIds', [])
+
+            if data.get('updateOnlyBatchName', True):
+                batch_ref = db.collection('Batches').document(batch_id)
+                batch_ref.update({
+                    'batchName': batch_name
+                })
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Batch name updated successfully'
+                }, status=200)
+            
+            
+            if not batch_name:
+                return JsonResponse({'error': 'Batch name is required'}, status=400)
+            
+            if not unit_type:
+                return JsonResponse({'error': 'Unit type is required'}, status=400)
+            
+            if not unit_id:
+                return JsonResponse({'error': 'Unit is required'}, status=400)
+            
+            # Only require learners for institutions
+            if unit_type == 'institution' and not learner_ids:
+                return JsonResponse({'error': 'At least one learner is required for institutions'}, status=400)
+            
+            # Check if batch exists
+            batch_ref = db.collection('Batches').document(batch_id)
+            batch_doc = batch_ref.get()
+            
+            if not batch_doc.exists:
+                return JsonResponse({'error': 'Batch not found'}, status=404)
+            
+            # Check if another batch already exists with the same name (excluding current batch)
+            existing_batch = db.collection('Batches')\
+                .where('batchName', '==', batch_name)\
+                .stream()
+            
+            for doc in existing_batch:
+                if doc.id != batch_id:
+                    return JsonResponse({'error': 'Another batch with this name already exists'}, status=400)
+            
+            # Get unit reference based on type
+            if unit_type == 'hospital':
+                unit_ref = db.collection('Hospitals').document(unit_id)
+            else:
+                unit_ref = db.collection('InstituteNames').document(unit_id)
+            
+            if not unit_ref.get().exists:
+                return JsonResponse({'error': 'Unit not found'}, status=404)
+            
+            # Get learner references (only for institutions)
+            learner_refs = []
+            if unit_type == 'institution':
+                for learner_id in learner_ids:
+                    learner_ref = db.collection('Users').document(learner_id)
+                    if learner_ref.get().exists:
+                        learner_refs.append(learner_ref)
+                
+                if not learner_refs:
+                    return JsonResponse({'error': 'No valid learners found'}, status=400)
+            
+            # Update batch
+            update_data = {
+                'batchName': batch_name,
+                'unitType': unit_type,
+                'unit': unit_ref,
+                'learners': learner_refs,
+                'updatedAt': firestore.SERVER_TIMESTAMP
+            }
+            
+            batch_ref.update(update_data)
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Batch updated successfully'
+            }, status=200)
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@csrf_exempt
+def delete_batch(request, batch_id):
+    """API endpoint to delete a batch."""
+    if request.method == 'POST':
+        try:
+            batch_ref = db.collection('Batches').document(batch_id)
+            batch_doc = batch_ref.get()
+            
+            if not batch_doc.exists:
+                return JsonResponse({'error': 'Batch not found'}, status=404)
+            
+            # Delete the batch
+            batch_ref.delete()
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Batch deleted successfully'
+            }, status=200)
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@csrf_exempt
+def remove_learners_from_batch(request, batch_id):
+    """API endpoint to remove learners from a batch."""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            learner_ids = data.get('learnerIds', [])
+            
+            if not learner_ids:
+                return JsonResponse({'error': 'At least one learner ID is required'}, status=400)
+            
+            # Check if batch exists
+            batch_ref = db.collection('Batches').document(batch_id)
+            batch_doc = batch_ref.get()
+            
+            if not batch_doc.exists:
+                return JsonResponse({'error': 'Batch not found'}, status=404)
+            
+            batch_data = batch_doc.to_dict()
+            current_learners = batch_data.get('learners', [])
+            
+            # Find learners to remove
+            learners_to_remove = []
+            for learner_ref in current_learners:
+                if learner_ref.id in learner_ids:
+                    learners_to_remove.append(learner_ref)
+            
+            if not learners_to_remove:
+                return JsonResponse({
+                    'success': True,
+                    'message': 'No learners found to remove'
+                }, status=200)
+            
+            # Remove learners from batch
+            batch_ref.update({
+                'learners': firestore.ArrayRemove(learners_to_remove),
+                'updatedAt': firestore.SERVER_TIMESTAMP
+            })
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'{len(learners_to_remove)} learner(s) removed successfully'
+            }, status=200)
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@csrf_exempt
+def add_learners_to_batch(request, batch_id):
+    """API endpoint to add learners to a batch."""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            learner_ids = data.get('learnerIds', [])
+            
+            if not learner_ids:
+                return JsonResponse({'error': 'At least one learner ID is required'}, status=400)
+            
+            # Check if batch exists
+            batch_ref = db.collection('Batches').document(batch_id)
+            batch_doc = batch_ref.get()
+            
+            if not batch_doc.exists:
+                return JsonResponse({'error': 'Batch not found'}, status=404)
+            
+            batch_data = batch_doc.to_dict()
+            current_learners = batch_data.get('learners', [])
+            current_learner_ids = [ref.id for ref in current_learners]
+            
+            # Filter out learners that are already in the batch
+            new_learner_ids = [lid for lid in learner_ids if lid not in current_learner_ids]
+            
+            if not new_learner_ids:
+                return JsonResponse({
+                    'success': True,
+                    'message': 'All selected learners are already in the batch'
+                }, status=200)
+            
+            # Get learner references
+            new_learner_refs = []
+            for learner_id in new_learner_ids:
+                learner_ref = db.collection('Users').document(learner_id)
+                if learner_ref.get().exists:
+                    new_learner_refs.append(learner_ref)
+            
+            if not new_learner_refs:
+                return JsonResponse({'error': 'No valid learners found'}, status=400)
+            
+            # Add learners to batch
+            batch_ref.update({
+                'learners': firestore.ArrayUnion(new_learner_refs),
+                'updatedAt': firestore.SERVER_TIMESTAMP
+            })
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'{len(new_learner_refs)} learner(s) added successfully'
+            }, status=200)
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@csrf_exempt
+def fetch_available_learners_for_batch(request, batch_id):
+    """API endpoint to fetch available learners for a batch (excluding current learners)."""
+    try:
+        # Check if batch exists
+        batch_ref = db.collection('Batches').document(batch_id)
+        batch_doc = batch_ref.get()
+        
+        if not batch_doc.exists:
+            return JsonResponse({'success': False, 'error': 'Batch not found'}, status=404)
+        
+        batch_data = batch_doc.to_dict()
+        unit_type = batch_data.get('unitType')
+        unit_ref = batch_data.get('unit')
+        current_learners = batch_data.get('learners', [])
+        current_learner_ids = [ref.id for ref in current_learners]
+        
+        if not unit_ref:
+            return JsonResponse({'success': False, 'error': 'Batch has no unit assigned'}, status=400)
+        
+        unit_doc = unit_ref.get()
+        if not unit_doc.exists:
+            return JsonResponse({'success': False, 'error': 'Unit not found'}, status=404)
+        
+        # Get unit name
+        if unit_type == 'institution':
+            unit_name = unit_doc.to_dict().get('instituteName', '')
+            user_field = 'institution'
+        else:
+            unit_name = unit_doc.to_dict().get('hospitalName', '')
+            user_field = 'hospital'
+        
+        # Query all learners from the unit
+        learners_ref = db.collection('Users').where(user_field, '==', unit_name).where('role', 'in', ['student', 'nurse'])
+        available_learners = []
+        
+        for doc in learners_ref.stream():
+            learner_data = doc.to_dict()
+            is_current_learner = doc.id in current_learner_ids
+            
+            available_learners.append({
+                'id': doc.id,
+                'name': learner_data.get('username', 'N/A'),
+                'email': learner_data.get('emailID', 'N/A'),
+                'isCurrentLearner': is_current_learner
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'learners': available_learners,
+            'unit_name': unit_name
+        }, status=200)
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@csrf_exempt
+def fetch_batch_courses(request, batch_id):
+    """API endpoint to fetch courses assigned to a batch."""
+    try:
+        # Check if batch exists
+        batch_ref = db.collection('Batches').document(batch_id)
+        batch_doc = batch_ref.get()
+        
+        if not batch_doc.exists:
+            return JsonResponse({'success': False, 'error': 'Batch not found'}, status=404)
+        
+        batch_data = batch_doc.to_dict()
+        course_refs = batch_data.get('courses', [])
+        
+        # Get course details
+        courses = []
+        for course_ref in course_refs:
+            course_doc = course_ref.get()
+            if course_doc.exists:
+                course_data = course_doc.to_dict()
+                procedure_refs = course_data.get('procedures', [])
+                
+                # Get procedure names
+                procedure_names = []
+                for proc_ref in procedure_refs:
+                    proc_doc = proc_ref.get()
+                    if proc_doc.exists:
+                        procedure_names.append(proc_doc.to_dict().get('procedureName', 'Unknown'))
+                
+                courses.append({
+                    'id': course_ref.id,
+                    'name': course_data.get('courseName', 'N/A'),
+                    'description': course_data.get('description', ''),
+                    'procedures': procedure_names,
+                    'procedure_count': len(procedure_names),
+                    'osce_types': course_data.get('osceTypes', []),
+                    'verification_required': course_data.get('verificationRequired', False),
+                    'status': course_data.get('status', 'active')
+                })
+        
+        return JsonResponse({
+            'success': True,
+            'courses': courses
+        }, status=200)
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@csrf_exempt
+def add_courses_to_batch(request, batch_id):
+    """API endpoint to add courses to a batch."""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            course_ids = data.get('courseIds', [])
+            
+            if not course_ids:
+                return JsonResponse({'error': 'At least one course ID is required'}, status=400)
+            
+            # Check if batch exists
+            batch_ref = db.collection('Batches').document(batch_id)
+            batch_doc = batch_ref.get()
+            
+            if not batch_doc.exists:
+                return JsonResponse({'error': 'Batch not found'}, status=404)
+            
+            batch_data = batch_doc.to_dict()
+            current_courses = batch_data.get('courses', [])
+            current_course_ids = [ref.id for ref in current_courses]
+            
+            # Filter out courses that are already in the batch
+            new_course_ids = [cid for cid in course_ids if cid not in current_course_ids]
+            
+            if not new_course_ids:
+                return JsonResponse({
+                    'success': True,
+                    'message': 'All selected courses are already in the batch'
+                }, status=200)
+            
+            # Get course references
+            new_course_refs = []
+            for course_id in new_course_ids:
+                course_ref = db.collection('Courses').document(course_id)
+                if course_ref.get().exists:
+                    new_course_refs.append(course_ref)
+            
+            if not new_course_refs:
+                return JsonResponse({'error': 'No valid courses found'}, status=400)
+            
+            # Add courses to batch
+            batch_ref.update({
+                'courses': firestore.ArrayUnion(new_course_refs),
+                'updatedAt': firestore.SERVER_TIMESTAMP
+            })
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'{len(new_course_refs)} course(s) added successfully'
+            }, status=200)
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@csrf_exempt
+def remove_courses_from_batch(request, batch_id):
+    """API endpoint to remove courses from a batch."""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            course_ids = data.get('courseIds', [])
+            
+            if not course_ids:
+                return JsonResponse({'error': 'At least one course ID is required'}, status=400)
+            
+            # Check if batch exists
+            batch_ref = db.collection('Batches').document(batch_id)
+            batch_doc = batch_ref.get()
+            
+            if not batch_doc.exists:
+                return JsonResponse({'error': 'Batch not found'}, status=404)
+            
+            batch_data = batch_doc.to_dict()
+            current_courses = batch_data.get('courses', [])
+            
+            # Find courses to remove
+            courses_to_remove = []
+            for course_ref in current_courses:
+                if course_ref.id in course_ids:
+                    courses_to_remove.append(course_ref)
+            
+            if not courses_to_remove:
+                return JsonResponse({
+                    'success': True,
+                    'message': 'No courses found to remove'
+                }, status=200)
+            
+            # Remove courses from batch
+            batch_ref.update({
+                'courses': firestore.ArrayRemove(courses_to_remove),
+                'updatedAt': firestore.SERVER_TIMESTAMP
+            })
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'{len(courses_to_remove)} course(s) removed successfully'
+            }, status=200)
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@csrf_exempt
+def fetch_available_courses_for_batch(request, batch_id):
+    """API endpoint to fetch available courses for a batch (excluding current courses)."""
+    try:
+        # Check if batch exists
+        batch_ref = db.collection('Batches').document(batch_id)
+        batch_doc = batch_ref.get()
+        
+        if not batch_doc.exists:
+            return JsonResponse({'success': False, 'error': 'Batch not found'}, status=404)
+        
+        batch_data = batch_doc.to_dict()
+        current_courses = batch_data.get('courses', [])
+        current_course_ids = [ref.id for ref in current_courses]
+        
+        # Query all active courses
+        courses_ref = db.collection('Courses').where('status', '==', 'active')
+        available_courses = []
+        
+        for doc in courses_ref.stream():
+            course_data = doc.to_dict()
+            is_current_course = doc.id in current_course_ids
+            
+            procedure_refs = course_data.get('procedures', [])
+            procedure_names = []
+            for proc_ref in procedure_refs:
+                proc_doc = proc_ref.get()
+                if proc_doc.exists:
+                    procedure_names.append(proc_doc.to_dict().get('procedureName', 'Unknown'))
+            
+            available_courses.append({
+                'id': doc.id,
+                'name': course_data.get('courseName', 'N/A'),
+                'description': course_data.get('description', ''),
+                'procedures': procedure_names,
+                'procedure_count': len(procedure_names),
+                'osce_types': course_data.get('osceTypes', []),
+                'verification_required': course_data.get('verificationRequired', False),
+                'isCurrentCourse': is_current_course
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'courses': available_courses
+        }, status=200)
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@csrf_exempt
+def fetch_batches_for_course(request, course_id):
+    """
+    API endpoint to fetch all batches assigned to a course, with optional filters and pagination.
+    """
+    try:
+        # Get filter parameters
+        search = request.GET.get('search', '').strip().lower()
+        unit_type = request.GET.get('unit_type', '').strip().lower()
+        unit_name = request.GET.get('unit_name', '').strip().lower()
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 10))
+
+        # Get the course document
+        course_ref = db.collection('Courses').document(course_id)
+        course_doc = course_ref.get()
+        if not course_doc.exists:
+            return JsonResponse({'success': False, 'error': 'Course not found'}, status=404)
+        course_data = course_doc.to_dict()
+
+        # Get all batches that have this course in their 'courses' array
+        batches_ref = db.collection('Batches')
+        batches = []
+        for doc in batches_ref.stream():
+            batch_data = doc.to_dict()
+            course_refs = batch_data.get('courses', [])
+            # Check if this batch has the course
+            if any(ref.id == course_id for ref in course_refs):
+                # Filtering
+                batch_name = batch_data.get('batchName', '').lower()
+                batch_unit_type = batch_data.get('unitType', '').lower()
+                unit_ref = batch_data.get('unit')
+                unit_name_val = ''
+                if unit_ref:
+                    unit_doc = unit_ref.get()
+                    if unit_doc.exists:
+                        if batch_unit_type == 'institution':
+                            unit_name_val = unit_doc.to_dict().get('instituteName', '').lower()
+                        else:
+                            unit_name_val = unit_doc.to_dict().get('hospitalName', '').lower()
+                if search and search not in batch_name:
+                    continue
+                if unit_type and unit_type != batch_unit_type:
+                    continue
+                if unit_name and unit_name != unit_name_val:
+                    continue
+
+                learners = batch_data.get('learners', [])
+                batches.append({
+                    'id': doc.id,
+                    'batchName': batch_data.get('batchName', ''),
+                    'unitType': batch_data.get('unitType', ''),
+                    'unitName': unit_name_val.title(),
+                    'learnerCount': len(learners),
+                })
+
+        # Pagination
+        total_batches = len(batches)
+        total_pages = (total_batches + page_size - 1) // page_size
+        start = (page - 1) * page_size
+        end = start + page_size
+        paginated_batches = batches[start:end]
+
+        return JsonResponse({
+            'success': True,
+            'batches': paginated_batches,
+            'page': page,
+            'total_pages': total_pages,
+            'total_batches': total_batches
+        }, status=200)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)

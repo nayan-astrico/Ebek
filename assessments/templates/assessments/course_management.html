@@ -1,0 +1,1670 @@
+{% extends 'assessments/base.html' %}
+
+{% block content %}
+<!-- Header -->
+<div class="header">
+    <div class="header-left">
+        <h1>Courses</h1>
+        <p class="text-muted">Manage your training courses</p>
+    </div>
+    <div class="header-right">
+        <button class="btn btn-primary" onclick="toggleAddCoursePanel()">
+            <i class="fas fa-plus"></i>
+            Add Course
+        </button>
+    </div>
+</div>
+
+<!-- Add Course Side Panel -->
+<div class="side-panel" id="addCoursePanel">
+    <div class="side-panel-header">
+        <h3>Add New Course</h3>
+        <button type="button" class="close" onclick="toggleAddCoursePanel()">
+            <span>&times;</span>
+        </button>
+    </div>
+    
+    <form class="side-panel-form" id="courseForm" novalidate>
+        <div class="form-group">
+            <label>Course Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="courseName" name="courseName" required>
+            <div class="error-message" id="courseNameError"></div>
+        </div>
+
+        <div class="form-group">
+            <label>Description</label>
+            <textarea class="form-control" id="description" name="description" rows="3" placeholder="Enter course description (optional)"></textarea>
+            <div class="error-message" id="descriptionError"></div>
+        </div>
+
+        <div class="form-group">
+            <label>Procedures <span class="text-danger">*</span></label>
+            <div class="multiselect-container">
+                <div class="multiselect-input" onclick="toggleDropdown()" id="proceduresInput">
+                    <span class="placeholder">Select procedures</span>
+                    <div class="selected-tags" id="selectedTags"></div>
+                    <i class="fas fa-chevron-down dropdown-arrow"></i>
+                </div>
+                <div class="multiselect-dropdown" id="proceduresDropdown">
+                    <div class="search-container">
+                        <input type="text" placeholder="Search procedures..." class="search-input" oninput="filterProcedures(this.value)">
+                    </div>
+                    <div class="options-container" id="proceduresOptions">
+                        <!-- Procedures will be loaded dynamically -->
+                    </div>
+                </div>
+            </div>
+            <div class="error-message" id="proceduresError"></div>
+        </div>
+
+        <div class="form-group">
+            <label>OSCE Types <span class="text-danger">*</span></label>
+            <div class="checkbox-group" id="osceTypesGroup">
+                <div class="custom-checkbox">
+                    <input type="checkbox" id="classroom" name="osce_type" value="classroom">
+                    <label for="classroom">Classroom</label>
+                </div>
+                <div class="custom-checkbox">
+                    <input type="checkbox" id="mock" name="osce_type" value="mock">
+                    <label for="mock">Mock</label>
+                </div>
+                <div class="custom-checkbox">
+                    <input type="checkbox" id="final" name="osce_type" value="final" onchange="toggleVerificationField(this)">
+                    <label for="final">Final</label>
+                </div>
+            </div>
+            <div class="error-message" id="osceTypesError"></div>
+        </div>
+
+        <div class="form-group verification-field" id="verificationField" style="display: none;">
+            <div class="custom-checkbox">
+                <input type="checkbox" id="verification" name="verification_required">
+                <label for="verification">Verification Required</label>
+            </div>
+        </div>
+
+        <div class="side-panel-actions">
+            <button type="button" class="btn btn-light" onclick="toggleAddCoursePanel()">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="submitBtn">
+                <span class="btn-text">Create Course</span>
+                <span class="btn-spinner" style="display: none;">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </span>
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Search and Filter Bar -->
+<div class="search-filter-bar">
+    <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" placeholder="Search courses..." id="searchInput" oninput="filterCourses(this.value)">
+    </div>
+    <button class="btn-filter" onclick="toggleFilterPanel()" id="filterBtn">
+        <i class="fas fa-filter"></i>
+        Filters
+        <span class="filter-badge" id="filterBadge" style="display: none;">0</span>
+    </button>
+</div>
+
+<!-- Filter Side Panel -->
+<div class="filter-panel" id="filterPanel">
+    <div class="filter-header">
+        <h3>Filter Courses</h3>
+        <button type="button" class="close" onclick="toggleFilterPanel()">
+            <span>&times;</span>
+        </button>
+    </div>
+    
+    <form class="filter-form">
+        <div class="filter-layout">
+            <!-- Main Filter Types (30%) -->
+            <div class="filter-types">
+                <div class="filter-type active" data-filter="course" onclick="switchFilter('course')">
+                    <span>Course</span>
+                </div>
+                <div class="filter-type" data-filter="status" onclick="switchFilter('status')">
+                    <span>Status</span>
+                </div>
+            </div>
+
+            <!-- Filter Content (70%) -->
+            <div class="filter-content-wrapper">
+                <!-- Course Content -->
+                <div class="filter-content active" id="course-content">
+                    <div class="filter-search">
+                        <input type="text" placeholder="Search courses" id="filterCourseSearch" oninput="filterCourseOptions(this.value)">
+                        <div class="selection-count" id="courseSelectionCount">0 Course selected</div>
+                    </div>
+                    <div class="options-list" id="filterCourseOptions">
+                        <!-- Course options will be loaded dynamically -->
+                    </div>
+                </div>
+
+                <!-- Status Content -->
+                <div class="filter-content" id="status-content">
+                    <div class="filter-search">
+                        <input type="text" placeholder="Search status" id="filterStatusSearch" oninput="filterStatusOptions(this.value)">
+                        <div class="selection-count" id="statusSelectionCount">0 Status selected</div>
+                    </div>
+                    <div class="options-list" id="filterStatusOptions">
+                        <label class="option-item">
+                            <input type="checkbox" name="status" value="active" onchange="updateStatusSelectionCount()">
+                            <span>Active</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="status" value="inactive" onchange="updateStatusSelectionCount()">
+                            <span>Inactive</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Actions -->
+        <div class="filter-actions">
+            <button type="button" class="btn btn-light" onclick="clearAllFilters()">Clear All</button>
+            <button type="button" class="btn btn-light" onclick="toggleFilterPanel()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="applyFilters()">Apply Filter</button>
+        </div>
+    </form>
+</div>
+
+<!-- Loading Spinner -->
+<div id="loadingSpinner" class="loading-spinner" style="display: none;">
+    <div class="spinner"></div>
+    <p>Loading courses...</p>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Course Name</th>
+                <th>No. of Procedures</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="coursesTableBody">
+            <!-- Courses will be loaded dynamically -->
+        </tbody>
+    </table>
+    
+    <!-- Empty State -->
+    <div id="emptyState" class="empty-state" style="display: none;">
+        <div class="empty-icon">
+            <i class="fas fa-book-open"></i>
+        </div>
+        <h3>No courses found</h3>
+        <p>Get started by creating your first course</p>
+        <button class="btn btn-primary" onclick="toggleAddCoursePanel()">
+            <i class="fas fa-plus"></i>
+            Create Course
+        </button>
+    </div>
+</div>
+
+<style>
+/* Header Styles */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.header-left h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.header-left p {
+    margin: 4px 0 0;
+    color: #666;
+}
+
+/* Button Styles */
+.btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: #F16564;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #e45857;
+}
+
+.btn-light {
+    background: #f8f9fa;
+    color: #495057;
+    border: 1px solid #dee2e6;
+}
+
+/* Loading Spinner */
+.loading-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    text-align: center;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #F16564;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.empty-icon {
+    font-size: 48px;
+    color: #cbd5e0;
+    margin-bottom: 16px;
+}
+
+.empty-state h3 {
+    margin: 0 0 8px 0;
+    color: #4a5568;
+    font-size: 18px;
+}
+
+.empty-state p {
+    margin: 0 0 24px 0;
+    color: #718096;
+}
+
+/* Side Panel Styles */
+.side-panel {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
+
+.side-panel.active {
+    right: 0;
+}
+
+.side-panel-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.side-panel-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+}
+
+.side-panel-form {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #2d3748;
+}
+
+.form-control {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #F16564;
+    box-shadow: 0 0 0 2px rgba(241, 101, 100, 0.1);
+}
+
+/* Error States */
+.form-control.error,
+.multiselect-input.error {
+    border-color: #e53e3e;
+    box-shadow: 0 0 0 2px rgba(229, 62, 62, 0.1);
+}
+
+.checkbox-group.error .custom-checkbox label:before {
+    border-color: #e53e3e;
+}
+
+.error-message {
+    color: #e53e3e;
+    font-size: 12px;
+    margin-top: 4px;
+    min-height: 16px;
+    display: block;
+    font-weight: 500;
+}
+
+.error-message:empty {
+    display: none;
+}
+
+.error-message:not(:empty) {
+    display: block !important;
+}
+
+/* Success States */
+.form-control.success,
+.multiselect-input.success {
+    border-color: #38a169;
+    box-shadow: 0 0 0 2px rgba(56, 161, 105, 0.1);
+}
+
+.success-message {
+    color: #38a169;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+/* Loading State */
+.btn-spinner {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Multiselect Styles */
+.multiselect-container {
+    position: relative;
+}
+
+.multiselect-input {
+    min-height: 38px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: white;
+}
+
+.multiselect-input.active {
+    border-color: #F16564;
+}
+
+.placeholder {
+    color: #a0aec0;
+}
+
+.selected-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.tag {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.tag-remove {
+    cursor: pointer;
+    color: #a0aec0;
+}
+
+.tag-remove:hover {
+    color: #F16564;
+}
+
+.dropdown-arrow {
+    transition: transform 0.2s;
+}
+
+.multiselect-input.active .dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+.multiselect-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin-top: 4px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    display: none;
+}
+
+.multiselect-dropdown.active {
+    display: block;
+}
+
+.search-container {
+    padding: 8px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.search-input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.options-container {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 8px 12px;
+}
+
+.option-item:hover {
+    background: #f7fafc;
+}
+
+.procedure-checkbox {
+    margin-right: 10px;
+    margin-left: 4px !important;
+}
+.procedure-title {
+    flex: 1;
+}
+
+/* Custom Checkbox Styles */
+.custom-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.custom-checkbox input[type="checkbox"] {
+    display: none;
+}
+
+.custom-checkbox label {
+    position: relative;
+    cursor: pointer;
+    padding-left: 28px;
+    margin: 0;
+    font-weight: normal;
+}
+
+.custom-checkbox label:before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    border: 2px solid #e2e8f0;
+    border-radius: 4px;
+    background: white;
+}
+
+.custom-checkbox input[type="checkbox"]:checked + label:before {
+    background: #F16564;
+    border-color: #F16564;
+}
+
+.custom-checkbox input[type="checkbox"]:checked + label:after {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-75%) rotate(45deg);
+    width: 6px;
+    height: 11px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+}
+
+.checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.side-panel-actions {
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    background: white;
+    margin-top: auto;
+}
+
+/* Search and Filter Bar */
+.search-filter-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.search-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 16px;
+}
+
+.search-box input {
+    border: none;
+    outline: none;
+    width: 100%;
+    font-size: 14px;
+}
+
+.btn-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #4a5568;
+    cursor: pointer;
+    position: relative;
+}
+
+.filter-badge {
+    background: #F16564;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    position: absolute;
+    top: -5px;
+    right: -5px;
+}
+
+/* Table Styles */
+.card {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table th {
+    background: #f8fafc;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5568;
+    text-transform: uppercase;
+}
+
+.table td {
+    padding: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.course-row {
+    cursor: pointer;
+}
+
+.course-row:hover {
+    background-color: #f7fafc;
+}
+
+/* Toggle Switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: #1AA09A;
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* Action Buttons */
+.actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    background: #edf2f7;
+    color: #4a5568;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.btn-icon:hover {
+    background: #e2e8f0;
+}
+
+.btn-icon.btn-danger {
+    color: #c53030;
+    background: #fff5f5;
+}
+
+.btn-icon.btn-danger:hover {
+    background: #fed7d7;
+}
+
+/* Overlay */
+.side-panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+}
+
+.side-panel-overlay.active {
+    display: block;
+}
+
+/* Filter Panel */
+.filter-panel {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+}
+
+.filter-panel.active {
+    right: 0;
+}
+
+.filter-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.filter-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.filter-layout {
+    display: flex;
+    height: calc(100vh - 140px);
+}
+
+.filter-types {
+    width: 30%;
+    border-right: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.filter-type {
+    padding: 16px 20px;
+    cursor: pointer;
+    border-bottom: 1px solid #e2e8f0;
+    font-weight: 500;
+    color: #4a5568;
+}
+
+.filter-type.active {
+    background: white;
+    color: #F16564;
+    border-right: 2px solid #F16564;
+}
+
+.filter-content-wrapper {
+    width: 70%;
+    position: relative;
+}
+
+.filter-content {
+    display: none;
+    height: 100%;
+    flex-direction: column;
+}
+
+.filter-content.active {
+    display: flex;
+}
+
+.filter-search {
+    padding: 20px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.filter-search input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin-bottom: 12px;
+}
+
+.selection-count {
+    font-size: 12px;
+    color: #666;
+}
+
+.options-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 20px;
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    cursor: pointer;
+}
+
+.option-item input[type="checkbox"] {
+    margin: 0;
+}
+
+.filter-actions {
+    padding: 16px 20px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+</style>
+
+<script>
+let selectedProcedures = [];
+let allCourses = [];
+let allProcedures = [];
+let currentFilters = {
+    courses: [],
+    status: []
+};
+
+// Initialize the page
+document.addEventListener('DOMContentLoaded', function() {
+    loadCourses();
+    loadProcedures();
+    setupEventListeners();
+});
+
+function setupEventListeners() {
+    const form = document.getElementById('courseForm');
+    
+    // Form validation
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        if (validateForm()) {
+            submitForm();
+        }
+    });
+    
+    // Real-time validation
+    document.getElementById('courseName').addEventListener('input', function() {
+        clearError('courseName');
+        if (this.value.trim()) {
+            this.classList.add('success');
+        } else {
+            this.classList.remove('success');
+        }
+    });
+    
+    // OSCE Types validation
+    const osceCheckboxes = document.querySelectorAll('input[name="osce_type"]');
+    osceCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            clearError('osceTypes');
+            const checkedOsce = document.querySelectorAll('input[name="osce_type"]:checked');
+            if (checkedOsce.length > 0) {
+                document.getElementById('osceTypesGroup').classList.add('success');
+            } else {
+                document.getElementById('osceTypesGroup').classList.remove('success');
+            }
+        });
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        const dropdown = document.getElementById('proceduresDropdown');
+        const input = document.querySelector('.multiselect-input');
+        if (!e.target.closest('.multiselect-container')) {
+            dropdown.classList.remove('active');
+            input.classList.remove('active');
+        }
+    });
+}
+
+function loadCourses() {
+    showLoading(true);
+    $.ajax({
+        url: '/fetch-courses/',
+        method: 'GET',
+        dataType: 'json',
+        success: function(data) {
+            allCourses = data.courses || [];
+            displayCourses(allCourses);
+            // Load filter options after courses are loaded
+            loadFilterCourseOptions();
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading courses:', error);
+            showError('Failed to load courses');
+        },
+        complete: function() {
+            showLoading(false);
+        }
+    });
+}
+
+function loadProcedures() {
+    $.ajax({
+        url: '/fetch-procedures/',
+        method: 'GET',
+        dataType: 'json',
+        success: function(data) {
+            allProcedures = data.procedures || [];
+            populateProceduresDropdown();
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading procedures:', error);
+        }
+    });
+}
+
+function populateProceduresDropdown() {
+    const container = document.getElementById('proceduresOptions');
+    container.innerHTML = '';
+    
+    allProcedures.forEach(procedure => {
+        const optionItem = document.createElement('div');
+        optionItem.className = 'option-item';
+        optionItem.setAttribute('data-value', procedure.id);
+        optionItem.style.display = 'flex';
+        optionItem.style.alignItems = 'center';
+        optionItem.style.cursor = 'pointer';
+        optionItem.innerHTML = `
+            <input type="checkbox" class="procedure-checkbox" id="proc${procedure.id}" value="${procedure.id}" style="margin-right:10px;">
+            <span class="procedure-title">${procedure.name}</span>
+        `;
+        container.appendChild(optionItem);
+        // Make the whole row clickable
+        optionItem.addEventListener('click', function(e) {
+            // Only toggle if not clicking directly on the checkbox
+            if (e.target.tagName !== 'INPUT') {
+                const checkbox = optionItem.querySelector('input[type="checkbox"]');
+                checkbox.checked = !checkbox.checked;
+                updateSelectedProcedures();
+                clearError('procedures');
+            }
+        });
+        // Also update on checkbox change
+        const checkbox = optionItem.querySelector('input[type="checkbox"]');
+        checkbox.addEventListener('change', function(e) {
+            updateSelectedProcedures();
+            clearError('procedures');
+            e.stopPropagation();
+        });
+    });
+}
+
+function displayCourses(courses) {
+    const tbody = document.getElementById('coursesTableBody');
+    const emptyState = document.getElementById('emptyState');
+    
+    if (courses.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+    }
+    
+    emptyState.style.display = 'none';
+    tbody.innerHTML = '';
+    
+    courses.forEach(course => {
+        const row = document.createElement('tr');
+        row.className = 'course-row';
+        // row.onclick = function() {
+        //     window.location.href = `/course-management/${course.id}/`;
+        // };
+        
+        row.innerHTML = `
+            <td>${course.name}</td>
+            <td>${course.procedure_count}</td>
+            <td>
+                <label class="switch">
+                    <input type="checkbox" ${course.status === 'active' ? 'checked' : ''} onchange="toggleCourseStatus('${course.id}', this.checked ? 'active' : 'inactive')">
+                    <span class="slider round"></span>
+                </label>
+            </td>
+            <td>
+                <div class="actions">
+                    <button class="btn-icon" onclick="event.stopPropagation(); editCourse('${course.id}')" title="Edit Course">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-icon btn-danger" onclick="event.stopPropagation(); deleteCourse('${course.id}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+}
+
+function filterCourses(searchText) {
+    let filtered = allCourses;
+    
+    // Apply search filter
+    if (searchText) {
+        filtered = filtered.filter(course => 
+            course.name.toLowerCase().includes(searchText.toLowerCase())
+        );
+    }
+    
+    // Apply current filters
+    filtered = applyCurrentFilters(filtered);
+    
+    displayCourses(filtered);
+}
+
+function applyCurrentFilters(courses) {
+    let filtered = courses;
+    
+    // Apply course name filters
+    if (currentFilters.courses.length > 0) {
+        filtered = filtered.filter(course => 
+            currentFilters.courses.includes(course.name)
+        );
+    }
+    
+    // Apply status filters
+    if (currentFilters.status.length > 0) {
+        filtered = filtered.filter(course => 
+            currentFilters.status.includes(course.status)
+        );
+    }
+    
+    return filtered;
+}
+
+function showLoading(show) {
+    const spinner = document.getElementById('loadingSpinner');
+    const table = document.querySelector('.table');
+    
+    if (show) {
+        spinner.style.display = 'flex';
+        table.style.display = 'none';
+    } else {
+        spinner.style.display = 'none';
+        table.style.display = 'table';
+    }
+}
+
+function showError(message) {
+    // Create a simple notification
+    const notification = $(`
+        <div class="alert alert-danger alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-exclamation-triangle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    
+    $('body').append(notification);
+    
+    // Auto remove after 5 seconds
+    setTimeout(function() {
+        notification.alert('close');
+    }, 5000);
+}
+
+function showSuccess(message) {
+    // Create a simple notification
+    const notification = $(`
+        <div class="alert alert-success alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-check-circle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    
+    $('body').append(notification);
+    
+    // Auto remove after 5 seconds
+    setTimeout(function() {
+        notification.alert('close');
+    }, 5000);
+}
+
+function toggleAddCoursePanel() {
+    const panel = document.getElementById('addCoursePanel');
+    panel.classList.toggle('active');
+    
+    if (panel.classList.contains('active')) {
+        document.body.style.overflow = 'hidden';
+        // Add overlay
+        if (!document.querySelector('.side-panel-overlay')) {
+            const overlay = document.createElement('div');
+            overlay.className = 'side-panel-overlay active';
+            overlay.onclick = toggleAddCoursePanel;
+            document.body.appendChild(overlay);
+        }
+    } else {
+        document.body.style.overflow = '';
+        // Remove overlay
+        const overlay = document.querySelector('.side-panel-overlay');
+        if (overlay) {
+            overlay.remove();
+        }
+    }
+}
+
+function toggleDropdown() {
+    const dropdown = document.getElementById('proceduresDropdown');
+    const input = document.querySelector('.multiselect-input');
+    
+    dropdown.classList.toggle('active');
+    input.classList.toggle('active');
+}
+
+function toggleVerificationField(checkbox) {
+    const verificationField = document.getElementById('verificationField');
+    verificationField.style.display = checkbox.checked ? 'block' : 'none';
+    
+    if (!checkbox.checked) {
+        document.getElementById('verification').checked = false;
+    }
+}
+
+function filterProcedures(searchText) {
+    const options = document.querySelectorAll('#proceduresOptions .option-item');
+    options.forEach(option => {
+        const text = option.textContent.toLowerCase();
+        option.style.display = text.includes(searchText.toLowerCase()) ? 'flex' : 'none';
+    });
+}
+
+function updateSelectedProcedures() {
+    const checkboxes = document.querySelectorAll('#proceduresOptions input[type="checkbox"]:checked');
+    const selectedTags = document.getElementById('selectedTags');
+    const placeholder = document.querySelector('.placeholder');
+    
+    selectedTags.innerHTML = '';
+    
+    if (checkboxes.length > 0) {
+        placeholder.style.display = 'none';
+        checkboxes.forEach(checkbox => {
+            const optionText = checkbox.closest('.option-item').querySelector('span').textContent;
+            const tag = document.createElement('div');
+            tag.className = 'tag';
+            tag.innerHTML = `
+                ${optionText}
+                <span class="tag-remove" onclick="removeTag('${checkbox.value}')">&times;</span>
+            `;
+            selectedTags.appendChild(tag);
+        });
+    } else {
+        placeholder.style.display = 'block';
+    }
+}
+
+function removeTag(value) {
+    const checkbox = document.querySelector(`#proceduresOptions input[value="${value}"]`);
+    if (checkbox) {
+        checkbox.checked = false;
+        updateSelectedProcedures();
+    }
+}
+
+function toggleFilterPanel() {
+    const panel = document.getElementById('filterPanel');
+    panel.classList.toggle('active');
+    
+    if (panel.classList.contains('active')) {
+        document.body.style.overflow = 'hidden';
+        // Add overlay
+        if (!document.querySelector('.filter-overlay')) {
+            const overlay = document.createElement('div');
+            overlay.className = 'side-panel-overlay filter-overlay active';
+            overlay.onclick = toggleFilterPanel;
+            document.body.appendChild(overlay);
+        }
+        
+        // Ensure filter options are loaded when panel opens
+        loadFilterCourseOptions();
+    } else {
+        document.body.style.overflow = '';
+        // Remove overlay
+        const overlay = document.querySelector('.filter-overlay');
+        if (overlay) {
+            overlay.remove();
+        }
+    }
+}
+
+function switchFilter(filterType) {
+    // Remove active class from all filter types
+    document.querySelectorAll('.filter-type').forEach(type => {
+        type.classList.remove('active');
+    });
+    
+    // Remove active class from all filter contents
+    document.querySelectorAll('.filter-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    // Add active class to selected filter type and content
+    document.querySelector(`[data-filter="${filterType}"]`).classList.add('active');
+    document.getElementById(`${filterType}-content`).classList.add('active');
+}
+
+function loadFilterCourseOptions() {
+    const container = document.getElementById('filterCourseOptions');
+    if (!container) {
+        console.log('Filter course options container not found');
+        return;
+    }
+    
+    container.innerHTML = '';
+    
+    console.log('Loading filter course options. Total courses:', allCourses.length);
+    
+    if (allCourses.length === 0) {
+        console.log('No courses available for filter options');
+        container.innerHTML = '<div class="text-muted p-3">No courses available</div>';
+        return;
+    }
+    
+    allCourses.forEach(course => {
+        const optionItem = document.createElement('label');
+        optionItem.className = 'option-item';
+        
+        optionItem.innerHTML = `
+            <input type="checkbox" name="course" value="${course.name}" onchange="updateCourseSelectionCount()">
+            <span>${course.name}</span>
+        `;
+        
+        container.appendChild(optionItem);
+    });
+    
+    console.log('Filter course options loaded. Total options:', container.children.length);
+    
+    // Update the selection count
+    updateCourseSelectionCount();
+}
+
+function filterCourseOptions(searchText) {
+    const options = document.querySelectorAll('#filterCourseOptions .option-item');
+    options.forEach(option => {
+        const text = option.textContent.toLowerCase();
+        option.style.display = text.includes(searchText.toLowerCase()) ? 'flex' : 'none';
+    });
+}
+
+function filterStatusOptions(searchText) {
+    const options = document.querySelectorAll('#filterStatusOptions .option-item');
+    options.forEach(option => {
+        const text = option.textContent.toLowerCase();
+        option.style.display = text.includes(searchText.toLowerCase()) ? 'flex' : 'none';
+    });
+}
+
+function updateCourseSelectionCount() {
+    const checkedCourses = document.querySelectorAll('#filterCourseOptions input[type="checkbox"]:checked');
+    const countElement = document.getElementById('courseSelectionCount');
+    countElement.textContent = `${checkedCourses.length} Course selected`;
+}
+
+function updateStatusSelectionCount() {
+    const checkedStatuses = document.querySelectorAll('#filterStatusOptions input[type="checkbox"]:checked');
+    const countElement = document.getElementById('statusSelectionCount');
+    countElement.textContent = `${checkedStatuses.length} Status selected`;
+}
+
+function updateFilterBadge() {
+    const totalFilters = currentFilters.courses.length + currentFilters.status.length;
+    const badge = document.getElementById('filterBadge');
+    
+    if (totalFilters > 0) {
+        badge.textContent = totalFilters;
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function applyFilters() {
+    // Get selected courses
+    const selectedCourses = Array.from(document.querySelectorAll('#filterCourseOptions input[type="checkbox"]:checked'))
+        .map(cb => cb.value);
+    
+    // Get selected statuses
+    const selectedStatuses = Array.from(document.querySelectorAll('#filterStatusOptions input[type="checkbox"]:checked'))
+        .map(cb => cb.value);
+    
+    // Update current filters
+    currentFilters.courses = selectedCourses;
+    currentFilters.status = selectedStatuses;
+    
+    // Apply filters to current search
+    const searchText = document.getElementById('searchInput').value;
+    filterCourses(searchText);
+    
+    // Update filter badge
+    updateFilterBadge();
+    
+    // Close filter panel
+    toggleFilterPanel();
+    
+    // Show filter applied notification
+    const totalFilters = selectedCourses.length + selectedStatuses.length;
+    if (totalFilters > 0) {
+        showSuccess(`${totalFilters} filter(s) applied successfully!`);
+    }
+}
+
+function clearAllFilters() {
+    // Uncheck all course filters
+    document.querySelectorAll('#filterCourseOptions input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+    });
+    
+    // Uncheck all status filters
+    document.querySelectorAll('#filterStatusOptions input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+    });
+    
+    // Update selection counts
+    updateCourseSelectionCount();
+    updateStatusSelectionCount();
+    
+    // Clear current filters
+    currentFilters.courses = [];
+    currentFilters.status = [];
+    
+    // Update filter badge
+    updateFilterBadge();
+    
+    // Reapply search
+    const searchText = document.getElementById('searchInput').value;
+    filterCourses(searchText);
+    
+    showSuccess('All filters cleared!');
+}
+
+// Validation Functions
+function validateForm() {
+    let isValid = true;
+    
+    // Clear all previous errors
+    clearAllErrors();
+    
+    // Validate Course Name
+    const courseName = document.getElementById('courseName').value.trim();
+    if (!courseName) {
+        showError('courseName', 'Course name is required');
+        isValid = false;
+    } else if (courseName.length < 3) {
+        showError('courseName', 'Course name must be at least 3 characters long');
+        isValid = false;
+    }
+    
+    // Validate Procedures
+    const selectedProcedures = document.querySelectorAll('#proceduresOptions input[type="checkbox"]:checked');
+    if (selectedProcedures.length === 0) {
+        showError('procedures', 'Please select at least one procedure');
+        isValid = false;
+    }
+    
+    // Validate OSCE Types
+    const selectedOsceTypes = document.querySelectorAll('input[name="osce_type"]:checked');
+    if (selectedOsceTypes.length === 0) {
+        showError('osceTypes', 'Please select at least one OSCE type');
+        isValid = false;
+    }
+    
+    return isValid;
+}
+
+function showError(fieldName, message) {
+    const errorElement = document.getElementById(fieldName + 'Error');
+    const fieldElement = document.getElementById(fieldName) || document.getElementById(fieldName + 'Input') || document.getElementById(fieldName + 'Group');
+    
+    if (errorElement) {
+        errorElement.textContent = message;
+        errorElement.style.display = 'block';
+    }
+    
+    if (fieldElement) {
+        fieldElement.classList.add('error');
+        fieldElement.classList.remove('success');
+    }
+}
+
+function clearError(fieldName) {
+    const errorElement = document.getElementById(fieldName + 'Error');
+    const fieldElement = document.getElementById(fieldName) || document.getElementById(fieldName + 'Input') || document.getElementById(fieldName + 'Group');
+    
+    if (errorElement) {
+        errorElement.textContent = '';
+        errorElement.style.display = 'none';
+    }
+    
+    if (fieldElement) {
+        fieldElement.classList.remove('error');
+    }
+}
+
+function clearAllErrors() {
+    const errorElements = document.querySelectorAll('.error-message');
+    errorElements.forEach(element => {
+        element.textContent = '';
+        element.style.display = 'none';
+    });
+    
+    const fieldElements = document.querySelectorAll('.error');
+    fieldElements.forEach(element => {
+        element.classList.remove('error');
+    });
+}
+
+function submitForm() {
+    const submitBtn = document.getElementById('submitBtn');
+    const btnText = submitBtn.querySelector('.btn-text');
+    const btnSpinner = submitBtn.querySelector('.btn-spinner');
+    
+    // Show loading state
+    submitBtn.disabled = true;
+    btnText.style.display = 'none';
+    btnSpinner.style.display = 'inline-flex';
+    
+    // Collect form data
+    const formData = {
+        courseName: document.getElementById('courseName').value.trim(),
+        description: document.getElementById('description').value.trim(),
+        procedures: Array.from(document.querySelectorAll('#proceduresOptions input[type="checkbox"]:checked')).map(cb => cb.value),
+        osceTypes: Array.from(document.querySelectorAll('input[name="osce_type"]:checked')).map(cb => cb.value),
+        verificationRequired: document.getElementById('verification').checked
+    };
+    
+    $.ajax({
+        url: '/create-course/',
+        method: 'POST',
+        dataType: 'json',
+        contentType: 'application/json',
+        data: JSON.stringify(formData),
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        success: function(data) {
+            // Show success message and close panel
+            showSuccess('Course created successfully!');
+            resetForm();
+            toggleAddCoursePanel();
+            // Reload courses and refresh filter options
+            loadCourses();
+            // Refresh filter options after a short delay to ensure courses are loaded
+            setTimeout(function() {
+                loadFilterCourseOptions();
+            }, 500);
+        },
+        error: function(xhr, status, error) {
+            let errorMessage = 'Failed to create course';
+            if (xhr.responseJSON && xhr.responseJSON.error) {
+                errorMessage = xhr.responseJSON.error;
+            }
+            showError(errorMessage);
+        },
+        complete: function() {
+            // Reset button state
+            submitBtn.disabled = false;
+            btnText.style.display = 'inline';
+            btnSpinner.style.display = 'none';
+        }
+    });
+}
+
+function resetForm() {
+    document.getElementById('courseForm').reset();
+    document.getElementById('selectedTags').innerHTML = '';
+    document.querySelector('.placeholder').style.display = 'block';
+    document.getElementById('verificationField').style.display = 'none';
+    clearAllErrors();
+    
+    // Remove success classes
+    const successElements = document.querySelectorAll('.success');
+    successElements.forEach(element => {
+        element.classList.remove('success');
+    });
+}
+
+// Helper function to get CSRF token
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Placeholder functions for future implementation
+function toggleCourseStatus(courseId, status) {
+    $.ajax({
+        url: `/courses/${courseId}/toggle-status/`,
+        method: 'POST',
+        dataType: 'json',
+        contentType: 'application/json',
+        data: JSON.stringify({ status: status }),
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        success: function(data) {
+            showSuccess('Course status updated successfully!');
+        },
+        error: function(xhr, status, error) {
+            let errorMessage = 'Failed to update course status';
+            if (xhr.responseJSON && xhr.responseJSON.error) {
+                errorMessage = xhr.responseJSON.error;
+            }
+            showError(errorMessage);
+            // Revert the toggle by reloading courses
+            loadCourses();
+        }
+    });
+}
+
+function editCourse(courseId) {
+    // Navigate to course detail page for editing
+    window.location.href = `/course-management/${courseId}/`;
+}
+
+function deleteCourse(courseId) {
+    if (confirm('Are you sure you want to delete this course? This action cannot be undone.')) {
+        $.ajax({
+            url: `/courses/${courseId}/delete/`,
+            method: 'POST',
+            dataType: 'json',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+                    success: function(data) {
+            showSuccess('Course deleted successfully!');
+            loadCourses(); // Reload the courses list
+            // Refresh filter options after a short delay to ensure courses are loaded
+            setTimeout(function() {
+                loadFilterCourseOptions();
+            }, 500);
+        },
+            error: function(xhr, status, error) {
+                let errorMessage = 'Failed to delete course';
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    errorMessage = xhr.responseJSON.error;
+                }
+                showError(errorMessage);
+            }
+        });
+    }
+}
+</script>
+{% endblock %} 
