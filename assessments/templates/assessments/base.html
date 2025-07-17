@@ -417,6 +417,7 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
+            overflow: auto;
         }
 
         /* Navigation area grows and scrolls if needed */
@@ -631,44 +632,14 @@
             <i class="fas fa-file-medical"></i>
                     <span>Create Assessment</span>
             </a>
-        </div>
+        
         {% endif %}
 
         
     {% endif %}
     
-    
-        <!-- <div class="nav-item">
-            <a href="{% url 'users_management' %}" class="nav-link" title="Manage Supervisors & Students">
-        <i class="fas fa-users"></i>
-                    <span>User Management</span>
-        </a>
-        </div>
 
-        <div class="nav-item">
-            <a href="{% url 'cohort_list' %}" class="nav-link" title="Manage Student Batches">
-        <i class="fas fa-user-friends"></i>
-                    <span>Cohorts</span>
-        </a>
-        </div>
-
-        <div class="nav-item">
-            <a href="{% url 'assign_assessment' %}" class="nav-link" title="View & Assign Assessments">
-        <i class="fas fa-tasks"></i>
-                    <span>Assignments</span>
-        </a>
-        </div>
-
-        <div class="nav-item">
-            <a href="{% url 'exam_reports_page' %}" class="nav-link" title="View Assessment Reports">
-        <i class="fas fa-chart-bar"></i>
-                    <span>Reports</span>
-            </a>
-        </div>
-    </div> -->
-
-    <div class="sidebar-bottom-area">
-        <div class="nav-item">
+        <div class="nav-item" style="margin-top: 100%;">
             <div class="sidebar-user-info d-flex align-items-center">
                 <div class="sidebar-user-initial mr-2">
                     <span class="user-initial-circle">{{ request.user.email|first|upper }}</span>
@@ -682,24 +653,19 @@
                 <span class="sidebar-logout-text" style="margin-left: 32px;">Logout</span>
             </a>
         </div>
-        <div class="nav-item">
-            <button id="toggleSidebar" class="nav-link d-flex align-items-center sidebar-logout-link" style="display:none !important;">
-                <i class="fas fa-angle-double-left" id="sidebarToggleIcon"></i>
-            </button>
-            <!-- <div class="sidebar-footer">
-                <button class="btn p-0 d-flex justify-content-center align-items-center" id="toggleSidebar" style="font-size: 1.5rem; color: #fff; background: none; border: none; width: 40px; height: 40px; margin: 0 auto; display: flex;">
-                    <i class="fas fa-angle-double-left" id="sidebarToggleIcon"></i>
-                </button>
-            </div> -->
-        </div>
-    </div>
 </div>
 {% endif %}
+
+<div id="sidePanel">
+    {% block sidePanel %}{% endblock %}
+</div>
 
 <!-- Main Content -->
 <div id="content">
     {% block content %}{% endblock %}
 </div>
+
+
 
 <script>
     // Sidebar toggle functionality

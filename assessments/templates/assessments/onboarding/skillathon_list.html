@@ -1,7 +1,9 @@
 {% extends 'assessments/base.html' %}
 {% load static %}
-
 {% block content %}
+
+<link href="{% static 'assessments/css/list.css' %}" rel="stylesheet">
+
 <!-- Header -->
 <div class="header">
     <div class="header-left">
@@ -9,9 +11,9 @@
         <p class="text-muted">Manage your training and assessment events</p>
     </div>
     <div class="header-right">
-        <a href="{% url 'skillathon_create' %}" class="btn btn-primary">
-            <i class="fas fa-plus"></i>
-            Add New Skillathon
+        <a href="javascript:void(0);" class="btn btn-primary"
+           onclick="openSkillathonFormPanel('{% url 'skillathon_create' %}', 'Add Skillathon')">
+            <i class="fas fa-plus"></i> Add Skillathon
         </a>
     </div>
 </div>
@@ -128,7 +130,8 @@
                 <td>{{ event.city }}, {{ event.state }}</td>
                 <td>
                     <div class="actions">
-                        <a href="{% url 'skillathon_edit' event.pk %}" class="btn-icon">
+                        <a href="javascript:void(0);" class="btn-icon"
+                        onclick="openSkillathonFormPanel('{% url 'skillathon_edit' event.pk %}', 'Edit Skillathon')">
                             <i class="fas fa-edit"></i>
                         </a>
                         <button type="button" 
@@ -147,7 +150,10 @@
                 <td colspan="7" class="empty">
                     <i class="fas fa-calendar-alt"></i>
                     <p>No skillathon events found</p>
-                    <a href="{% url 'skillathon_create' %}" class="btn btn-primary">Add New Skillathon</a>
+                    <a href="javascript:void(0);" class="btn btn-primary"
+           onclick="openSkillathonFormPanel('{% url 'skillathon_create' %}', 'Add Skillathon')">
+            Add Skillathon
+        </a>
                 </td>
             </tr>
             {% endfor %}
@@ -202,8 +208,17 @@
         </div>
     </div>
 </div>
+<div id="skillathonFormPanel" class="side-panel">
+    <div class="side-panel-header">
+        <h3 id="formPanelTitle">Add Skillathon</h3>
+        <button type="button" class="close" onclick="closeSkillathonFormPanel()">&times;</button>
+    </div>
+    <div class="side-panel-body" id="skillathonFormContainer">
+    </div>
+</div>
+<div id="sidePanelOverlay" class="side-panel-overlay" onclick="closeSkillathonFormPanel()"></div>
 
-<style>
+<!-- <style>
 /* Basic Layout */
 .header {
     display: flex;
@@ -660,9 +675,43 @@
         right: -100%;
     }
 }
-</style>
+</style> -->
 
 <script>
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            // Does this cookie string begin with the name we want?
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function openSkillathonFormPanel(url, title) {
+    document.getElementById('formPanelTitle').textContent = title;
+    document.getElementById('skillathonFormPanel').classList.add('active');
+    document.getElementById('sidePanelOverlay').classList.add('active');
+    fetch(url)
+        .then(response => response.text())
+        .then(html => {
+            console.log(html);
+            document.getElementById('skillathonFormContainer').innerHTML = html;
+        });
+}
+
+function closeSkillathonFormPanel() {
+    document.getElementById('skillathonFormPanel').classList.remove('active');
+    document.getElementById('sidePanelOverlay').classList.remove('active');
+    document.getElementById('skillathonFormContainer').innerHTML = '';
+}
+
 function confirmDelete(button) {
     const name = button.dataset.name;
     const url = button.dataset.url;
@@ -737,5 +786,33 @@ function updateSelectionCount(category) {
     const label = category.charAt(0).toUpperCase() + category.slice(1);
     countElement.textContent = `${count} ${label} selected`;
 }
+
+document.addEventListener('submit', function(e) {
+    if (e.target.closest('#skillathonFormPanel form')) {
+        e.preventDefault();
+        const form = e.target;
+        const url = form.action;
+        const formData = new FormData(form);
+        fetch(url, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        })
+        .then(response => response.text())
+        .then(html => {
+            if (html.includes('form-group')) {
+                // Form has errors, re-render it
+                document.getElementById('skillathonFormContainer').innerHTML = html;
+            } else {
+                // Success: close panel and reload page
+                closeSkillathonFormPanel();
+                location.reload(); // <--- This reloads the page
+            }
+        });
+    }
+});
 </script>
 {% endblock %}

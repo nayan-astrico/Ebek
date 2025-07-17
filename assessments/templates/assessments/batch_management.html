@@ -20,7 +20,7 @@
     <div class="search-filter-bar">
         <div class="search-box">
             <i class="fas fa-search"></i>
-            <input type="text" placeholder="Search batches...">
+            <input type="text" id="searchInput" placeholder="Search batches...">
         </div>
         <button class="btn-filter" onclick="toggleFilterPanel()">
             <i class="fas fa-filter"></i>
@@ -57,27 +57,27 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Unit Name <span class="text-danger">*</span></label>
-                    <select class="form-control" id="unitName" name="unitName" required disabled>
-                        <option value="">Select Unit Name</option>
+                    <label>Unit <span class="text-danger">*</span></label>
+                    <select class="form-control" id="unitSelect" name="unitId" required disabled>
+                        <option value="">Select Unit</option>
                     </select>
-                    <div class="error-message" id="unitNameError"></div>
+                    <div class="error-message" id="unitError"></div>
                 </div>
 
                 <div class="form-group">
-                    <label>Learners <span class="text-danger">*</span></label>
+                    <label>Learners <span class="text-danger" id="learnersRequired">*</span></label>
                     <div class="multiselect-container">
-                        <div class="multiselect-input" onclick="toggleDropdown()" id="learnersInput">
+                        <div class="multiselect-input" onclick="toggleLearnersDropdown()" id="learnersInput">
                             <span class="placeholder">Select learners</span>
-                            <div class="selected-tags" id="selectedTags"></div>
-                            <i class="fas fa-chevron-down dropdown-arrow"></i>
+                            <div class="selected-tags" id="selectedLearners"></div>
+                            <i class="fas fa-chevron-down"></i>
                         </div>
                         <div class="multiselect-dropdown" id="learnersDropdown">
                             <div class="search-container">
-                                <input type="text" placeholder="Search learners..." class="search-input" oninput="filterLearners(this.value)">
+                                <input type="text" placeholder="Search learners..." oninput="filterLearners(this.value)">
                             </div>
                             <div class="options-container" id="learnersOptions">
-                                <!-- Learners will be populated dynamically based on unit selection -->
+                                <!-- Learners will be loaded here -->
                             </div>
                         </div>
                     </div>
@@ -112,9 +112,6 @@
                         <div class="filter-type active" data-filter="unit" onclick="switchFilter('unit')">
                             <span>Unit Type</span>
                         </div>
-                        <div class="filter-type" data-filter="status" onclick="switchFilter('status')">
-                            <span>Status</span>
-                        </div>
                     </div>
 
                     <!-- Filter Content (70%) -->
@@ -133,24 +130,6 @@
                                 <label class="option-item">
                                     <input type="checkbox" name="unit" value="institution">
                                     <span>Institution</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <!-- Status Content -->
-                        <div class="filter-content" id="status-content">
-                            <div class="filter-search">
-                                <input type="text" placeholder="Search status">
-                                <div class="selection-count">0 Status selected</div>
-                            </div>
-                            <div class="options-list">
-                                <label class="option-item">
-                                    <input type="checkbox" name="status" value="active">
-                                    <span>Active</span>
-                                </label>
-                                <label class="option-item">
-                                    <input type="checkbox" name="status" value="inactive">
-                                    <span>Inactive</span>
                                 </label>
                             </div>
                         </div>
@@ -174,55 +153,11 @@
                         <th>Unit Type</th>
                         <th>Unit Name</th>
                         <th>Learners</th>
-                        <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <tr class="batch-row" onclick="window.location.href='{% url 'batch_detail' 1 %}'">
-                        <td>Batch 2024-A</td>
-                        <td>Hospital</td>
-                        <td>City General Hospital</td>
-                        <td>25</td>
-                        <td>
-                            <label class="switch">
-                                <input type="checkbox" checked>
-                                <span class="slider round"></span>
-                            </label>
-                        </td>
-                        <td>
-                            <div class="actions">
-                                <button class="btn-icon">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn-icon btn-danger">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr class="batch-row" onclick="window.location.href='{% url 'batch_detail' 2 %}'">
-                        <td>Batch 2024-B</td>
-                        <td>Institution</td>
-                        <td>Medical College</td>
-                        <td>30</td>
-                        <td>
-                            <label class="switch">
-                                <input type="checkbox" checked>
-                                <span class="slider round"></span>
-                            </label>
-                        </td>
-                        <td>
-                            <div class="actions">
-                                <button class="btn-icon">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn-icon btn-danger">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
+                <tbody id="batchesTableBody">
+                    <!-- Batches will be loaded here -->
                 </tbody>
             </table>
         </div>
@@ -428,6 +363,10 @@
     cursor: not-allowed;
 }
 
+.text-danger {
+    color: #e53e3e;
+}
+
 .error-message {
     color: #e53e3e;
     font-size: 12px;
@@ -435,6 +374,11 @@
     display: none;
 }
 
+.error-message.show {
+    display: block;
+}
+
+/* Multiselect Styles */
 .multiselect-container {
     position: relative;
 }
@@ -476,6 +420,11 @@
     gap: 4px;
 }
 
+.tag-remove {
+    cursor: pointer;
+    color: #666;
+}
+
 .multiselect-dropdown {
     position: absolute;
     top: 100%;
@@ -499,7 +448,7 @@
     border-bottom: 1px solid #e2e8f0;
 }
 
-.search-input {
+.search-container input {
     width: 100%;
     padding: 8px;
     border: 1px solid #e2e8f0;
@@ -522,6 +471,10 @@
 
 .option-item:hover {
     background: #f7fafc;
+}
+
+.option-item input[type="checkbox"] {
+    margin: 0;
 }
 
 .side-panel-actions {
@@ -611,63 +564,8 @@
     border-top: 1px solid #e2e8f0;
 }
 
-.batch-row {
-    cursor: pointer;
-}
-
-.batch-row:hover {
+.table tbody tr:hover {
     background-color: #f7fafc;
-}
-
-.switch {
-    position: relative;
-    display: inline-block;
-    width: 50px;
-    height: 24px;
-}
-
-.switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #ccc;
-    transition: .4s;
-}
-
-.slider:before {
-    position: absolute;
-    content: "";
-    height: 16px;
-    width: 16px;
-    left: 4px;
-    bottom: 4px;
-    background-color: white;
-    transition: .4s;
-}
-
-input:checked + .slider {
-    background-color: #1AA09A;
-}
-
-input:checked + .slider:before {
-    transform: translateX(26px);
-}
-
-.slider.round {
-    border-radius: 24px;
-}
-
-.slider.round:before {
-    border-radius: 50%;
 }
 
 .actions {
@@ -831,26 +729,72 @@ input:checked + .slider:before {
     gap: 12px;
     justify-content: flex-end;
 }
-
-/* Add the overlay styles */
-.side-panel-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 999;
-    display: none;
-}
-
-.side-panel-overlay.active {
-    display: block;
-}
 </style>
 
 <script>
 let selectedLearners = [];
+let availableLearners = [];
+
+// Load batches on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadBatches();
+    
+    // Add event listener for unit selection
+    document.getElementById('unitSelect').addEventListener('change', function() {
+        loadAvailableLearners();
+    });
+});
+
+function loadBatches() {
+    const filters = getBatchFilters();
+    let url = '/api/batches/?';
+    if (filters.unitTypes.length > 0) {
+        url += 'unitType=' + filters.unitTypes.join(',') + '&';
+    }
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayBatches(data.batches);
+            } else {
+                console.error('Error loading batches:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+}
+
+function displayBatches(batches) {
+    const tbody = document.getElementById('batchesTableBody');
+    tbody.innerHTML = '';
+    
+    if (batches.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #666;">No batches found</td></tr>';
+        return;
+    }
+    
+    batches.forEach(batch => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${batch.batchName}</td>
+            <td>${batch.unitType}</td>
+            <td>${batch.unitName}</td>
+            <td>${batch.learnerCount}</td>
+            <td>
+                <div class="actions">
+                    <button class="btn-icon" onclick="editBatch('${batch.id}')">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-icon btn-danger" onclick="deleteBatch('${batch.id}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
 
 function toggleAddBatchPanel() {
     const panel = document.getElementById('addBatchPanel');
@@ -864,59 +808,125 @@ function toggleAddBatchPanel() {
             overlay.onclick = toggleAddBatchPanel;
             document.body.appendChild(overlay);
         }
+        loadAvailableLearners();
     } else {
         document.body.style.overflow = '';
         const overlay = document.querySelector('.side-panel-overlay');
         if (overlay) {
             overlay.remove();
         }
+        resetForm();
     }
 }
 
 function handleUnitTypeChange() {
     const unitType = document.getElementById('unitType').value;
-    const unitNameSelect = document.getElementById('unitName');
+    const unitSelect = document.getElementById('unitSelect');
+    const learnersInput = document.getElementById('learnersInput');
+    const learnersRequired = document.getElementById('learnersRequired');
     
-    // Clear current options
-    unitNameSelect.innerHTML = '<option value="">Select Unit Name</option>';
+    unitSelect.innerHTML = '<option value="">Select Unit</option>';
     
     if (unitType) {
-        unitNameSelect.disabled = false;
-        
-        // Populate unit names based on type
-        if (unitType === 'hospital') {
-            const hospitals = [
-                { id: 1, name: 'City General Hospital' },
-                { id: 2, name: 'Central Hospital' },
-                { id: 3, name: 'Community Medical Center' }
-            ];
-            
-            hospitals.forEach(hospital => {
-                const option = document.createElement('option');
-                option.value = hospital.id;
-                option.textContent = hospital.name;
-                unitNameSelect.appendChild(option);
-            });
-        } else {
-            const institutions = [
-                { id: 1, name: 'Medical College' },
-                { id: 2, name: 'Nursing School' },
-                { id: 3, name: 'Health Institute' }
-            ];
-            
-            institutions.forEach(institution => {
-                const option = document.createElement('option');
-                option.value = institution.id;
-                option.textContent = institution.name;
-                unitNameSelect.appendChild(option);
-            });
-        }
+        unitSelect.disabled = false;
+        loadUnits(unitType);
+        learnersInput.style.pointerEvents = 'auto';
+        learnersInput.style.opacity = '1';
+        learnersRequired.style.display = 'inline';
     } else {
-        unitNameSelect.disabled = true;
+        unitSelect.disabled = true;
+        learnersInput.style.pointerEvents = 'none';
+        learnersInput.style.opacity = '0.5';
+        learnersRequired.style.display = 'none';
     }
+    
+    // Clear learners when unit type changes
+    availableLearners = [];
+    document.getElementById('learnersOptions').innerHTML = '';
+    document.getElementById('selectedLearners').innerHTML = '';
+    document.querySelector('.placeholder').style.display = 'block';
+    selectedLearners = [];
 }
 
-function toggleDropdown() {
+function loadUnits(unitType) {
+    const endpoint = unitType === 'hospital' ? '/api/fetch-hospitals/' : '/fetch-institutes/';
+    
+    fetch(endpoint)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success || data.institutes) {
+                const unitSelect = document.getElementById('unitSelect');
+                const units = data.units || data.institutes;
+                units.forEach(unit => {
+                    const option = document.createElement('option');
+                    option.value = unit.id;
+                    option.textContent = unit.name || unit.instituteName;
+                    unitSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading units:', error);
+        });
+}
+
+function loadAvailableLearners() {
+    const unitSelect = document.getElementById('unitSelect');
+    const unitType = document.getElementById('unitType').value;
+    
+    if (!unitSelect.value) {
+        console.log('No unit selected');
+        return;
+    }
+    
+    const unitId = unitSelect.value;
+    fetch(`/api/fetch-learners/${unitType}/${unitId}/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                availableLearners = data.learners;
+                displayLearners(availableLearners);
+            } else {
+                console.error('Error loading learners:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading learners:', error);
+        });
+}
+
+function displayLearners(learners) {
+    const container = document.getElementById('learnersOptions');
+    container.innerHTML = '';
+    
+    learners.forEach(learner => {
+        const option = document.createElement('div');
+        option.className = 'option-item';
+        option.style.display = 'flex';
+        option.style.alignItems = 'center';
+        option.style.cursor = 'pointer';
+        option.innerHTML = `
+            <input type="checkbox" id="learner_${learner.id}" value="${learner.id}" onchange="updateSelectedLearners()" style="margin-left: 12px; margin-right: 12px;">
+            <div>
+                <div style="font-weight: 500;">${learner.name}</div>
+                <div style="font-size: 12px; color: #666;">${learner.email}</div>
+            </div>
+        `;
+        // Toggle checkbox when clicking anywhere except the checkbox itself
+        option.addEventListener('click', function(e) {
+            if (e.target.tagName !== 'INPUT') {
+                const checkbox = option.querySelector('input[type="checkbox"]');
+                checkbox.checked = !checkbox.checked;
+                updateSelectedLearners();
+            }
+        });
+        container.appendChild(option);
+    });
+}
+
+function toggleLearnersDropdown() {
+    const unitType = document.getElementById('unitType').value;
+    
     const dropdown = document.getElementById('learnersDropdown');
     const input = document.querySelector('.multiselect-input');
     
@@ -925,16 +935,16 @@ function toggleDropdown() {
 }
 
 function filterLearners(searchText) {
-    const options = document.querySelectorAll('#learnersOptions .option-item');
-    options.forEach(option => {
-        const text = option.textContent.toLowerCase();
-        option.style.display = text.includes(searchText.toLowerCase()) ? 'flex' : 'none';
-    });
+    const filtered = availableLearners.filter(learner => 
+        learner.name.toLowerCase().includes(searchText.toLowerCase()) ||
+        learner.email.toLowerCase().includes(searchText.toLowerCase())
+    );
+    displayLearners(filtered);
 }
 
 function updateSelectedLearners() {
     const checkboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]:checked');
-    const selectedTags = document.getElementById('selectedTags');
+    const selectedTags = document.getElementById('selectedLearners');
     const placeholder = document.querySelector('.placeholder');
     
     selectedTags.innerHTML = '';
@@ -943,14 +953,16 @@ function updateSelectedLearners() {
     if (selectedLearners.length > 0) {
         placeholder.style.display = 'none';
         checkboxes.forEach(checkbox => {
-            const optionText = checkbox.closest('.option-item').querySelector('span').textContent;
-            const tag = document.createElement('div');
-            tag.className = 'tag';
-            tag.innerHTML = `
-                ${optionText}
-                <span class="tag-remove" onclick="removeLearner('${checkbox.value}')">&times;</span>
-            `;
-            selectedTags.appendChild(tag);
+            const learner = availableLearners.find(l => l.id === checkbox.value);
+            if (learner) {
+                const tag = document.createElement('div');
+                tag.className = 'tag';
+                tag.innerHTML = `
+                    ${learner.name}
+                    <span class="tag-remove" onclick="removeLearner('${checkbox.value}')">&times;</span>
+                `;
+                selectedTags.appendChild(tag);
+            }
         });
     } else {
         placeholder.style.display = 'block';
@@ -963,6 +975,21 @@ function removeLearner(value) {
         checkbox.checked = false;
         updateSelectedLearners();
     }
+}
+
+function clearErrors() {
+    document.querySelectorAll('.error-message').forEach(error => {
+        error.classList.remove('show');
+    });
+}
+
+function resetForm() {
+    document.getElementById('batchForm').reset();
+    document.getElementById('selectedLearners').innerHTML = '';
+    document.querySelector('.placeholder').style.display = 'block';
+    document.getElementById('unitSelect').disabled = true;
+    selectedLearners = [];
+    clearErrors();
 }
 
 function toggleFilterPanel() {
@@ -999,145 +1026,128 @@ function switchFilter(filterType) {
     document.getElementById(`${filterType}-content`).classList.add('active');
 }
 
-// Form Validation
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.getElementById('batchForm');
-    
-    form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        if (validateForm()) {
-            submitForm();
-        }
-    });
-    
-    // Real-time validation
-    document.getElementById('batchName').addEventListener('input', function() {
-        validateField('batchName', this.value.trim() !== '', 'Batch name is required');
-    });
-    
-    document.getElementById('unitType').addEventListener('change', function() {
-        validateField('unitType', this.value !== '', 'Unit type is required');
-    });
-    
-    document.getElementById('unitName').addEventListener('change', function() {
-        validateField('unitName', this.value !== '', 'Unit name is required');
-    });
-});
-
-function validateField(fieldName, condition, errorMessage) {
-    const field = document.getElementById(fieldName);
-    const errorElement = document.getElementById(`${fieldName}Error`);
-    
-    if (!condition) {
-        field.classList.add('error');
-        field.classList.remove('success');
-        errorElement.textContent = errorMessage;
-        errorElement.style.display = 'block';
-        return false;
-    } else {
-        field.classList.remove('error');
-        field.classList.add('success');
-        errorElement.style.display = 'none';
-        return true;
-    }
-}
-
-function validateForm() {
-    let isValid = true;
-    
-    isValid = validateField('batchName', 
-        document.getElementById('batchName').value.trim() !== '', 
-        'Batch name is required') && isValid;
-    
-    isValid = validateField('unitType',
-        document.getElementById('unitType').value !== '',
-        'Unit type is required') && isValid;
-    
-    isValid = validateField('unitName',
-        document.getElementById('unitName').value !== '',
-        'Unit name is required') && isValid;
-    
-    isValid = validateField('learnersInput',
-        selectedLearners.length > 0,
-        'Please select at least one learner') && isValid;
-    
-    return isValid;
-}
-
-function submitForm() {
-    const submitBtn = document.getElementById('submitBtn');
-    const btnText = submitBtn.querySelector('.btn-text');
-    const btnSpinner = submitBtn.querySelector('.btn-spinner');
-    
-    submitBtn.disabled = true;
-    btnText.style.display = 'none';
-    btnSpinner.style.display = 'inline-flex';
+// Form submission
+document.getElementById('batchForm').addEventListener('submit', function(e) {
+    e.preventDefault();
     
     const formData = {
         batchName: document.getElementById('batchName').value.trim(),
         unitType: document.getElementById('unitType').value,
-        unitName: document.getElementById('unitName').value,
-        learners: selectedLearners
+        unitId: document.getElementById('unitSelect').value,
+        learnerIds: selectedLearners
     };
     
-    // Simulate API call
-    setTimeout(() => {
-        submitBtn.disabled = false;
-        btnText.style.display = 'inline';
+    // Validate form
+    if (!formData.batchName) {
+        showError('batchNameError', 'Batch name is required');
+        return;
+    }
+    if (!formData.unitType) {
+        showError('unitTypeError', 'Unit type is required');
+        return;
+    }
+    if (!formData.unitId) {
+        showError('unitError', 'Unit is required');
+        return;
+    }
+    // Only require learners for institutions
+    if (formData.unitType === 'institution' && formData.learnerIds.length === 0) {
+        showError('learnersError', 'Please select at least one learner');
+        return;
+    }
+    
+    // Show loading state
+    const submitBtn = document.getElementById('submitBtn');
+    const btnText = submitBtn.querySelector('.btn-text');
+    const btnSpinner = submitBtn.querySelector('.btn-spinner');
+    
+    btnText.style.display = 'none';
+    btnSpinner.style.display = 'inline-block';
+    submitBtn.disabled = true;
+    
+    // Submit form
+    fetch('/api/batches/create/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Batch created successfully!');
+            toggleAddBatchPanel();
+            loadBatches();
+        } else {
+            alert('Error creating batch: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error creating batch');
+    })
+    .finally(() => {
+        btnText.style.display = 'inline-block';
         btnSpinner.style.display = 'none';
-        
-        alert('Batch created successfully!');
-        resetForm();
-        toggleAddBatchPanel();
-    }, 2000);
+        submitBtn.disabled = false;
+    });
+});
+
+document.querySelector('.filter-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    toggleFilterPanel();
+    loadBatches();
+});
+
+function showError(elementId, message) {
+    const errorElement = document.getElementById(elementId);
+    errorElement.textContent = message;
+    errorElement.classList.add('show');
 }
 
-function resetForm() {
-    document.getElementById('batchForm').reset();
-    document.getElementById('selectedTags').innerHTML = '';
-    document.querySelector('.placeholder').style.display = 'block';
-    document.getElementById('unitName').disabled = true;
-    selectedLearners = [];
-    
-    // Remove all validation states
-    const fields = ['batchName', 'unitType', 'unitName', 'learnersInput'];
-    fields.forEach(field => {
-        const element = document.getElementById(field);
-        if (element) {
-            element.classList.remove('error', 'success');
-            const errorElement = document.getElementById(`${field}Error`);
-            if (errorElement) {
-                errorElement.style.display = 'none';
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
             }
         }
-    });
+    }
+    return cookieValue;
 }
 
-function filterOptions(type) {
-    const searchInput = document.querySelector(`input[placeholder="Search ${type === 'unit' ? 'unit types' : 'status'}"]`);
-    const options = document.querySelectorAll(`input[name="${type}"]`);
-    const searchText = searchInput.value.toLowerCase();
-    
-    options.forEach(option => {
-        const label = option.closest('.option-item');
-        const text = label.querySelector('span').textContent.toLowerCase();
-        label.style.display = text.includes(searchText) ? 'flex' : 'none';
-    });
+function editBatch(batchId) {
+    // Redirect to batch detail page for editing
+    window.location.href = `/batch-management/${batchId}/`;
 }
 
-function updateSelectionCount(type) {
-    const checkedCount = document.querySelectorAll(`input[name="${type}"]:checked`).length;
-    const countElement = document.querySelector(`.filter-section:has(input[name="${type}"]) .selection-count`);
-    countElement.textContent = `${checkedCount} ${type.charAt(0).toUpperCase() + type.slice(1)} selected`;
+function deleteBatch(batchId) {
+    if (confirm('Are you sure you want to delete this batch?')) {
+        // TODO: Implement delete functionality
+        console.log('Delete batch:', batchId);
+    }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    ['unit', 'status'].forEach(type => {
-        const checkboxes = document.querySelectorAll(`input[name="${type}"]`);
-        checkboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', () => updateSelectionCount(type));
-        });
-    });
+function getBatchFilters() {
+    const unitTypes = Array.from(document.querySelectorAll('input[name="unit"]:checked')).map(cb => cb.value);
+    return {
+        unitTypes
+    };
+}
+
+document.addEventListener('click', function(event) {
+    const dropdown = document.getElementById('learnersDropdown');
+    const input = document.getElementById('learnersInput');
+    if (!dropdown.contains(event.target) && !input.contains(event.target)) {
+        dropdown.classList.remove('active');
+        input.classList.remove('active');
+    }
 });
 </script>
 {% endblock %}

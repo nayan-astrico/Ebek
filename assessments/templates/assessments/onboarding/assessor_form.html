@@ -1,10 +1,13 @@
 {% extends 'assessments/base.html' %}
+{% load static %}
+{% block sidePanel %}
 
-{% block content %}
+<link href="{% static 'assessments/css/form.css' %}" rel="stylesheet">
+
 <div class="page-container">
-    <div class="container-fluid py-4">
+    <div class="container-fluid">
         <div class="row justify-content-center">
-            <div class="col-md-8">
+            <div class="col-md-12">
                 <div class="card bg-white border-0">
                     <div class="card-header bg-white border-0 pb-0">
                         <h3 class="card-title mb-0">
@@ -16,7 +19,13 @@
                         </h3>
                     </div>
                     <div class="card-body pt-4">
-                    <form method="post" novalidate>
+                        {% if action == 'Create' %}
+                            <form method="post" action="{% url 'assessor_create' %}" novalidate>
+                        {% else %}
+                            <form method="post" action="{% url 'assessor_edit' form.instance.pk %}" novalidate>
+                        {% endif %}
+
+
                         {% csrf_token %}
                         
                         {% if form.non_field_errors %}
@@ -242,7 +251,7 @@
     </div>
 </div>
 
-<style>
+<!-- <style>
     .page-container {
         background: #fff;
         min-height: 100vh;
@@ -356,7 +365,7 @@
         color: #E53E3E;
         margin-left: 4px;
     }
-</style>
+</style> -->
 
 <script>
 function toggleAssessorFields(value) {

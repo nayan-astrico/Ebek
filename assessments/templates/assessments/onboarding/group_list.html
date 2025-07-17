@@ -1,16 +1,19 @@
 {% extends 'assessments/base.html' %}
-
+{% load static %}
 {% block content %}
+
+<link href="{% static 'assessments/css/list.css' %}" rel="stylesheet">
+
 <!-- Header -->
 <div class="header">
     <div class="header-left">
         <h1>Groups</h1>
-        <p class="text-muted">Manage your institution and hospital groups</p>
+        <p class="text-muted">Manage your groups</p>
     </div>
     <div class="header-right">
-        <a href="{% url 'group_create' %}" class="btn btn-primary">
-            <i class="fas fa-plus"></i>
-            Add Group
+        <a href="javascript:void(0);" class="btn btn-primary"
+           onclick="openGroupFormPanel('{% url 'group_create' %}', 'Add Group')">
+            <i class="fas fa-plus"></i> Add Group
         </a>
     </div>
 </div>
@@ -174,7 +177,8 @@
                             </td>
                             <td>
                     <div class="actions">
-                        <a href="{% url 'group_edit' group.pk %}" class="btn-icon">
+                        <a href="javascript:void(0);" class="btn-icon"
+                           onclick="openGroupFormPanel('{% url 'group_edit' group.pk %}', 'Edit Group')">
                                         <i class="fas fa-edit"></i>
                                     </a>
                         <button type="button" 
@@ -193,7 +197,10 @@
                 <td colspan="7" class="empty">
                     <i class="fas fa-users"></i>
                     <p>No groups found</p>
-                    <a href="{% url 'group_create' %}" class="btn btn-primary">Add Group</a>
+                    <a href="javascript:void(0);" class="btn btn-primary"
+                                onclick="openGroupFormPanel('{% url 'group_create' %}', 'Add Group')">
+                     Add New Group
+                    </a>
                 </td>
                         </tr>
                         {% endfor %}
@@ -249,454 +256,53 @@
     </div>
 </div>
 
-<style>
-/* Basic Layout */
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-}
-
-.header-left h1 {
-    margin: 0;
-    font-size: 24px;
-    font-weight: 600;
-}
-
-.header-left p {
-    margin: 4px 0 0;
-    color: #666;
-}
-
-.btn-primary {
-    background: #F16564;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
-    color: white;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    transition: background-color 0.2s;
-    text-decoration: none;
-}
-
-.btn-primary:hover,
-.btn-primary:active,
-.btn-primary:focus,
-.btn-primary:visited {
-    background: #e45857;
-    text-decoration: none;
-    color: white;
-    outline: none;
-    box-shadow: none;
-}
-
-/* Search and Filter Bar */
-.search-filter-bar {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 24px;
-}
-
-.search-box {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 8px 16px;
-}
-
-.search-box input {
-    border: none;
-    outline: none;
-    width: 100%;
-    font-size: 14px;
-}
-
-.btn-filter {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    font-size: 14px;
-    color: #4a5568;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.btn-filter:hover {
-    background: #f7fafc;
-}
-
-/* Table */
-.card {
-    background: white;
-    border-radius: 8px;
-    border: 1px solid #e2e8f0;
-    overflow: hidden;
-}
-
-.table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.table th {
-    background: #f8fafc;
-    padding: 12px 16px;
-    text-align: left;
-    font-size: 12px;
-    font-weight: 600;
-    color: #4a5568;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.table td {
-    padding: 16px;
-    border-top: 1px solid #e2e8f0;
-}
-
-/* Institution */
-.institution {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-/* Unit Head */
-.unit-head {
-    display: flex;
-    flex-direction: column;
-}
-
-.unit-head small {
-    color: #666;
-}
-
-/* Status Badge */
-.badge {
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 500;
-}
-
-.badge.active {
-    background: #c6f6d5;
-    color: #2f855a;
-}
-
-.badge.inactive {
-    background: #fed7d7;
-    color: #c53030;
-}
-
-/* Actions */
-.actions {
-    display: flex;
-    gap: 8px;
-}
-
-.btn-icon {
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: none;
-    background: #edf2f7;
-    color: #4a5568;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    text-decoration: none;
-}
-
-.btn-icon:hover {
-    background: #e2e8f0;
-    text-decoration: none;
-    color: #4a5568;
-}
-
-.btn-icon.btn-danger {
-    color: #c53030;
-    background: #fff5f5;
-}
-
-.btn-icon.btn-danger:hover {
-    background: #fed7d7;
-}
-
-/* Empty State */
-.empty {
-    text-align: center;
-    padding: 48px !important;
-}
-
-.empty i {
-    font-size: 48px;
-    color: #a0aec0;
-    margin-bottom: 16px;
-}
-
-.empty p {
-    margin: 0 0 16px;
-    color: #4a5568;
-}
-
-/* Pagination */
-.pagination {
-    display: flex;
-    justify-content: center;
-    gap: 4px;
-    margin-top: 24px;
-}
-
-.btn-page {
-    min-width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 6px;
-    background: #edf2f7;
-    color: #4a5568;
-    text-decoration: none;
-}
-
-.btn-page:hover {
-    background: #e2e8f0;
-    text-decoration: none;
-}
-
-.btn-page.active {
-    background: #1AA09A;
-    color: white;
-}
-
-/* Filter Panel */
-.filter-panel {
-    position: fixed;
-    top: 0;
-    right: -600px;
-    width: 600px;
-    height: 100vh;
-    background: white;
-    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
-    transition: right 0.3s ease;
-    z-index: 1000;
-}
-
-.filter-panel.active {
-    right: 0;
-}
-
-.filter-header {
-    padding: 20px 24px;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.filter-header h3 {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 600;
-    color: #1a202c;
-}
-
-.filter-form {
-    display: flex;
-    flex-direction: column;
-    height: calc(100vh - 64px);
-}
-
-.filter-layout {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
-}
-
-/* Filter Types (30%) */
-.filter-types {
-    width: 30%;
-    background: #f8fafc;
-    border-right: 1px solid #e2e8f0;
-}
-
-.filter-type {
-    padding: 16px 20px;
-    cursor: pointer;
-    transition: all 0.2s;
-    position: relative;
-    color: #4a5568;
-}
-
-.filter-type:hover {
-    background: #f1f5f9;
-}
-
-.filter-type.active {
-    background: white;
-    color: #F16564;
-}
-
-.filter-type.active::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 4px;
-    background: #F16564;
-}
-
-/* Filter Content (70%) */
-.filter-content-wrapper {
-    width: 70%;
-    display: flex;
-    flex-direction: column;
-    background: white;
-}
-
-.filter-content {
-    display: none;
-    height: 100%;
-    flex-direction: column;
-}
-
-.filter-content.active {
-    display: flex;
-}
-
-.filter-search {
-    padding: 20px;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.filter-search input {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    font-size: 14px;
-    margin-bottom: 12px;
-}
-
-.filter-search input:focus {
-    outline: none;
-    border-color: #F16564;
-    box-shadow: 0 0 0 2px rgba(241, 101, 100, 0.1);
-}
-
-.selection-count {
-    font-size: 14px;
-    color: #4a5568;
-}
-
-.options-list {
-    padding: 16px 20px;
-    overflow-y: auto;
-    flex: 1;
-}
-
-.option-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 0;
-    cursor: pointer;
-}
-
-.option-item input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    border: 2px solid #cbd5e0;
-    border-radius: 4px;
-    cursor: pointer;
-}
-
-.option-item input[type="checkbox"]:checked {
-    background-color: #F16564;
-    border-color: #F16564;
-}
-
-.option-item span {
-    font-size: 14px;
-    color: #4a5568;
-}
-
-.filter-actions {
-    padding: 16px 24px;
-    border-top: 1px solid #e2e8f0;
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-    background: white;
-    margin-top: auto;
-}
-
-/* Overlay */
-.overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.5);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    z-index: 999;
-}
-
-.overlay.active {
-    opacity: 1;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 16px;
-    }
-
-    .header-right {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        width: 100%;
-    }
-
-    .header-right .btn {
-        width: 100%;
-    }
-
-    .card {
-        overflow-x: auto;
-    }
-
-    .table {
-        min-width: 800px;
-    }
-
-    .filter-panel {
-        width: 100%;
-        right: -100%;
-    }
-}
-</style>
+<!-- Hospital Form Side Panel -->
+<div id="groupFormPanel" class="side-panel">
+    <div class="side-panel-header">
+        <h3 id="formPanelTitle">Add Group</h3>
+        <button type="button" class="close" onclick="closeGroupFormPanel()">&times;</button>
+    </div>
+    <div class="side-panel-body" id="groupFormContainer">
+    </div>
+</div>
+<div id="sidePanelOverlay" class="side-panel-overlay" onclick="closeGroupFormPanel()"></div>
 
 <script>
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            // Does this cookie string begin with the name we want?
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function openGroupFormPanel(url, title) {
+    document.getElementById('formPanelTitle').textContent = title;
+    document.getElementById('groupFormPanel').classList.add('active');
+    document.getElementById('sidePanelOverlay').classList.add('active');
+    fetch(url)
+        .then(response => response.text())
+        .then(html => {
+            console.log(html);
+            document.getElementById('groupFormContainer').innerHTML = html;
+        });
+}
+
+function closeGroupFormPanel() {
+    document.getElementById('groupFormPanel').classList.remove('active');
+    document.getElementById('sidePanelOverlay').classList.remove('active');
+    document.getElementById('groupFormContainer').innerHTML = '';
+}
+
 function confirmDelete(button) {
     const name = button.dataset.name;
     const url = button.dataset.url;
@@ -771,5 +377,35 @@ function updateSelectionCount(category) {
     const label = category.charAt(0).toUpperCase() + category.slice(1);
     countElement.textContent = `${count} ${label} selected`;
 }
+
+
+// Intercept form submission (optional, for AJAX submit)
+document.addEventListener('submit', function(e) {
+    if (e.target.closest('#groupFormPanel form')) {
+        e.preventDefault();
+        const form = e.target;
+        const url = form.action;
+        const formData = new FormData(form);
+        fetch(url, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        })
+        .then(response => response.text())
+        .then(html => {
+            if (html.includes('form-group')) {
+                // Form has errors, re-render it
+                document.getElementById('groupFormContainer').innerHTML = html;
+            } else {
+                // Success: close panel and reload page
+                closeGroupFormPanel();
+                location.reload(); // <--- This reloads the page
+            }
+        });
+    }
+});
 </script>
 {% endblock %} 

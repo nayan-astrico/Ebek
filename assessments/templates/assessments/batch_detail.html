@@ -12,15 +12,29 @@
 <!-- Batch Header -->
 <div class="course-header">
     <div class="course-header-left">
-        <h1>Batch 2024-A</h1>
-        <p class="course-description">City General Hospital</p>
+        <div class="batch-name-container">
+            <div class="batch-name-display" id="batchNameDisplay">
+                <h1 id="batchNameText">{{ batch.name }}</h1>
+                <button class="edit-name-btn" onclick="enableBatchNameEdit()">
+                    <i class="fas fa-edit"></i>
+                </button>
+            </div>
+            <div class="batch-name-edit" id="batchNameEdit" style="display: none;">
+                <input type="text" id="batchNameInput" value="{{ batch.name }}" class="batch-name-input">
+                <div class="edit-actions">
+                    <button class="save-name-btn" onclick="saveBatchName()">
+                        <i class="fas fa-check"></i>
+                    </button>
+                    <button class="cancel-name-btn" onclick="cancelBatchNameEdit()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <p class="course-description">{{ batch.unit_name }}</p>
     </div>
     <div class="course-header-right">
-        <button class="btn btn-light" onclick="openEditBatchPanel()">
-            <i class="fas fa-edit"></i>
-            Edit Batch
-        </button>
-        <button class="btn btn-danger">
+        <button class="btn btn-danger" onclick="deleteBatch()">
             <i class="fas fa-trash"></i>
             Delete Batch
         </button>
@@ -34,23 +48,19 @@
         <div class="info-grid">
             <div class="info-item">
                 <label>Batch Name</label>
-                <span class="info-value">Batch 2024-A</span>
+                <span class="info-value">{{ batch.name }}</span>
             </div>
             <div class="info-item">
                 <label>Unit Type</label>
-                <span class="info-value">Hospital</span>
+                <span class="info-value">{{ batch.unit_type|title }}</span>
             </div>
             <div class="info-item">
                 <label>Unit Name</label>
-                <span class="info-value">City General Hospital</span>
+                <span class="info-value">{{ batch.unit_name }}</span>
             </div>
             <div class="info-item">
                 <label>Learners</label>
-                <span class="info-value">25</span>
-            </div>
-            <div class="info-item">
-                <label>Status</label>
-                <span class="status-badge status-active">Active</span>
+                <span class="info-value">{{ batch.learner_count }}</span>
             </div>
         </div>
     </div>
@@ -86,39 +96,7 @@
         <div class="form-group">
             <label>Available Learners <span class="text-danger">*</span></label>
             <div class="available-learners-container" id="availableLearners">
-                <div class="learner-item">
-                    <div class="custom-checkbox">
-                        <input type="checkbox" id="learner_1" value="1">
-                        <label for="learner_1">
-                            <div class="learner-info">
-                                <span class="learner-name">Sarah Johnson</span>
-                                <span class="learner-email">sarah.j@example.com</span>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-                <div class="learner-item">
-                    <div class="custom-checkbox">
-                        <input type="checkbox" id="learner_2" value="2">
-                        <label for="learner_2">
-                            <div class="learner-info">
-                                <span class="learner-name">Michael Chen</span>
-                                <span class="learner-email">m.chen@example.com</span>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-                <div class="learner-item">
-                    <div class="custom-checkbox">
-                        <input type="checkbox" id="learner_3" value="3">
-                        <label for="learner_3">
-                            <div class="learner-info">
-                                <span class="learner-name">Emily Davis</span>
-                                <span class="learner-email">emily.d@example.com</span>
-                            </div>
-                        </label>
-                    </div>
-                </div>
+                <!-- Available learners will be loaded here -->
             </div>
             <div class="error-message" id="addLearnersError"></div>
         </div>
@@ -153,62 +131,7 @@
         <div class="form-group">
             <label>Available Courses <span class="text-danger">*</span></label>
             <div class="available-courses-container" id="availableCourses">
-                <div class="course-item">
-                    <div class="custom-checkbox">
-                        <input type="checkbox" id="course_1" value="1">
-                        <label for="course_1">
-                            <div class="course-info">
-                                <span class="course-name">Basic Life Support</span>
-                                <div class="course-details">
-                                    <span class="course-procedures">12 procedures</span>
-                                    <span class="course-osce">Classroom, Mock, Final</span>
-                                </div>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-                <div class="course-item">
-                    <div class="custom-checkbox">
-                        <input type="checkbox" id="course_2" value="2">
-                        <label for="course_2">
-                            <div class="course-info">
-                                <span class="course-name">Advanced Cardiac Life Support</span>
-                                <div class="course-details">
-                                    <span class="course-procedures">24 procedures</span>
-                                    <span class="course-osce">Classroom, Mock</span>
-                                </div>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-                <div class="course-item">
-                    <div class="custom-checkbox">
-                        <input type="checkbox" id="course_3" value="3">
-                        <label for="course_3">
-                            <div class="course-info">
-                                <span class="course-name">Pediatric Advanced Life Support</span>
-                                <div class="course-details">
-                                    <span class="course-procedures">18 procedures</span>
-                                    <span class="course-osce">Classroom, Final</span>
-                                </div>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-                <div class="course-item">
-                    <div class="custom-checkbox">
-                        <input type="checkbox" id="course_4" value="4">
-                        <label for="course_4">
-                            <div class="course-info">
-                                <span class="course-name">Neonatal Resuscitation</span>
-                                <div class="course-details">
-                                    <span class="course-procedures">15 procedures</span>
-                                    <span class="course-osce">Classroom, Mock, Final</span>
-                                </div>
-                            </div>
-                        </label>
-                    </div>
-                </div>
+                <!-- Available courses will be loaded here -->
             </div>
             <div class="error-message" id="addCoursesError"></div>
         </div>
@@ -244,14 +167,7 @@
         <div class="procedures-controls">
             <div class="search-box">
                 <i class="fas fa-search"></i>
-                <input type="text" placeholder="Search learners..." id="learnerSearch">
-            </div>
-            <div class="filter-controls">
-                <select class="form-control" id="statusFilter">
-                    <option value="">All Status</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                </select>
+                <input type="text" placeholder="Search learners..." id="learnerSearch" oninput="filterLearnersTable(this.value)">
             </div>
         </div>
 
@@ -262,45 +178,27 @@
                     <tr>
                         <th>Learner Name</th>
                         <th>Email</th>
-                        <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="learnersTableBody">
-                    <tr>
-                        <td>John Doe</td>
-                        <td>john.doe@example.com</td>
-                        <td>
-                            <span class="status-badge status-active">Active</span>
-                        </td>
+                    {% for learner in batch.learners %}
+                    <tr data-learner-id="{{ learner.id }}">
+                        <td>{{ learner.name }}</td>
+                        <td>{{ learner.email }}</td>
                         <td>
                             <div class="actions">
-                                <button class="btn-icon">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn-icon btn-danger">
+                                <button class="btn-icon btn-danger" onclick="removeLearner('{{ learner.id }}')">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
                         </td>
                     </tr>
+                    {% empty %}
                     <tr>
-                        <td>Jane Smith</td>
-                        <td>jane.smith@example.com</td>
-                        <td>
-                            <span class="status-badge status-active">Active</span>
-                        </td>
-                        <td>
-                            <div class="actions">
-                                <button class="btn-icon">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn-icon btn-danger">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
+                        <td colspan="3" style="text-align: center; color: #666;">No learners found</td>
                     </tr>
+                    {% endfor %}
                 </tbody>
             </table>
         </div>
@@ -325,13 +223,6 @@
                 <i class="fas fa-search"></i>
                 <input type="text" placeholder="Search courses..." id="courseSearch">
             </div>
-            <div class="filter-controls">
-                <select class="form-control" id="courseStatusFilter">
-                    <option value="">All Status</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                </select>
-            </div>
         </div>
 
         <!-- Courses Table -->
@@ -340,60 +231,36 @@
                 <thead>
                     <tr>
                         <th>Course Name</th>
-                        <th>No. of Procedures</th>
+                        <th>Procedures</th>
                         <th>OSCE Types</th>
-                        <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="coursesTableBody">
-                    <tr>
-                        <td>Basic Life Support</td>
-                        <td>12</td>
+                    {% for course in batch.courses %}
+                    <tr data-course-id="{{ course.id }}">
+                        <td>{{ course.name }}</td>
                         <td>
-                            <div class="osce-types-display">
-                                <span class="osce-badge">Classroom</span>
-                                <span class="osce-badge">Mock</span>
-                                <span class="osce-badge">Final</span>
+                            <div class="procedure-pills">
+                                {% for proc in course.procedures %}
+                                    <span class="pill">{{ proc }}</span>
+                                {% endfor %}
                             </div>
                         </td>
-                        <td>
-                            <span class="status-badge status-active">Active</span>
-                        </td>
+                        <td>{{ course.osce_types|join:", " }}</td>
                         <td>
                             <div class="actions">
-                                <button class="btn-icon">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn-icon btn-danger">
+                                <button class="btn-icon btn-danger" onclick="removeCourse('{{ course.id }}')">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
                         </td>
                     </tr>
+                    {% empty %}
                     <tr>
-                        <td>Advanced Cardiac Life Support</td>
-                        <td>24</td>
-                        <td>
-                            <div class="osce-types-display">
-                                <span class="osce-badge">Classroom</span>
-                                <span class="osce-badge">Mock</span>
-                            </div>
-                        </td>
-                        <td>
-                            <span class="status-badge status-active">Active</span>
-                        </td>
-                        <td>
-                            <div class="actions">
-                                <button class="btn-icon">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn-icon btn-danger">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
+                        <td colspan="4" style="text-align: center; color: #666;">No courses assigned to this batch</td>
                     </tr>
+                    {% endfor %}
                 </tbody>
             </table>
         </div>
@@ -439,6 +306,10 @@
     border-bottom: 1px solid #e2e8f0;
 }
 
+.course-header-left {
+    flex: 1;
+}
+
 .course-header-left h1 {
     margin: 0 0 8px 0;
     font-size: 32px;
@@ -471,16 +342,6 @@
     gap: 8px;
 }
 
-.course-header-right .btn-light {
-    background: #f8f9fa;
-    color: #495057;
-    border: 1px solid #dee2e6;
-}
-
-.course-header-right .btn-light:hover {
-    background: #e2e6ea;
-}
-
 .course-header-right .btn-danger {
     background: #dc3545;
     color: white;
@@ -488,6 +349,95 @@
 
 .course-header-right .btn-danger:hover {
     background: #c82333;
+}
+
+/* Batch Name Editable Styles */
+.batch-name-container {
+    position: relative;
+}
+
+.batch-name-display {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.batch-name-display h1 {
+    margin: 0 0 8px 0;
+    font-size: 32px;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.edit-name-btn {
+    background: none;
+    border: none;
+    color: #718096;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    font-size: 16px;
+}
+
+.edit-name-btn:hover {
+    background: #f7fafc;
+    color: #F16564;
+}
+
+.batch-name-edit {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.batch-name-input {
+    font-size: 32px;
+    font-weight: 600;
+    color: #2d3748;
+    border: 2px solid #F16564;
+    border-radius: 6px;
+    padding: 8px 12px;
+    background: white;
+    outline: none;
+    min-width: 300px;
+}
+
+.batch-name-input:focus {
+    box-shadow: 0 0 0 3px rgba(241, 101, 100, 0.1);
+}
+
+.edit-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.save-name-btn, .cancel-name-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    font-size: 16px;
+}
+
+.save-name-btn {
+    color: #38a169;
+}
+
+.save-name-btn:hover {
+    background: #f0fff4;
+    color: #2f855a;
+}
+
+.cancel-name-btn {
+    color: #e53e3e;
+}
+
+.cancel-name-btn:hover {
+    background: #fff5f5;
+    color: #c53030;
 }
 
 /* Course Overview */
@@ -532,26 +482,6 @@
     font-size: 14px;
     font-weight: 500;
     color: #2d3748;
-}
-
-/* Status Badge */
-.status-badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 500;
-    text-transform: uppercase;
-}
-
-.status-active {
-    background: #c6f6d5;
-    color: #22543d;
-}
-
-.status-inactive {
-    background: #fed7d7;
-    color: #c53030;
 }
 
 /* OSCE Types Display */
@@ -650,15 +580,6 @@
     outline: none;
     width: 100%;
     font-size: 14px;
-}
-
-.filter-controls {
-    display: flex;
-    gap: 12px;
-}
-
-.filter-controls select {
-    min-width: 150px;
 }
 
 /* Table Styles */
@@ -815,6 +736,9 @@
 .learner-item {
     padding: 12px 16px;
     border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
 .learner-item:last-child {
@@ -825,10 +749,16 @@
     background: #f7fafc;
 }
 
+.learner-item.current-learner {
+    background: #f0f9ff;
+    border-left: 3px solid #3b82f6;
+}
+
 .learner-info {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    flex: 1;
 }
 
 .learner-name {
@@ -839,6 +769,16 @@
 .learner-email {
     font-size: 12px;
     color: #718096;
+}
+
+.current-learner-badge {
+    background: #3b82f6;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
 }
 
 /* Custom Checkbox */
@@ -1004,6 +944,38 @@
 .course-osce {
     color: #718096;
 }
+
+/* Current Course Badge */
+.current-course-badge {
+    background: #3b82f6;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.course-item.current-course {
+    background: #f0f9ff;
+    border-left: 3px solid #3b82f6;
+}
+
+.procedure-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.pill {
+    background: #f0f4f8;
+    color: #2d3748;
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    display: inline-block;
+}
+```
 </style>
 
 <script>
@@ -1021,6 +993,138 @@ function switchTab(tabName) {
     document.getElementById(`${tabName}-panel`).classList.add('active');
 }
 
+// Batch Name Edit Functions
+function enableBatchNameEdit() {
+    const displayDiv = document.getElementById('batchNameDisplay');
+    const editDiv = document.getElementById('batchNameEdit');
+    const input = document.getElementById('batchNameInput');
+    
+    displayDiv.style.display = 'none';
+    editDiv.style.display = 'flex';
+    
+    // Focus and select the input
+    input.focus();
+    input.select();
+}
+
+function cancelBatchNameEdit() {
+    const displayDiv = document.getElementById('batchNameDisplay');
+    const editDiv = document.getElementById('batchNameEdit');
+    const input = document.getElementById('batchNameInput');
+    const originalName = '{{ batch.name }}';
+    
+    // Reset input value to original
+    input.value = originalName;
+    
+    displayDiv.style.display = 'flex';
+    editDiv.style.display = 'none';
+}
+
+function saveBatchName() {
+    const input = document.getElementById('batchNameInput');
+    const newName = input.value.trim();
+    const originalName = '{{ batch.name }}';
+    
+    if (!newName) {
+        alert('Batch name cannot be empty');
+        return;
+    }
+    
+    if (newName === originalName) {
+        cancelBatchNameEdit();
+        return;
+    }
+    
+    // Show loading state
+    const saveBtn = document.querySelector('.save-name-btn');
+    const originalIcon = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    saveBtn.disabled = true;
+    
+    // Prepare form data with all required fields
+    const formData = {
+        batchName: newName,
+        updateOnlyBatchName: true
+    };
+    
+    // Submit to API
+    fetch(`/api/batches/{{ batch.id }}/update/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update the display
+            document.getElementById('batchNameText').textContent = newName;
+            document.querySelector('.info-value').textContent = newName;
+            
+            // Switch back to display mode
+            cancelBatchNameEdit();
+            
+            // Show success message
+            showSuccessMessage('Batch name updated successfully!');
+        } else {
+            alert('Error updating batch name: ' + data.error);
+            // Reset input to original value
+            input.value = originalName;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error updating batch name');
+        // Reset input to original value
+        input.value = originalName;
+    })
+    .finally(() => {
+        saveBtn.innerHTML = originalIcon;
+        saveBtn.disabled = false;
+    });
+}
+
+function showSuccessMessage(message) {
+    // Create a temporary success message
+    const successDiv = document.createElement('div');
+    successDiv.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #38a169;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 6px;
+        z-index: 10000;
+        font-weight: 500;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    `;
+    successDiv.textContent = message;
+    document.body.appendChild(successDiv);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        successDiv.remove();
+    }, 3000);
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
 function openAddLearnerPanel() {
     const panel = document.getElementById('addLearnerPanel');
     panel.classList.add('active');
@@ -1034,6 +1138,9 @@ function openAddLearnerPanel() {
     }
     
     document.body.style.overflow = 'hidden';
+    
+    // Load available learners
+    loadAvailableLearners();
 }
 
 function closeAddLearnerPanel() {
@@ -1051,6 +1158,53 @@ function closeAddLearnerPanel() {
     // Reset form
     document.getElementById('addLearnerForm').reset();
     clearAddLearnerErrors();
+}
+
+function loadAvailableLearners() {
+    const batchId = '{{ batch.id }}';
+    
+    fetch(`/api/batches/${batchId}/available-learners/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayAvailableLearners(data.learners);
+            } else {
+                console.error('Error loading available learners:', data.error);
+                alert('Error loading available learners: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error loading available learners');
+        });
+}
+
+function displayAvailableLearners(learners) {
+    const container = document.getElementById('availableLearners');
+    container.innerHTML = '';
+    
+    if (learners.length === 0) {
+        container.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No available learners found</div>';
+        return;
+    }
+    
+    learners.forEach(learner => {
+        const learnerItem = document.createElement('div');
+        learnerItem.className = `learner-item ${learner.isCurrentLearner ? 'current-learner' : ''}`;
+        learnerItem.innerHTML = `
+            <div class="custom-checkbox">
+                <input type="checkbox" id="available_learner_${learner.id}" value="${learner.id}" ${learner.isCurrentLearner ? 'checked disabled' : ''}>
+                <label for="available_learner_${learner.id}">
+                    <div class="learner-info">
+                        <div class="learner-name">${learner.name}</div>
+                        <div class="learner-email">${learner.email}</div>
+                    </div>
+                </label>
+            </div>
+            ${learner.isCurrentLearner ? '<span class="current-learner-badge">Current</span>' : ''}
+        `;
+        container.appendChild(learnerItem);
+    });
 }
 
 function filterAvailableLearners(searchTerm) {
@@ -1074,14 +1228,14 @@ function clearAddLearnerErrors() {
     });
 }
 
-// Handle form submission
+// Handle add learner form submission
 document.addEventListener('DOMContentLoaded', function() {
     const addLearnerForm = document.getElementById('addLearnerForm');
     if (addLearnerForm) {
         addLearnerForm.addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const selectedLearners = document.querySelectorAll('#availableLearners input:checked');
+            const selectedLearners = Array.from(document.querySelectorAll('#availableLearners input:checked:not(:disabled)')).map(cb => cb.value);
             if (selectedLearners.length === 0) {
                 const errorElement = document.getElementById('addLearnersError');
                 errorElement.textContent = 'Please select at least one learner to add.';
@@ -1098,15 +1252,40 @@ document.addEventListener('DOMContentLoaded', function() {
             btnSpinner.style.display = 'inline-block';
             submitBtn.disabled = true;
             
-            // Simulate API call
-            setTimeout(() => {
+            // Prepare form data
+            const formData = {
+                learnerIds: selectedLearners
+            };
+            
+            // Submit to API
+            fetch(`/api/batches/{{ batch.id }}/add-learners/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Learners added successfully!');
+                    closeAddLearnerPanel();
+                    // Reload the page to show updated data
+                    window.location.reload();
+                } else {
+                    alert('Error adding learners: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error adding learners');
+            })
+            .finally(() => {
                 btnText.style.display = 'inline-block';
                 btnSpinner.style.display = 'none';
                 submitBtn.disabled = false;
-                
-                alert('Learners added successfully!');
-                closeAddLearnerPanel();
-            }, 2000);
+            });
         });
     }
 });
@@ -1124,6 +1303,9 @@ function openAddCoursePanel() {
     }
     
     document.body.style.overflow = 'hidden';
+    
+    // Load available courses
+    loadAvailableCourses();
 }
 
 function closeAddCoursePanel() {
@@ -1141,6 +1323,60 @@ function closeAddCoursePanel() {
     // Reset form
     document.getElementById('addCourseForm').reset();
     clearAddCourseErrors();
+}
+
+function loadAvailableCourses() {
+    const batchId = '{{ batch.id }}';
+    
+    fetch(`/api/batches/${batchId}/available-courses/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayAvailableCourses(data.courses);
+            } else {
+                console.error('Error loading available courses:', data.error);
+                alert('Error loading available courses: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error loading available courses');
+        });
+}
+
+function displayAvailableCourses(courses) {
+    const container = document.getElementById('availableCourses');
+    container.innerHTML = '';
+    
+    if (courses.length === 0) {
+        container.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No available courses found</div>';
+        return;
+    }
+    
+    courses.forEach(course => {
+        const courseItem = document.createElement('div');
+        courseItem.className = `course-item ${course.isCurrentCourse ? 'current-course' : ''}`;
+        courseItem.innerHTML = `
+            <div class="custom-checkbox">
+                <input type="checkbox" id="available_course_${course.id}" value="${course.id}" ${course.isCurrentCourse ? 'checked disabled' : ''}>
+                <label for="available_course_${course.id}">
+                    <div class="course-info">
+                        <div class="course-name">${course.name}</div>
+                        <div class="course-details">
+                            <span class="course-procedures">
+                                ${course.procedures && course.procedures.length
+                                    ? course.procedures.map(proc => `<span class="pill">${proc}</span>`).join('')
+                                    : '<span class="pill" style="background:#f8d7da;color:#721c24;">No procedures</span>'}
+                            </span>
+                            <span class="course-osce">${course.osce_types.join(', ')}</span>
+                        </div>
+                    </div>
+                </label>
+            </div>
+            ${course.isCurrentCourse ? '<span class="current-course-badge">Current</span>' : ''}
+        `;
+        container.appendChild(courseItem);
+    });
 }
 
 function filterAvailableCourses(searchTerm) {
@@ -1163,14 +1399,14 @@ function clearAddCourseErrors() {
     });
 }
 
-// Handle form submission
+// Handle add course form submission
 document.addEventListener('DOMContentLoaded', function() {
     const addCourseForm = document.getElementById('addCourseForm');
     if (addCourseForm) {
         addCourseForm.addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const selectedCourses = document.querySelectorAll('#availableCourses input:checked');
+            const selectedCourses = Array.from(document.querySelectorAll('#availableCourses input:checked:not(:disabled)')).map(cb => cb.value);
             if (selectedCourses.length === 0) {
                 const errorElement = document.getElementById('addCoursesError');
                 errorElement.textContent = 'Please select at least one course to add.';
@@ -1187,16 +1423,195 @@ document.addEventListener('DOMContentLoaded', function() {
             btnSpinner.style.display = 'inline-block';
             submitBtn.disabled = true;
             
-            // Simulate API call
-            setTimeout(() => {
+            // Prepare form data
+            const formData = {
+                courseIds: selectedCourses
+            };
+            
+            // Submit to API
+            fetch(`/api/batches/{{ batch.id }}/add-courses/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Courses added successfully!');
+                    closeAddCoursePanel();
+                    // Redirect with tab=courses to keep the Courses tab open
+                    window.location.href = window.location.pathname + '?tab=courses';
+                } else {
+                    alert('Error adding courses: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error adding courses');
+            })
+            .finally(() => {
                 btnText.style.display = 'inline-block';
                 btnSpinner.style.display = 'none';
                 submitBtn.disabled = false;
-                
-                alert('Courses added successfully!');
-                closeAddCoursePanel();
-            }, 2000);
+            });
         });
+    }
+});
+
+function removeCourse(courseId) {
+    if (confirm('Are you sure you want to remove this course from the batch?')) {
+        // Prepare form data
+        const formData = {
+            courseIds: [courseId]
+        };
+        
+        // Submit to API
+        fetch(`/api/batches/{{ batch.id }}/remove-courses/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Course removed successfully!');
+                // Reload the page to show updated data
+                window.location.reload();
+            } else {
+                alert('Error removing course: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error removing course');
+        });
+    }
+}
+
+function deleteBatch() {
+    if (confirm('Are you sure you want to delete this batch? This action cannot be undone.')) {
+        fetch(`/api/batches/{{ batch.id }}/delete/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Batch deleted successfully!');
+                window.location.href = '{% url "batch_management" %}';
+            } else {
+                alert('Error deleting batch: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error deleting batch');
+        });
+    }
+}
+
+function loadBatchCourses() {
+    const batchId = '{{ batch.id }}';
+    
+    fetch(`/api/batches/${batchId}/courses/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayBatchCourses(data.courses);
+            } else {
+                console.error('Error loading batch courses:', data.error);
+                displayBatchCourses([]);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            displayBatchCourses([]);
+        });
+}
+
+function displayBatchCourses(courses) {
+    const tableBody = document.getElementById('coursesTableBody');
+    
+    if (courses.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #666;">No courses assigned to this batch</td></tr>';
+        return;
+    }
+    
+    tableBody.innerHTML = '';
+    
+    courses.forEach(course => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${course.name}</td>
+            <td>
+                <div class="procedure-pills">
+                    ${course.procedures.map(proc => `<span class="pill">${proc}</span>`).join('')}
+                </div>
+            </td>
+            <td>${course.osce_types.join(', ')}</td>
+            <td>
+                <div class="actions">
+                    <button class="btn-icon btn-danger" onclick="removeCourse('${course.id}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+        tableBody.appendChild(row);
+    });
+}
+
+// Load courses when courses tab is clicked
+function switchTab(tabName) {
+    // Remove active class from all tabs and panels
+    document.querySelectorAll('.tab-item').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.remove('active');
+    });
+    
+    // Add active class to selected tab and panel
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+    document.getElementById(`${tabName}-panel`).classList.add('active');
+    
+    // Load courses if courses tab is selected
+    if (tabName === 'courses') {
+        loadBatchCourses();
+    }
+}
+
+// Add keyboard support for batch name editing
+document.addEventListener('DOMContentLoaded', function() {
+    const batchNameInput = document.getElementById('batchNameInput');
+    if (batchNameInput) {
+        batchNameInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveBatchName();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelBatchNameEdit();
+            }
+        });
+    }
+});
+
+// Check for tab query param
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tab = urlParams.get('tab');
+    if (tab === 'courses') {
+        switchTab('courses');
     }
 });
 </script>

@@ -189,6 +189,7 @@ def on_institute_save(sender, instance, created, **kwargs):
     data = {
         "instituteName": instance.name,
         "created_at": instance.created_at.isoformat() if instance.created_at else None,
+        "onboarding_type": instance.onboarding_type
     }
 
     db.collection("InstituteNames").document(str(instance.id)).set(data)
@@ -203,7 +204,7 @@ def on_institute_save(sender, instance, created, **kwargs):
         if docs:
             # Update the first matching document
             user_data = {
-                "institute": instance.name
+                "institute": instance.name,
             }
             docs[0].reference.update(user_data)
 
@@ -254,6 +255,7 @@ def on_hospital_save(sender, instance, created, **kwargs):
     data = {
         "hospitalName": instance.name,
         "created_at": instance.created_at.isoformat() if instance.created_at else None,
+        "onboarding_type": instance.onboarding_type
     }
     db.collection("HospitalNames").document(str(instance.id)).set(data)
     
@@ -267,7 +269,7 @@ def on_hospital_save(sender, instance, created, **kwargs):
         if docs:
             # Update the first matching document
             user_data = {
-                "hospital": instance.name
+                "hospital": instance.name,
             }
             docs[0].reference.update(user_data)
 
@@ -544,3 +546,154 @@ def batch_sync_users_to_firebase_auth(users):
                 password="DefaultPassword123!",  # You may want to handle this securely
                 disabled=not user.is_active
             )
+
+def batch_sync_users_to_firestore_with_progress(users, session_key, total_rows):
+    """
+    Batch sync users to Firestore with real-time progress tracking
+    """
+    print(f"[DEBUG] Starting Firebase sync for {len(users)} users")
+    try:
+        from django.core.cache import cache
+        
+        # Update progress - Starting Firebase sync
+        progress_data = cache.get(f"upload_progress:{session_key}")
+        print(f"[DEBUG] Retrieved progress data from cache: {progress_data}")
+        
+        progress_data.update({
+            'status': 'syncing_firebase',
+            'message': 'Starting Firebase sync...',
+            'progress': 30
+        })
+        cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
+        print(f"[DEBUG] Updated progress to 30% for Firebase sync start")
+        
+        # Step 1: Batch write user documents (30% to 50%)
+        print(f"[DEBUG] Starting batch write to Firestore...")
+        batch = db.batch()
+        for i, user in enumerate(users):
+            user_data = {
+                "emailID": user.email,
+                "name": user.full_name,
+                "role": user.user_role,
+                "is_active": user.is_active,
+                "date_joined": user.date_joined.isoformat() if user.date_joined else None,
+                "phone_number": user.phone_number,
+                "username": user.email
+            }
+            
+            doc_ref = db.collection("Users").document(str(user.id))
+            batch.set(doc_ref, user_data)
+            
+            # Update progress every 10 users
+            if (i + 1) % 10 == 0:
+                progress = 30 + int((i + 1) / len(users) * 20)
+                progress_data.update({
+                    'message': f'Syncing user {i + 1} of {len(users)} to Firestore...',
+                    'progress': progress
+                })
+                cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
+                print(f"[DEBUG] Updated progress to {progress}% for user {i + 1}")
+        
+        # Commit the batch
+        print(f"[DEBUG] Committing batch to Firestore...")
+        batch.commit()
+        print(f"[DEBUG] Batch commit completed successfully")
+        
+        # Update progress - Batch commit completed
+        progress_data.update({
+            'message': 'Firestore batch commit completed. Updating learner data...',
+            'progress': 50
+        })
+        cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
+        print(f"[DEBUG] Progress updated to 50% after batch commit")
+        
+        # Step 2: Update learner data and create assignments (50% to 90%)
+        print(f"[DEBUG] Starting learner data updates...")
+        for i, user in enumerate(users):
+            try:
+                learner = Learner.objects.get(learner_user=user)
+                
+                # Update progress for learner data sync
+                progress = 50 + int((i + 1) / len(users) * 35)
+                progress_data.update({
+                    'message': f'Updating learner data for {learner.learner_user.full_name}...',
+                    'progress': progress
+                })
+                cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
+                
+                # Debug print every 5 users
+                if (i + 1) % 5 == 0 or i == 0:
+                    print(f"[DEBUG] Processing learner {i + 1}/{len(users)}: {learner.learner_user.full_name}, Progress: {progress}%")
+                
+                # Find user document in Firestore
+                users_ref = db.collection("Users")
+                query = users_ref.where("emailID", "==", learner.learner_user.email).limit(1)
+                docs = query.get()
+                
+                if docs:
+                    # Update the first matching document with all learner data
+                    user_data = {
+                        "learner_type": learner.learner_type,
+                        "speciality": learner.speciality,
+                        "state": learner.state,
+                        "district": learner.district,
+                        "date_of_birth": learner.date_of_birth.isoformat() if learner.date_of_birth else None,
+                        "certifications": learner.certifications,
+                        "learner_gender": learner.learner_gender,
+                        "skillathon_event": learner.skillathon_event.name if learner.skillathon_event else None,
+                        "onboarding_type": learner.onboarding_type
+                    }
+                    
+                    # Add institution/hospital specific data
+                    if learner.learner_type == 'student' and learner.college:
+                        user_data["institution"] = learner.college.name
+                        user_data["course"] = learner.course
+                        user_data["stream"] = learner.stream
+                        user_data["year_of_study"] = learner.year_of_study
+                    elif learner.learner_type == 'nurse' and learner.hospital:
+                        user_data["hospital"] = learner.hospital.name
+                        user_data["designation"] = learner.designation
+                        user_data["years_of_experience"] = learner.years_of_experience
+                        user_data["educational_qualification"] = learner.educational_qualification
+                        user_data["educational_institution"] = learner.educational_institution
+                    
+                    docs[0].reference.update(user_data)
+                    
+                    # Update progress for test/exam assignments
+                    progress = 85 + int((i + 1) / len(users) * 5)
+                    progress_data.update({
+                        'message': f'Creating assignments for {learner.learner_user.full_name}...',
+                        'progress': progress
+                    })
+                    cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
+                    
+                    # Create test and exam assignments
+                    create_test_and_exam_assignments(learner, learner.skillathon_event)
+                    
+            except Learner.DoesNotExist:
+                # User exists but no learner record - this is normal for some users
+                continue
+            except Exception as e:
+                print(f"Error processing learner {user.email}: {e}")
+                continue
+        
+        # Update progress - Firebase sync completed
+        progress_data.update({
+            'message': 'Firebase sync completed successfully!',
+            'progress': 90
+        })
+        cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
+        print(f"[DEBUG] Firebase sync completed, progress set to 90%")
+        
+    except Exception as e:
+        print(f"Firebase sync error: {e}")
+        print(traceback.format_exc())
+        
+        # Update progress with error
+        progress_data = cache.get(f"upload_progress:{session_key}")
+        progress_data.update({
+            'status': 'error',
+            'message': f'Firebase sync error: {str(e)}',
+            'progress': 100
+        })
+        cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)

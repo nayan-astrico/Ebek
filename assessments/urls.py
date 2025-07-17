@@ -1,6 +1,8 @@
 from django.urls import path
 from . import views
 from django.contrib.auth import views as auth_views
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
 
 urlpatterns = [
     path('', views.login_page, name='login_page'),
@@ -9,9 +11,9 @@ urlpatterns = [
     path('procedures/<str:procedure_id>/<str:action>/', views.ProcedureAPIView.as_view(), name='procedure_api'),
     path('assign_assessment/', views.assign_assessment, name='assign_assessment'),
     path('course-management/', views.course_management, name='course_management'),
-    path('course-management/<int:course_id>/', views.course_detail, name='course_detail'),
+    path('course-management/<str:course_id>/', views.course_detail, name='course_detail'),
     path('batch-management/', views.batch_management, name='batch_management'),
-    path('batch-management/<int:batch_id>/', views.batch_detail, name='batch_detail'),
+    path('batch-management/<str:batch_id>/', views.batch_detail, name='batch_detail'),
     path('fetch-institutes/', views.fetch_institutes, name='fetch_institutes'),
     path('fetch-cohorts/', views.fetch_cohorts, name='fetch-cohorts'),
     path('fetch-assessors/', views.fetch_assessors, name='fetch-assessors'),
@@ -56,6 +58,7 @@ urlpatterns = [
     path('onboarding/learners/<int:pk>/edit/', views.learner_edit, name='learner_edit'),
     path('onboarding/learners/<int:pk>/delete/', views.learner_delete, name='learner_delete'),
     path('onboarding/learners/bulk-upload/', views.learner_bulk_upload, name='learner_bulk_upload'),
+    path('onboarding/learners/upload-progress/<str:session_key>/', views.upload_progress_stream, name='upload_progress_stream'),
     path('onboarding/assessors/', views.assessor_list, name='assessor_list'),
     path('onboarding/assessors/create/', views.assessor_create, name='assessor_create'),
     path('onboarding/assessors/<int:pk>/edit/', views.assessor_edit, name='assessor_edit'),
@@ -65,4 +68,30 @@ urlpatterns = [
     path('onboarding/skillathon/<int:pk>/edit/', views.skillathon_edit, name='skillathon_edit'),
     path('onboarding/skillathon/<int:pk>/delete/', views.skillathon_delete, name='skillathon_delete'),
     path('fetch-skillathons/', views.fetch_skillathons, name='fetch_skillathons'),
+    path('create-course/', views.create_course, name='create_course'),
+    path('fetch-courses/', views.fetch_courses, name='fetch_courses'),
+    path('courses/<str:course_id>/delete/', views.delete_course, name='delete_course'),
+    path('courses/<str:course_id>/toggle-status/', views.toggle_course_status, name='toggle_course_status'),
+    path('courses/<str:course_id>/update/', views.update_course, name='update_course'),
+    path('courses/<str:course_id>/add-procedures/', views.add_procedures_to_course, name='add_procedures_to_course'),
+    path('courses/<str:course_id>/remove-procedure/', views.remove_procedure_from_course, name='remove_procedure_from_course'),
+    
+    # Batch API endpoints
+    path('api/batches/', views.fetch_batches, name='fetch_batches'),
+    path('api/batches/create/', views.create_batch, name='create_batch'),
+    path('api/batches/<str:batch_id>/', views.fetch_batch_details, name='fetch_batch_details'),
+    path('api/batches/<str:batch_id>/update/', views.update_batch, name='update_batch'),
+    path('api/batches/<str:batch_id>/delete/', views.delete_batch, name='delete_batch'),
+    path('api/batches/<str:batch_id>/remove-learners/', views.remove_learners_from_batch, name='remove_learners_from_batch'),
+    path('api/batches/<str:batch_id>/add-learners/', views.add_learners_to_batch, name='add_learners_to_batch'),
+    path('api/batches/<str:batch_id>/available-learners/', views.fetch_available_learners_for_batch, name='fetch_available_learners_for_batch'),
+    path('api/fetch-hospitals/', views.fetch_hospitals, name='fetch_hospitals'),
+    path('api/fetch-learners/<str:unit_type>/<str:unit_id>/', views.fetch_learners, name='fetch_learners'),
+
+    # Batch Course API endpoints
+    path('api/batches/<str:batch_id>/courses/', views.fetch_batch_courses, name='fetch_batch_courses'),
+    path('api/batches/<str:batch_id>/add-courses/', views.add_courses_to_batch, name='add_courses_to_batch'),
+    path('api/batches/<str:batch_id>/remove-courses/', views.remove_courses_from_batch, name='remove_courses_from_batch'),
+    path('api/batches/<str:batch_id>/available-courses/', views.fetch_available_courses_for_batch, name='fetch_available_courses_for_batch'),
+    path('courses/<str:course_id>/batches/', views.fetch_batches_for_course, name='fetch_batches_for_course'),
 ]

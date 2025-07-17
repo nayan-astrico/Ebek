@@ -27,7 +27,10 @@ if DEBUG == "True":
 else:
     DEBUG = False
 
-FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
+if DEBUG == True:
+    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_uat_key.json")
+else:
+    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
 
 # Initialize Firebase
 cred = credentials.Certificate(FIREBASE_KEY_PATH)
@@ -168,3 +171,11 @@ LOGOUT_REDIRECT_URL = 'login_page'
 # Session settings
 SESSION_COOKIE_AGE = 360000  # 1 hour in seconds
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+
+# Cache configuration (using default cache for now)
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+    }
+}

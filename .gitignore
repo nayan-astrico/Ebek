@@ -18,4 +18,6 @@ venv/
 /android/*
 /.env
 /firebase_key.json
+/firebase_uat_key.json
 /db.sqlite3
+/media/uploaded_excels/*
