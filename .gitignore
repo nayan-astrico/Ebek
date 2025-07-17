@@ -6,11 +6,8 @@ expo-env.d.ts
 /media/static/*
 *.pyc
 /__pycache__/*
-/migrations/*
-/assessments/migrations/*
 __pycache__/*
 *.pyc
-/assessments/migrations
 .env
 venv/
 /node_modules/*
