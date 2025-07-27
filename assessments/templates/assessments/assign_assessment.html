@@ -184,6 +184,13 @@
 <div class="overlay" id="assignOverlay" onclick="toggleAssignPanel()"></div>
 
 <style>
+    .btn {
+        padding: 0.5rem 1rem !important;
+        font-size: 0.875rem !important;
+        font-weight: 500 !important;
+        border-radius: 6px !important;
+        transition: all 0.2s !important;
+    }
     .btn-add {
         background-color: #f7a82d;
         color: white;
@@ -203,16 +210,15 @@
     }
 
     .btn-light {
-        background-color: #f8f9fa;
-        color: #333;
-        border: 1px solid #ced4da;
-        padding: 8px 16px;
-        border-radius: 5px;
-        cursor: pointer;
+        background-color: #EDF2F7;
+        border-color: #EDF2F7;
+        color: #4A5568;
     }
 
     .btn-light:hover {
-        background-color: #e9ecef;
+        background-color: #E2E8F0;
+        border-color: #E2E8F0;
+        color: #2D3748;
     }
 
     .btn-icon {
@@ -341,20 +347,6 @@
         border-radius: 5px;
     }
 
-    /* .assign-btn {
-        width: 100%;
-        background-color: #f7a82d;
-        border: none;
-        color: white;
-        padding: 10px;
-        border-radius: 5px;
-        font-weight: bold;
-        cursor: pointer;
-    }
-
-    .assign-btn:hover {
-        background-color: #e69500;
-    } */
 
     .card {
         background: white;
@@ -577,7 +569,6 @@
 
     .assign-actions {
         padding: 20px 24px;
-        border-top: 1px solid #e2e8f0;
         display: flex;
         gap: 12px;
         justify-content: flex-end;

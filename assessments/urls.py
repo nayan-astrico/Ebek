@@ -3,6 +3,7 @@ from . import views
 from django.contrib.auth import views as auth_views
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
+from .onboarding_views import learner_list, learner_list_api
 
 urlpatterns = [
     path('', views.login_page, name='login_page'),
@@ -46,6 +47,7 @@ urlpatterns = [
     path('onboarding/groups/<int:pk>/delete/', views.group_delete, name='group_delete'),
     path('onboarding/', views.onboarding_dashboard, name='onboarding_dashboard'),
     path('onboarding/institutions/', views.institution_list, name='institution_list'),
+    path('onboarding/institutions/api/', views.institution_list_api, name='institution_list_api'),
     path('onboarding/institutions/create/', views.institution_create, name='institution_create'),
     path('onboarding/institutions/<int:pk>/edit/', views.institution_edit, name='institution_edit'),
     path('onboarding/institutions/<int:pk>/delete/', views.institution_delete, name='institution_delete'),
@@ -53,7 +55,8 @@ urlpatterns = [
     path('onboarding/hospitals/create/', views.hospital_create, name='hospital_create'),
     path('onboarding/hospitals/<int:pk>/edit/', views.hospital_edit, name='hospital_edit'),
     path('onboarding/hospitals/<int:pk>/delete/', views.hospital_delete, name='hospital_delete'),
-    path('onboarding/learners/', views.learner_list, name='learner_list'),
+    path('onboarding/learners/', learner_list, name='learner_list'),
+    path('onboarding/learners/api/', learner_list_api, name='learner_list_api'),
     path('onboarding/learners/create/', views.learner_create, name='learner_create'),
     path('onboarding/learners/<int:pk>/edit/', views.learner_edit, name='learner_edit'),
     path('onboarding/learners/<int:pk>/delete/', views.learner_delete, name='learner_delete'),
@@ -90,8 +93,14 @@ urlpatterns = [
 
     # Batch Course API endpoints
     path('api/batches/<str:batch_id>/courses/', views.fetch_batch_courses, name='fetch_batch_courses'),
+    path('api/batches/<str:batch_id>/courses-paginated/', views.fetch_batch_courses_paginated, name='fetch_batch_courses_paginated'),
+    path('api/batches/<str:batch_id>/learners/', views.fetch_batch_learners, name='fetch_batch_learners'),
     path('api/batches/<str:batch_id>/add-courses/', views.add_courses_to_batch, name='add_courses_to_batch'),
     path('api/batches/<str:batch_id>/remove-courses/', views.remove_courses_from_batch, name='remove_courses_from_batch'),
     path('api/batches/<str:batch_id>/available-courses/', views.fetch_available_courses_for_batch, name='fetch_available_courses_for_batch'),
     path('courses/<str:course_id>/batches/', views.fetch_batches_for_course, name='fetch_batches_for_course'),
+    path('onboarding/hospitals/api/', views.hospital_list_api, name='hospital_list_api'),
+    path('onboarding/groups/api/', views.group_list_api, name='group_list_api'),
+    path('onboarding/assessors/api/', views.assessor_list_api, name='assessor_list_api'),
+    path('onboarding/skillathons/api/', views.skillathon_list_api, name='skillathon_list_api'),
 ]

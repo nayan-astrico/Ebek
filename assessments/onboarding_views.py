@@ -42,6 +42,7 @@ from .firebase_sync import (
     on_skillathon_save, on_skillathon_delete,
     on_group_save, on_group_delete, batch_sync_users_to_firestore_with_progress
 )
+import threading
 
 
 # Group Views
@@ -262,19 +263,15 @@ def institution_list(request):
 
 @login_required
 def institution_create(request):
-    print("institution_create")
-    print("heree")
     User = get_user_model()
-    print(request.method)
     if request.method == 'POST':
 
         form = InstitutionForm(request.POST)
         if form.is_valid():
-            print("form is valid")
-            head_name = form.cleaned_data['unit_head_name']
-            head_email = form.cleaned_data['unit_head_email']
-            head_phone = form.cleaned_data['unit_head_phone']
-            institution_name = form.cleaned_data['name']
+            head_name = form.cleaned_data['unit_head_name'].strip()
+            head_email = form.cleaned_data['unit_head_email'].strip()
+            head_phone = form.cleaned_data['unit_head_phone'].strip()
+            institution_name = form.cleaned_data['name'].strip()
             user = None
             if head_name == '' or head_email == '' or head_phone == '':
                 pass
@@ -294,7 +291,8 @@ def institution_create(request):
                     reset_link = request.build_absolute_uri(reverse('login'))
                     subject = 'Your Unit Head Account Created'
                     body = f"""Dear {head_name},\n\nYour unit head account has been created for the institution {institution_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                    send_email(subject, body, [head_email])
+                    send_email_thread = threading.Thread(target=send_email, args=(subject, body, [head_email]))
+                    send_email_thread.start()
                 else:
                     # Update name/phone if changed
                     updated = False
@@ -306,6 +304,7 @@ def institution_create(request):
                         updated = True
                     if updated:
                         user.save()
+            
             institution = form.save(commit=False)
             if user is not None:
                 institution.unit_head = user
@@ -388,6 +387,45 @@ def institution_delete(request, pk):
         messages.success(request, 'Institution deleted successfully.')
         return redirect('institution_list')
     return redirect('institution_list')
+
+@login_required
+def institution_list_api(request):
+    offset = int(request.GET.get('offset', 0))
+    limit = int(request.GET.get('limit', 10))
+
+    institutions = Institution.objects.all().order_by('-created_at')
+    selected_groups = request.GET.getlist('group')
+    selected_institutions = request.GET.getlist('institution')
+    selected_states = request.GET.getlist('state')
+    selected_statuses = request.GET.getlist('status')
+
+    if selected_groups:
+        institutions = institutions.filter(group_id__in=selected_groups)
+    if selected_institutions:
+        institutions = institutions.filter(id__in=selected_institutions)
+    if selected_states:
+        institutions = institutions.filter(state__in=selected_states)
+    if selected_statuses:
+        active_status = [status.lower() == 'active' for status in selected_statuses]
+        institutions = institutions.filter(is_active__in=active_status)
+
+    institutions = institutions[offset:offset+limit]
+
+    data = []
+    for institution in institutions:
+        data.append({
+            'id': institution.pk,
+            'name': institution.name,
+            'group': institution.group.name if institution.group else '-',
+            'state': institution.state or '-',
+            'total_strength': getattr(institution, 'total_strength', 0) or 0,
+            'unit_head': institution.unit_head.get_full_name() if institution.unit_head else None,
+            'unit_head_email': institution.unit_head.email if institution.unit_head else None,
+            'is_active': institution.is_active,
+            'edit_url': reverse('institution_edit', args=[institution.pk]),
+            'delete_url': reverse('institution_delete', args=[institution.pk]),
+        })
+    return JsonResponse({'institutions': data})
 
 # Hospital Views
 @login_required
@@ -557,39 +595,89 @@ def hospital_delete(request, pk):
         return redirect('hospital_list')
     return redirect('hospital_list')
 
+@login_required
+def hospital_list_api(request):
+    offset = int(request.GET.get('offset', 0))
+    limit = int(request.GET.get('limit', 10))
+
+    hospitals = Hospital.objects.all().order_by('-created_at')
+    selected_groups = request.GET.getlist('group')
+    selected_hospitals = request.GET.getlist('hospital')
+    selected_states = request.GET.getlist('state')
+    selected_statuses = request.GET.getlist('status')
+
+    if selected_groups:
+        hospitals = hospitals.filter(group_id__in=selected_groups)
+    if selected_hospitals:
+        hospitals = hospitals.filter(id__in=selected_hospitals)
+    if selected_states:
+        hospitals = hospitals.filter(state__in=selected_states)
+    if selected_statuses:
+        active_status = [status.lower() == 'active' for status in selected_statuses]
+        hospitals = hospitals.filter(is_active__in=active_status)
+
+    hospitals = hospitals[offset:offset+limit]
+
+    data = []
+    for hospital in hospitals:
+        data.append({
+            'id': hospital.pk,
+            'name': hospital.name,
+            'group': hospital.group.name if hospital.group else '-',
+            'state': hospital.state or '-',
+            'nurse_strength': getattr(hospital, 'nurse_strength', 0) or 0,
+            'unit_head': hospital.unit_head.get_full_name() if hospital.unit_head else None,
+            'unit_head_email': hospital.unit_head.email if hospital.unit_head else None,
+            'is_active': hospital.is_active,
+            'edit_url': reverse('hospital_edit', args=[hospital.pk]),
+            'delete_url': reverse('hospital_delete', args=[hospital.pk]),
+        })
+    return JsonResponse({'hospitals': data})
+
+@login_required
+def group_list_api(request):
+    offset = int(request.GET.get('offset', 0))
+    limit = int(request.GET.get('limit', 10))
+
+    groups = Group.objects.all().order_by('-created_at')
+    selected_groups = request.GET.getlist('group')
+    selected_types = request.GET.getlist('type')
+    selected_statuses = request.GET.getlist('status')
+
+    if selected_groups:
+        groups = groups.filter(id__in=selected_groups)
+    if selected_types:
+        groups = groups.filter(type__in=selected_types)
+    if selected_statuses:
+        active_status = [status.lower() == 'active' for status in selected_statuses]
+        groups = groups.filter(is_active__in=active_status)
+
+    groups = groups[offset:offset+limit]
+
+    data = []
+    for group in groups:
+        data.append({
+            'id': group.pk,
+            'name': group.name,
+            'type': group.get_type_display(),
+            'unit_count': group.institution_set.count() if group.type == 'institution' else group.hospital_set.count(),
+            'group_head': group.group_head.get_full_name() if group.group_head else 'Not Assigned',
+            'group_head_email': group.group_head.email if group.group_head else '-',
+            'is_active': group.is_active,
+            'edit_url': reverse('group_edit', args=[group.pk]),
+            'delete_url': reverse('group_delete', args=[group.pk]),
+        })
+    return JsonResponse({'groups': data})
+
 # Learner Views
 @login_required
 def learner_list(request):
-    learners = Learner.objects.all().order_by('-created_at')
-    
-    # Get filter values as lists
-    selected_institutions = request.GET.getlist('institution')
-    selected_hospitals = request.GET.getlist('hospital')
-    selected_learner_types = request.GET.getlist('learner_type')
-    
-    # Apply filters
-    if selected_institutions:
-        learners = learners.filter(college_id__in=selected_institutions)
-    if selected_hospitals:
-        learners = learners.filter(hospital_id__in=selected_hospitals)
-    if selected_learner_types:
-        learners = learners.filter(learner_type__in=selected_learner_types)
-    
-    # Convert selected IDs to integers for template comparison
-    selected_institutions = [int(x) for x in selected_institutions] if selected_institutions else []
-    selected_hospitals = [int(x) for x in selected_hospitals] if selected_hospitals else []
-    
-    paginator = Paginator(learners, 10)
-    page = request.GET.get('page')
-    learners = paginator.get_page(page)
-    
     return render(request, 'assessments/onboarding/learner_list.html', {
-        'learners': learners,
         'institutions': Institution.objects.all(),
         'hospitals': Hospital.objects.all(),
-        'selected_institutions': selected_institutions,
-        'selected_hospitals': selected_hospitals,
-        'selected_learner_types': selected_learner_types,
+        'selected_institutions': [],
+        'selected_hospitals': [],
+        'selected_learner_types': [],
     })
 
 @login_required
@@ -1154,13 +1242,14 @@ def assessor_create(request):
             assessor_name = form.cleaned_data['assessor_name']
             assessor_email = form.cleaned_data['assessor_email']
             assessor_phone = form.cleaned_data['assessor_phone']
+
+            print(f"[DEBUG] Assessor email: {assessor_email}")
             
             user, created = User.objects.get_or_create(
-                email=assessor_email,
-                defaults={
-                    'is_active': True,
-                }
+                email=assessor_email
             )
+
+            print(f"[DEBUG] User created: {created}")
             if created:
                 user.full_name = assessor_name
                 user.phone_number = assessor_phone
@@ -1170,24 +1259,15 @@ def assessor_create(request):
                 reset_link = request.build_absolute_uri(reverse('login'))
                 subject = 'Your Assessor Account Created'
                 body = f"""Dear {assessor_name},\n\nYour assessor account has been created.\n\nUsername: {assessor_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                send_email(subject, body, [assessor_email])
+                assessor = form.save(commit=False)
+                assessor.assessor_user = user
+                assessor.save()
+                send_email_thread = threading.Thread(target=send_email, args=(subject, body, [assessor_email]))
+                send_email_thread.start()
+                
             else:
-                # Update name/phone if changed
-                updated = False
-                if user.full_name != assessor_name:
-                    user.full_name = assessor_name
-                    updated = True
-                if user.phone_number != assessor_phone:
-                    user.phone_number = assessor_phone
-                    updated = True
-                if updated:
-                    user.save()
-            
-            assessor = form.save(commit=False)
-            assessor.assessor_user = user
-            assessor.save()
-            messages.success(request, 'Assessor created successfully.')
-            return HttpResponse('OK')
+                messages.success(request, 'Assessor already exists')
+                return HttpResponse('OK')
     else:
         form = AssessorForm()
     return render(request, 'assessments/onboarding/assessor_form.html', {'form': form, 'action': 'Create'})
@@ -1267,6 +1347,38 @@ def assessor_delete(request, pk):
         return redirect('assessor_list')
     return redirect('assessor_list')
 
+@login_required
+def assessor_list_api(request):
+    offset = int(request.GET.get('offset', 0))
+    limit = int(request.GET.get('limit', 10))
+
+    assessors = Assessor.objects.all().order_by('-created_at')
+    selected_specialities = request.GET.getlist('speciality')
+    selected_statuses = request.GET.getlist('status')
+
+    if selected_specialities:
+        assessors = assessors.filter(specialization__in=selected_specialities)
+    if selected_statuses:
+        active_status = [status.lower() == 'active' for status in selected_statuses]
+        assessors = assessors.filter(is_active__in=active_status)
+
+    assessors = assessors[offset:offset+limit]
+
+    data = []
+    for assessor in assessors:
+        data.append({
+            'id': assessor.pk,
+            'full_name': assessor.assessor_user.full_name,
+            'email': assessor.assessor_user.email,
+            'phone_number': assessor.assessor_user.phone_number,
+            'specialization': assessor.specialization,
+            'location': assessor.location,
+            'is_active': assessor.is_active,
+            'edit_url': reverse('assessor_edit', args=[assessor.pk]),
+            'delete_url': reverse('assessor_delete', args=[assessor.pk]),
+        })
+    return JsonResponse({'assessors': data})
+
 # Skillathon Event Views
 @login_required
 def skillathon_list(request):
@@ -1327,6 +1439,41 @@ def skillathon_delete(request, pk):
         return redirect('skillathon_list')
     return redirect('skillathon_list')
 
+@login_required
+def skillathon_list_api(request):
+    offset = int(request.GET.get('offset', 0))
+    limit = int(request.GET.get('limit', 10))
+
+    events = SkillathonEvent.objects.all().order_by('-date')
+    status = request.GET.get('status')
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    location = request.GET.get('location')
+
+    if status:
+        events = events.filter(status=status)
+    if date_from:
+        events = events.filter(date__gte=date_from)
+    if date_to:
+        events = events.filter(date__lte=date_to)
+    if location:
+        events = events.filter(Q(state__icontains=location) | Q(city__icontains=location))
+
+    events = events[offset:offset+limit]
+
+    data = []
+    for event in events:
+        data.append({
+            'id': event.pk,
+            'name': event.name,
+            'date': event.date.strftime('%d %b %Y') if event.date else '-',
+            'city': event.city,
+            'state': event.state,
+            'edit_url': reverse('skillathon_edit', args=[event.pk]),
+            'delete_url': reverse('skillathon_delete', args=[event.pk]),
+        })
+    return JsonResponse({'events': data})
+
 def reconnect_all_signals():
     post_save.connect(on_user_save, sender=EbekUser)
     post_delete.connect(on_user_delete, sender=EbekUser)
@@ -1343,3 +1490,40 @@ def reconnect_all_signals():
     post_save.connect(on_group_save, sender=Group)
     post_delete.connect(on_group_delete, sender=Group)
     print("All signals have been reconnected.")
+
+@login_required
+def learner_list_api(request):
+    offset = int(request.GET.get('offset', 0))
+    limit = int(request.GET.get('limit', 10))
+
+    # Filtering logic (same as main view)
+    learners = Learner.objects.all().order_by('-created_at')
+    selected_institutions = request.GET.getlist('institution')
+    selected_hospitals = request.GET.getlist('hospital')
+    selected_learner_types = request.GET.getlist('learner_type')
+
+    if selected_institutions:
+        learners = learners.filter(college_id__in=selected_institutions)
+    if selected_hospitals:
+        learners = learners.filter(hospital_id__in=selected_hospitals)
+    if selected_learner_types:
+        learners = learners.filter(learner_type__in=selected_learner_types)
+
+    # Pagination (offset/limit)
+    learners = learners[offset:offset+limit]
+
+    data = []
+    for learner in learners:
+        data.append({
+            'id': learner.pk,
+            'full_name': learner.learner_user.full_name,
+            'email': learner.learner_user.email,
+            'phone_number': learner.learner_user.phone_number,
+            'learner_type': learner.get_learner_type_display(),
+            'institution': getattr(learner.college, 'name', '-') if learner.learner_type == 'student' else getattr(learner.hospital, 'name', '-'),
+            'skillathon': learner.skillathon_event.name if learner.skillathon_event else '-',
+            'is_active': learner.is_active,
+            'edit_url': reverse('learner_edit', args=[learner.pk]),
+            'delete_url': reverse('learner_delete', args=[learner.pk]),
+        })
+    return JsonResponse({'learners': data})

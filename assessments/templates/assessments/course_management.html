@@ -121,9 +121,9 @@
         <div class="filter-layout">
             <!-- Main Filter Types (30%) -->
             <div class="filter-types">
-                <div class="filter-type active" data-filter="course" onclick="switchFilter('course')">
+                <!-- <div class="filter-type active" data-filter="course" onclick="switchFilter('course')">
                     <span>Course</span>
-                </div>
+                </div> -->
                 <div class="filter-type" data-filter="status" onclick="switchFilter('status')">
                     <span>Status</span>
                 </div>
@@ -131,19 +131,17 @@
 
             <!-- Filter Content (70%) -->
             <div class="filter-content-wrapper">
-                <!-- Course Content -->
-                <div class="filter-content active" id="course-content">
+                <!-- <div class="filter-content active" id="course-content">
                     <div class="filter-search">
                         <input type="text" placeholder="Search courses" id="filterCourseSearch" oninput="filterCourseOptions(this.value)">
                         <div class="selection-count" id="courseSelectionCount">0 Course selected</div>
                     </div>
                     <div class="options-list" id="filterCourseOptions">
-                        <!-- Course options will be loaded dynamically -->
                     </div>
-                </div>
+                </div> -->
 
                 <!-- Status Content -->
-                <div class="filter-content" id="status-content">
+                <div class="filter-content active" id="status-content">
                     <div class="filter-search">
                         <input type="text" placeholder="Search status" id="filterStatusSearch" oninput="filterStatusOptions(this.value)">
                         <div class="selection-count" id="statusSelectionCount">0 Status selected</div>
@@ -192,7 +190,13 @@
             <!-- Courses will be loaded dynamically -->
         </tbody>
     </table>
-    
+    <div id="coursesLoadingSpinner" class="loading-spinner" style="display: none;">
+        <div class="spinner"></div>
+        <p>Loading courses...</p>
+    </div>
+    <div style="text-align:center; margin: 20px 0;">
+        <button id="showMoreCoursesBtn" class="btn btn-primary" style="display:none;" onclick="loadMoreCourses()">Show More</button>
+    </div>
     <!-- Empty State -->
     <div id="emptyState" class="empty-state" style="display: none;">
         <div class="empty-icon">
@@ -206,6 +210,8 @@
         </button>
     </div>
 </div>
+
+
 
 <style>
 /* Header Styles */
@@ -542,6 +548,15 @@
 .procedure-checkbox {
     margin-right: 10px;
     margin-left: 4px !important;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: #F16564;
+}
+
+.procedure-checkbox:checked {
+    background: #F16564;
+    border-color: #F16564;
 }
 .procedure-title {
     flex: 1;
@@ -583,6 +598,18 @@
 .custom-checkbox input[type="checkbox"]:checked + label:before {
     background: #F16564;
     border-color: #F16564;
+}
+
+/* Add styles for procedure checkboxes */
+.procedure-checkbox:checked {
+    background: #F16564 !important;
+    border-color: #F16564 !important;
+    accent-color: #F16564;
+}
+
+/* For browsers that support accent-color */
+input[type="checkbox"]:checked {
+    accent-color: #F16564;
 }
 
 .custom-checkbox input[type="checkbox"]:checked + label:after {
@@ -930,11 +957,152 @@ let currentFilters = {
     status: []
 };
 
+let courseOffset = 0;
+const courseLimit = 10;
+let courseLoading = false;
+let allCoursesLoaded = false;
+let firstLoad = true;
+let currentSearch = '';
+let currentStatusFilters = [];
+
+function renderCourseRow(course) {
+    const row = document.createElement('tr');
+    row.className = 'course-row';
+    row.innerHTML = `
+        <td>${course.name}</td>
+        <td>${course.procedure_count}</td>
+        <td>
+            <label class="switch">
+                <input type="checkbox" ${course.status === 'active' ? 'checked' : ''} onchange="toggleCourseStatus('${course.id}', this.checked ? 'active' : 'inactive')">
+                <span class="slider round"></span>
+            </label>
+        </td>
+        <td>
+            <div class="actions">
+                <button class="btn-icon" onclick="event.stopPropagation(); editCourse('${course.id}')" title="Edit Course">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn-icon btn-danger" onclick="event.stopPropagation(); deleteCourse('${course.id}')">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </td>
+    `;
+    return row;
+}
+
+function buildCourseQueryParams() {
+    const params = new URLSearchParams();
+    params.append('offset', courseOffset);
+    params.append('limit', courseLimit);
+    if (currentSearch) params.append('search', currentSearch);
+    currentStatusFilters.forEach(status => params.append('status', status));
+    return params.toString();
+}
+
+function loadMoreCourses() {
+    if (courseLoading || allCoursesLoaded) return;
+    courseLoading = true;
+    if (firstLoad) {
+        document.getElementById('coursesLoadingSpinner').style.display = 'flex';
+        document.getElementById('showMoreCoursesBtn').style.display = 'none';
+    } else {
+        document.getElementById('showMoreCoursesBtn').innerText = 'Loading...';
+        document.getElementById('showMoreCoursesBtn').disabled = true;
+    }
+
+    fetch(`/fetch-courses/?${buildCourseQueryParams()}`)
+        .then(response => response.json())
+        .then(data => {
+            const courses = data.courses || [];
+            if (courses.length < courseLimit || data.all_loaded) {
+                allCoursesLoaded = true;
+                document.getElementById('showMoreCoursesBtn').style.display = 'none';
+            }
+            courseOffset += courses.length;
+            allCourses = allCourses.concat(courses);
+            const tbody = document.getElementById('coursesTableBody');
+            courses.forEach(course => {
+                tbody.appendChild(renderCourseRow(course));
+            });
+            if (courseOffset === 0 && courses.length === 0) {
+                tbody.innerHTML = '';
+                document.getElementById('emptyState').style.display = 'block';
+                document.getElementById('showMoreCoursesBtn').style.display = 'none';
+            } else {
+                document.getElementById('emptyState').style.display = 'none';
+            }
+            if (!allCoursesLoaded && allCourses.length > 0) {
+                document.getElementById('showMoreCoursesBtn').style.display = 'inline-block';
+                document.getElementById('showMoreCoursesBtn').innerText = 'Show More';
+                document.getElementById('showMoreCoursesBtn').disabled = false;
+            }
+        })
+        .finally(() => {
+            courseLoading = false;
+            document.getElementById('coursesLoadingSpinner').style.display = 'none';
+            firstLoad = false;
+        });
+}
+
+function resetCoursesAndLoad() {
+    courseOffset = 0;
+    allCoursesLoaded = false;
+    allCourses = [];
+    firstLoad = true;
+    document.getElementById('coursesTableBody').innerHTML = '';
+    document.getElementById('showMoreCoursesBtn').style.display = 'none';
+    document.getElementById('coursesLoadingSpinner').style.display = 'flex';
+    loadMoreCourses();
+}
+
+// Hook up search and filter to lazy loading
+function filterCourses(searchText) {
+    currentSearch = searchText || '';
+    // Get current status filters
+    currentStatusFilters = Array.from(document.querySelectorAll('#filterStatusOptions input[type="checkbox"]:checked')).map(cb => cb.value);
+    resetCoursesAndLoad();
+}
+
+function applyFilters() {
+    // Get selected statuses
+    const selectedStatuses = Array.from(document.querySelectorAll('#filterStatusOptions input[type="checkbox"]:checked')).map(cb => cb.value);
+    currentStatusFilters = selectedStatuses;
+    // Get current search
+    currentSearch = document.getElementById('searchInput').value;
+    // Update currentFilters for UI
+    currentFilters.status = selectedStatuses;
+    // Apply filters to current search
+    resetCoursesAndLoad();
+    // Update filter badge
+    updateFilterBadge();
+    // Close filter panel
+    toggleFilterPanel();
+    // Show filter applied notification
+    const totalFilters = currentStatusFilters.length;
+    if (totalFilters > 0) {
+        showSuccess(`${totalFilters} filter(s) applied successfully!`);
+    }
+}
+
 // Initialize the page
 document.addEventListener('DOMContentLoaded', function() {
-    loadCourses();
+    courseOffset = 0;
+    allCoursesLoaded = false;
+    allCourses = [];
+    firstLoad = true;
+    currentSearch = '';
+    currentStatusFilters = [];
+    document.getElementById('coursesTableBody').innerHTML = '';
+    document.getElementById('showMoreCoursesBtn').style.display = 'none';
+    document.getElementById('coursesLoadingSpinner').style.display = 'flex';
+    loadMoreCourses();
     loadProcedures();
     setupEventListeners();
+    // Hook up search input
+    document.getElementById('searchInput').addEventListener('input', function() {
+        filterCourses(this.value);
+    });
 });
 
 function setupEventListeners() {
@@ -1101,40 +1269,99 @@ function displayCourses(courses) {
     });
 }
 
-function filterCourses(searchText) {
-    let filtered = allCourses;
-    
-    // Apply search filter
-    if (searchText) {
-        filtered = filtered.filter(course => 
-            course.name.toLowerCase().includes(searchText.toLowerCase())
-        );
-    }
-    
-    // Apply current filters
-    filtered = applyCurrentFilters(filtered);
-    
-    displayCourses(filtered);
+function filterCourseOptions(searchText) {
+    const options = document.querySelectorAll('#filterCourseOptions .option-item');
+    options.forEach(option => {
+        const text = option.textContent.toLowerCase();
+        option.style.display = text.includes(searchText.toLowerCase()) ? 'flex' : 'none';
+    });
 }
 
-function applyCurrentFilters(courses) {
-    let filtered = courses;
+function filterStatusOptions(searchText) {
+    const options = document.querySelectorAll('#filterStatusOptions .option-item');
+    options.forEach(option => {
+        const text = option.textContent.toLowerCase();
+        option.style.display = text.includes(searchText.toLowerCase()) ? 'flex' : 'none';
+    });
+}
+
+function updateCourseSelectionCount() {
+    const checkedCourses = document.querySelectorAll('#filterCourseOptions input[type="checkbox"]:checked');
+    const countElement = document.getElementById('courseSelectionCount');
+    countElement.textContent = `${checkedCourses.length} Course selected`;
+}
+
+function updateStatusSelectionCount() {
+    const checkedStatuses = document.querySelectorAll('#filterStatusOptions input[type="checkbox"]:checked');
+    const countElement = document.getElementById('statusSelectionCount');
+    countElement.textContent = `${checkedStatuses.length} Status selected`;
+}
+
+function updateFilterBadge() {
+    const totalFilters = currentFilters.courses.length + currentFilters.status.length;
+    const badge = document.getElementById('filterBadge');
     
-    // Apply course name filters
-    if (currentFilters.courses.length > 0) {
-        filtered = filtered.filter(course => 
-            currentFilters.courses.includes(course.name)
-        );
+    if (totalFilters > 0) {
+        badge.textContent = totalFilters;
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
     }
+}
+
+function applyFilters() {
+    // Get selected courses
+    const selectedCourses = Array.from(document.querySelectorAll('#filterCourseOptions input[type="checkbox"]:checked'))
+        .map(cb => cb.value);
     
-    // Apply status filters
-    if (currentFilters.status.length > 0) {
-        filtered = filtered.filter(course => 
-            currentFilters.status.includes(course.status)
-        );
+    // Get selected statuses
+    const selectedStatuses = Array.from(document.querySelectorAll('#filterStatusOptions input[type="checkbox"]:checked'))
+        .map(cb => cb.value);
+    
+    // Update current filters
+    currentFilters.courses = selectedCourses;
+    currentFilters.status = selectedStatuses;
+    
+    // Apply filters to current search
+    const searchText = document.getElementById('searchInput').value;
+    filterCourses(searchText);
+    
+    // Update filter badge
+    updateFilterBadge();
+    
+    // Close filter panel
+    toggleFilterPanel();
+    
+    // Show filter applied notification
+    const totalFilters = selectedCourses.length + selectedStatuses.length;
+    if (totalFilters > 0) {
+        showSuccess(`${totalFilters} filter(s) applied successfully!`);
     }
-    
-    return filtered;
+}
+
+function clearAllFilters() {
+    // Uncheck all course filters
+    document.querySelectorAll('#filterCourseOptions input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+    });
+    // Uncheck all status filters
+    document.querySelectorAll('#filterStatusOptions input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+    });
+    // Update selection counts
+    updateCourseSelectionCount();
+    updateStatusSelectionCount();
+    // Clear current filters
+    currentFilters.courses = [];
+    currentFilters.status = [];
+    // Update filter badge
+    updateFilterBadge();
+    // Reapply search
+    const searchText = document.getElementById('searchInput').value;
+    filterCourses(searchText);
+    showSuccess('All filters cleared!');
+    // Sync status checkboxes
+    syncStatusFilterCheckboxes();
 }
 
 function showLoading(show) {
@@ -1151,6 +1378,7 @@ function showLoading(show) {
 }
 
 function showError(message) {
+    console.log("showError", message);
     // Create a simple notification
     const notification = $(`
         <div class="alert alert-danger alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
@@ -1167,7 +1395,7 @@ function showError(message) {
     // Auto remove after 5 seconds
     setTimeout(function() {
         notification.alert('close');
-    }, 5000);
+    }, 2000);
 }
 
 function showSuccess(message) {
@@ -1187,7 +1415,7 @@ function showSuccess(message) {
     // Auto remove after 5 seconds
     setTimeout(function() {
         notification.alert('close');
-    }, 5000);
+    }, 2000);
 }
 
 function toggleAddCoursePanel() {
@@ -1318,181 +1546,70 @@ function loadFilterCourseOptions() {
         console.log('Filter course options container not found');
         return;
     }
-    
     container.innerHTML = '';
-    
     console.log('Loading filter course options. Total courses:', allCourses.length);
-    
     if (allCourses.length === 0) {
         console.log('No courses available for filter options');
         container.innerHTML = '<div class="text-muted p-3">No courses available</div>';
         return;
     }
-    
     allCourses.forEach(course => {
         const optionItem = document.createElement('label');
         optionItem.className = 'option-item';
-        
         optionItem.innerHTML = `
-            <input type="checkbox" name="course" value="${course.name}" onchange="updateCourseSelectionCount()">
+            <input type="checkbox" name="course" value="${course.name}">
             <span>${course.name}</span>
         `;
-        
+        // Set checked state based on currentFilters
+        const checkbox = optionItem.querySelector('input[type="checkbox"]');
+        if (currentFilters.courses.includes(course.name)) {
+            checkbox.checked = true;
+        }
+        checkbox.onchange = updateCourseSelectionCount;
         container.appendChild(optionItem);
     });
-    
-    console.log('Filter course options loaded. Total options:', container.children.length);
-    
     // Update the selection count
     updateCourseSelectionCount();
+    // Also sync status checkboxes
+    syncStatusFilterCheckboxes();
 }
 
-function filterCourseOptions(searchText) {
-    const options = document.querySelectorAll('#filterCourseOptions .option-item');
-    options.forEach(option => {
-        const text = option.textContent.toLowerCase();
-        option.style.display = text.includes(searchText.toLowerCase()) ? 'flex' : 'none';
+function syncStatusFilterCheckboxes() {
+    const statusCheckboxes = document.querySelectorAll('#filterStatusOptions input[type="checkbox"]');
+    statusCheckboxes.forEach(cb => {
+        cb.checked = currentFilters.status.includes(cb.value);
     });
-}
-
-function filterStatusOptions(searchText) {
-    const options = document.querySelectorAll('#filterStatusOptions .option-item');
-    options.forEach(option => {
-        const text = option.textContent.toLowerCase();
-        option.style.display = text.includes(searchText.toLowerCase()) ? 'flex' : 'none';
-    });
-}
-
-function updateCourseSelectionCount() {
-    const checkedCourses = document.querySelectorAll('#filterCourseOptions input[type="checkbox"]:checked');
-    const countElement = document.getElementById('courseSelectionCount');
-    countElement.textContent = `${checkedCourses.length} Course selected`;
-}
-
-function updateStatusSelectionCount() {
-    const checkedStatuses = document.querySelectorAll('#filterStatusOptions input[type="checkbox"]:checked');
-    const countElement = document.getElementById('statusSelectionCount');
-    countElement.textContent = `${checkedStatuses.length} Status selected`;
-}
-
-function updateFilterBadge() {
-    const totalFilters = currentFilters.courses.length + currentFilters.status.length;
-    const badge = document.getElementById('filterBadge');
-    
-    if (totalFilters > 0) {
-        badge.textContent = totalFilters;
-        badge.style.display = 'flex';
-    } else {
-        badge.style.display = 'none';
-    }
-}
-
-function applyFilters() {
-    // Get selected courses
-    const selectedCourses = Array.from(document.querySelectorAll('#filterCourseOptions input[type="checkbox"]:checked'))
-        .map(cb => cb.value);
-    
-    // Get selected statuses
-    const selectedStatuses = Array.from(document.querySelectorAll('#filterStatusOptions input[type="checkbox"]:checked'))
-        .map(cb => cb.value);
-    
-    // Update current filters
-    currentFilters.courses = selectedCourses;
-    currentFilters.status = selectedStatuses;
-    
-    // Apply filters to current search
-    const searchText = document.getElementById('searchInput').value;
-    filterCourses(searchText);
-    
-    // Update filter badge
-    updateFilterBadge();
-    
-    // Close filter panel
-    toggleFilterPanel();
-    
-    // Show filter applied notification
-    const totalFilters = selectedCourses.length + selectedStatuses.length;
-    if (totalFilters > 0) {
-        showSuccess(`${totalFilters} filter(s) applied successfully!`);
-    }
-}
-
-function clearAllFilters() {
-    // Uncheck all course filters
-    document.querySelectorAll('#filterCourseOptions input[type="checkbox"]').forEach(cb => {
-        cb.checked = false;
-    });
-    
-    // Uncheck all status filters
-    document.querySelectorAll('#filterStatusOptions input[type="checkbox"]').forEach(cb => {
-        cb.checked = false;
-    });
-    
-    // Update selection counts
-    updateCourseSelectionCount();
     updateStatusSelectionCount();
-    
-    // Clear current filters
-    currentFilters.courses = [];
-    currentFilters.status = [];
-    
-    // Update filter badge
-    updateFilterBadge();
-    
-    // Reapply search
-    const searchText = document.getElementById('searchInput').value;
-    filterCourses(searchText);
-    
-    showSuccess('All filters cleared!');
 }
 
 // Validation Functions
 function validateForm() {
     let isValid = true;
-    
     // Clear all previous errors
     clearAllErrors();
     
     // Validate Course Name
     const courseName = document.getElementById('courseName').value.trim();
     if (!courseName) {
-        showError('courseName', 'Course name is required');
-        isValid = false;
-    } else if (courseName.length < 3) {
-        showError('courseName', 'Course name must be at least 3 characters long');
+        showError('Course name is required');
         isValid = false;
     }
     
     // Validate Procedures
     const selectedProcedures = document.querySelectorAll('#proceduresOptions input[type="checkbox"]:checked');
     if (selectedProcedures.length === 0) {
-        showError('procedures', 'Please select at least one procedure');
+        showError('Please select at least one procedure');
         isValid = false;
     }
     
     // Validate OSCE Types
     const selectedOsceTypes = document.querySelectorAll('input[name="osce_type"]:checked');
     if (selectedOsceTypes.length === 0) {
-        showError('osceTypes', 'Please select at least one OSCE type');
+        showError('Please select at least one OSCE type');
         isValid = false;
     }
     
     return isValid;
-}
-
-function showError(fieldName, message) {
-    const errorElement = document.getElementById(fieldName + 'Error');
-    const fieldElement = document.getElementById(fieldName) || document.getElementById(fieldName + 'Input') || document.getElementById(fieldName + 'Group');
-    
-    if (errorElement) {
-        errorElement.textContent = message;
-        errorElement.style.display = 'block';
-    }
-    
-    if (fieldElement) {
-        fieldElement.classList.add('error');
-        fieldElement.classList.remove('success');
-    }
 }
 
 function clearError(fieldName) {
@@ -1556,13 +1673,14 @@ function submitForm() {
             resetForm();
             toggleAddCoursePanel();
             // Reload courses and refresh filter options
-            loadCourses();
+            resetCoursesAndLoad();
             // Refresh filter options after a short delay to ensure courses are loaded
             setTimeout(function() {
                 loadFilterCourseOptions();
             }, 500);
         },
         error: function(xhr, status, error) {
+            console.log(xhr.responseJSON);
             let errorMessage = 'Failed to create course';
             if (xhr.responseJSON && xhr.responseJSON.error) {
                 errorMessage = xhr.responseJSON.error;
@@ -1629,7 +1747,7 @@ function toggleCourseStatus(courseId, status) {
             }
             showError(errorMessage);
             // Revert the toggle by reloading courses
-            loadCourses();
+            resetCoursesAndLoad();
         }
     });
 }
@@ -1648,14 +1766,14 @@ function deleteCourse(courseId) {
             headers: {
                 'X-CSRFToken': getCookie('csrftoken')
             },
-                    success: function(data) {
-            showSuccess('Course deleted successfully!');
-            loadCourses(); // Reload the courses list
-            // Refresh filter options after a short delay to ensure courses are loaded
-            setTimeout(function() {
-                loadFilterCourseOptions();
-            }, 500);
-        },
+            success: function(data) {
+                showSuccess('Course deleted successfully!');
+                resetCoursesAndLoad(); // Reload the courses list
+                // Refresh filter options after a short delay to ensure courses are loaded
+                setTimeout(function() {
+                    loadFilterCourseOptions();
+                }, 500);
+            },
             error: function(xhr, status, error) {
                 let errorMessage = 'Failed to delete course';
                 if (xhr.responseJSON && xhr.responseJSON.error) {

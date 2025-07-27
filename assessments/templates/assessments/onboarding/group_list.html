@@ -145,91 +145,14 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for group in groups %}
-                        <tr>
-                <td>
-                    <div class="institution">
-                        <span>{{ group.name }}</span>
-                    </div>
-                </td>
-                            <td>{{ group.get_type_display }}</td>
-                            <td>
-                                {% if group.type == 'institution' %}
-                                    {{ group.institution_set.count }}
-                                {% else %}
-                                    {{ group.hospital_set.count }}
-                                {% endif %}
-                            </td>
-                <td>
-                    <div class="unit-head">
-                        <span>{{ group.group_head.get_full_name|default:"Not Assigned" }}</span>
-                        {% if group.group_head %}
-                        <small>{{ group.group_head.email }}</small>
-                        {% endif %}
-                    </div>
-                </td>
-                            <td>{{ group.group_head.email|default:"-" }}</td>
-                            <td>
-                    <span class="badge {% if group.is_active %}active{% else %}inactive{% endif %}">
-                                    {{ group.is_active|yesno:"Active,Inactive" }}
-                                </span>
-                            </td>
-                            <td>
-                    <div class="actions">
-                        <a href="javascript:void(0);" class="btn-icon"
-                           onclick="openGroupFormPanel('{% url 'group_edit' group.pk %}', 'Edit Group')">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                        <button type="button" 
-                                class="btn-icon btn-danger" 
-                                data-name="{{ group.name }}"
-                                data-url="{% url 'group_delete' group.pk %}"
-                                onclick="confirmDelete(this)"
-                                title="Delete">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                <td colspan="7" class="empty">
-                    <i class="fas fa-users"></i>
-                    <p>No groups found</p>
-                    <a href="javascript:void(0);" class="btn btn-primary"
-                                onclick="openGroupFormPanel('{% url 'group_create' %}', 'Add Group')">
-                     Add New Group
-                    </a>
-                </td>
-                        </tr>
-                        {% endfor %}
+                    <tbody id="groupTableBody">
+    <!-- Group rows will be loaded here by JS -->
                     </tbody>
                 </table>
+<div style="text-align:center; margin: 20px 0;">
+    <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreGroups()">Show More</button>
             </div>
-
-<!-- Pagination -->
-            {% if groups.has_other_pages %}
-<div class="pagination">
-                    {% if groups.has_previous %}
-    <a href="?page={{ groups.previous_page_number }}" class="btn-page">
-        <i class="fas fa-chevron-left"></i>
-    </a>
-                    {% endif %}
-
-                    {% for num in groups.paginator.page_range %}
-    <a href="?page={{ num }}" class="btn-page {% if groups.number == num %}active{% endif %}">
-        {{ num }}
-    </a>
-                    {% endfor %}
-
-                    {% if groups.has_next %}
-    <a href="?page={{ groups.next_page_number }}" class="btn-page">
-        <i class="fas fa-chevron-right"></i>
-    </a>
-            {% endif %}
 </div>
-{% endif %}
 
 <!-- Delete Modal -->
 <div class="modal fade" id="deleteModal" tabindex="-1">
@@ -406,6 +329,80 @@ document.addEventListener('submit', function(e) {
             }
         });
     }
+});
+
+let offset = 0;
+const limit = 10;
+let loading = false;
+let allLoaded = false;
+
+function renderGroupRow(group) {
+    return `
+    <tr>
+        <td><div class="institution"><span>${group.name}</span></div></td>
+        <td>${group.type}</td>
+        <td>${group.unit_count}</td>
+        <td><div class="unit-head"><span>${group.group_head}</span>${group.group_head_email && group.group_head_email !== '-' ? `<small>${group.group_head_email}</small>` : ''}</div></td>
+        <td>${group.group_head_email || '-'}</td>
+        <td><span class="badge ${group.is_active ? 'active' : 'inactive'}">${group.is_active ? 'Active' : 'Inactive'}</span></td>
+        <td>
+            <div class="actions">
+                <a href="javascript:void(0);" class="btn-icon"
+                   onclick="openGroupFormPanel('${group.edit_url}', 'Edit Group')">
+                    <i class="fas fa-edit"></i>
+                </a>
+                <button type="button" 
+                        class="btn-icon btn-danger" 
+                        data-name="${group.name}"
+                        data-url="${group.delete_url}"
+                        onclick="confirmDelete(this)"
+                        title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </td>
+    </tr>
+    `;
+}
+
+function loadMoreGroups() {
+    if (loading || allLoaded) return;
+    loading = true;
+    document.getElementById('showMoreBtn').innerText = 'Loading...';
+    fetch(`/onboarding/groups/api/?offset=${offset}&limit=${limit}`)
+        .then(response => response.json())
+        .then(data => {
+            const groups = data.groups;
+            if (groups.length < limit) {
+                allLoaded = true;
+                document.getElementById('showMoreBtn').style.display = 'none';
+            }
+            offset += groups.length;
+            const tbody = document.getElementById('groupTableBody');
+            groups.forEach(group => {
+                tbody.insertAdjacentHTML('beforeend', renderGroupRow(group));
+            });
+            if (offset === 0 && groups.length === 0) {
+                tbody.innerHTML = `<tr>
+                    <td colspan="7" class="empty">
+                        <i class="fas fa-users"></i>
+                        <p>No groups found</p>
+                        <a href="javascript:void(0);" class="btn btn-primary"
+                           onclick="openGroupFormPanel('{% url 'group_create' %}', 'Add Group')">
+                         Add New Group
+                        </a>
+                    </td>
+                </tr>`;
+                document.getElementById('showMoreBtn').style.display = 'none';
+            }
+        })
+        .finally(() => {
+            loading = false;
+            if (!allLoaded) document.getElementById('showMoreBtn').innerText = 'Show More';
+        });
+}
+document.addEventListener('DOMContentLoaded', function() {
+    loadMoreGroups();
 });
 </script>
 {% endblock %} 

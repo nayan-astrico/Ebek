@@ -157,9 +157,16 @@
                     </tr>
                 </thead>
                 <tbody id="batchesTableBody">
-                    <!-- Batches will be loaded here -->
+                    <!-- Batches will be loaded dynamically -->
                 </tbody>
             </table>
+            <div id="batchesLoadingSpinner" class="loading-spinner" style="display: none;">
+                <div class="spinner"></div>
+                <p>Loading batches...</p>
+            </div>
+            <div style="text-align:center; margin: 20px 0;">
+                <button id="showMoreBatchesBtn" class="btn btn-primary" onclick="loadMoreBatches()">Show More</button>
+            </div>
         </div>
     </div>
 </div>
@@ -479,7 +486,6 @@
 
 .side-panel-actions {
     padding: 16px 24px;
-    border-top: 1px solid #e2e8f0;
     display: flex;
     gap: 12px;
     justify-content: flex-end;
@@ -729,11 +735,40 @@
     gap: 12px;
     justify-content: flex-end;
 }
+
+/* Loading Spinner Styles */
+.loading-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    color: #666;
+}
+
+.spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #F16564;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin-bottom: 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
 </style>
 
 <script>
 let selectedLearners = [];
 let availableLearners = [];
+let currentPage = 1;
+let totalBatches = 0;
+let allBatches = [];
+const batchesPerPage = 10;
 
 // Load batches on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -743,25 +778,50 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('unitSelect').addEventListener('change', function() {
         loadAvailableLearners();
     });
+
+    // Add event listener for search input
+    document.getElementById('searchInput').addEventListener('input', function() {
+        currentPage = 1; // Reset to first page on search
+        allBatches = []; // Clear existing batches
+        loadBatches();
+    });
 });
 
 function loadBatches() {
+    const searchText = document.getElementById('searchInput').value.trim();
     const filters = getBatchFilters();
-    let url = '/api/batches/?';
+    let url = `/api/batches/?page=${currentPage}&page_size=${batchesPerPage}&search=${searchText}&`;
     if (filters.unitTypes.length > 0) {
         url += 'unitType=' + filters.unitTypes.join(',') + '&';
     }
+    
+    // Show loading spinner
+    const loadingSpinner = document.getElementById('batchesLoadingSpinner');
+    const showMoreBtn = document.getElementById('showMoreBatchesBtn');
+    loadingSpinner.style.display = 'flex';
+    showMoreBtn.style.display = 'none';
+    
     fetch(url)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                displayBatches(data.batches);
+                totalBatches = data.total_count;
+                if (currentPage === 1) {
+                    allBatches = data.batches;
+                } else {
+                    allBatches = allBatches.concat(data.batches);
+                }
+                displayBatches(allBatches);
+                updateShowMoreButton(data.has_next);
             } else {
                 console.error('Error loading batches:', data.error);
             }
         })
         .catch(error => {
             console.error('Error:', error);
+        })
+        .finally(() => {
+            loadingSpinner.style.display = 'none';
         });
 }
 
@@ -794,6 +854,43 @@ function displayBatches(batches) {
         `;
         tbody.appendChild(row);
     });
+}
+
+function updateShowMoreButton(hasNext) {
+    const showMoreBtn = document.getElementById('showMoreBatchesBtn');
+    if (hasNext && allBatches.length > 0) {
+        showMoreBtn.style.display = 'inline-block';
+    } else {
+        showMoreBtn.style.display = 'none';
+    }
+}
+
+function loadMoreBatches() {
+    currentPage++;
+    const searchText = document.getElementById('searchInput').value.trim();
+    const filters = getBatchFilters();
+    let url = `/api/batches/?page=${currentPage}&page_size=${batchesPerPage}&search=${searchText}&`;
+    if (filters.unitTypes.length > 0) {
+        url += 'unitType=' + filters.unitTypes.join(',') + '&';
+    }
+
+    const showMoreBtn = document.getElementById('showMoreBatchesBtn');
+    showMoreBtn.style.display = 'none';
+
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                allBatches = allBatches.concat(data.batches);
+                displayBatches(allBatches);
+                updateShowMoreButton(data.has_next);
+            } else {
+                console.error('Error loading more batches:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
 }
 
 function toggleAddBatchPanel() {
@@ -1077,16 +1174,16 @@ document.getElementById('batchForm').addEventListener('submit', function(e) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert('Batch created successfully!');
+            showSuccess('Batch created successfully!');
             toggleAddBatchPanel();
             loadBatches();
         } else {
-            alert('Error creating batch: ' + data.error);
+            showError('Error creating batch: ' + data.error);
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Error creating batch');
+        showError('Error creating batch');
     })
     .finally(() => {
         btnText.style.display = 'inline-block';
@@ -1097,6 +1194,8 @@ document.getElementById('batchForm').addEventListener('submit', function(e) {
 
 document.querySelector('.filter-form').addEventListener('submit', function(e) {
     e.preventDefault();
+    currentPage = 1; // Reset to first page when applying filters
+    allBatches = []; // Clear existing batches
     toggleFilterPanel();
     loadBatches();
 });
@@ -1123,14 +1222,34 @@ function getCookie(name) {
 }
 
 function editBatch(batchId) {
-    // Redirect to batch detail page for editing
+    console.log("editBatch", batchId);
     window.location.href = `/batch-management/${batchId}/`;
 }
 
 function deleteBatch(batchId) {
     if (confirm('Are you sure you want to delete this batch?')) {
-        // TODO: Implement delete functionality
-        console.log('Delete batch:', batchId);
+        fetch(`/api/batches/${batchId}/delete/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showSuccess('Batch deleted successfully!');
+                currentPage = 1;
+                allBatches = [];
+                loadBatches();
+            } else {
+                showError('Error deleting batch: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showError('Error deleting batch');
+        });
     }
 }
 
@@ -1149,5 +1268,47 @@ document.addEventListener('click', function(event) {
         input.classList.remove('active');
     }
 });
+
+
+function showError(message) {
+    console.log("showError", message);
+    // Create a simple notification
+    const notification = $(`
+        <div class="alert alert-danger alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-exclamation-triangle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    
+    $('body').append(notification);
+    
+    // Auto remove after 5 seconds
+    setTimeout(function() {
+        notification.alert('close');
+    }, 2000);
+}
+
+function showSuccess(message) {
+    // Create a simple notification
+    const notification = $(`
+        <div class="alert alert-success alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-check-circle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    
+    $('body').append(notification);
+    
+    // Auto remove after 5 seconds
+    setTimeout(function() {
+        notification.alert('close');
+    }, 2000);
+}
 </script>
 {% endblock %}

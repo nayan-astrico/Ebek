@@ -47,7 +47,7 @@
 }
 
 .form-control:focus {
-    border-color: #1AA09A;
+    border-color: #F16564;
     box-shadow: 0 0 0 2px rgba(26, 160, 154, 0.1);
 }
 
@@ -72,13 +72,13 @@ textarea.form-control {
 }
 
 .btn-primary {
-    background-color: #1AA09A;
-    border-color: #1AA09A;
+    background-color: #F16564;
+    border-color: #F16564;
 }
 
 .btn-primary:hover {
-    background-color: #158F89;
-    border-color: #158F89;
+    background-color: #F16564;
+    border-color: #F16564;
 }
 
 .btn-light {
@@ -99,8 +99,8 @@ textarea.form-control {
 }
 
 .custom-control-input:checked ~ .custom-control-label::before {
-    background-color: #1AA09A;
-    border-color: #1AA09A;
+    background-color: #F16564;
+    border-color: #F16564;
 }
 
 .custom-control-label {

@@ -20,7 +20,7 @@
             <i class="fas fa-edit"></i>
             Edit Course
         </button>
-        <button class="btn btn-danger" onclick="deleteCourse()">
+        <button class="btn btn-primary" style="background: #F16564; color: white; border-color: #F16564;" onclick="deleteCourse()">
             <i class="fas fa-trash"></i>
             Delete Course
         </button>
@@ -80,7 +80,7 @@
                 <h3>Course Procedures</h3>
                 <p class="text-muted">Manage procedures assigned to this course</p>
             </div>
-            <button class="btn btn-primary" onclick="openAddProcedurePanel()">
+            <button class="btn btn-primary" onclick="openAddProcedurePanel()" style="background: #F16564; color: white; border-color: #F16564;">
                 <i class="fas fa-plus"></i>
                 Add Procedure
             </button>
@@ -114,7 +114,7 @@
                         </td>
                         <td>
                             <div class="actions">
-                                <button class="btn btn-danger btn-sm" title="Remove from Course" onclick="removeProcedure('{{ procedure.id }}')">
+                                <button class="btn-icon btn-danger" title="Remove from Course" onclick="removeProcedure('{{ procedure.id }}')">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
@@ -173,11 +173,9 @@
                 </tbody>
             </table>
         </div>
-        <div class="pagination-controls" style="display: flex; justify-content: flex-end; margin-top: 16px; gap: 8px;">
-    <button class="btn btn-light" id="prevPageBtn" disabled>Previous</button>
-    <span id="pageInfo" style="align-self: center;">Page 1</span>
-    <button class="btn btn-light" id="nextPageBtn" disabled>Next</button>
-</div>
+        <div style="text-align:center; margin: 20px 0;">
+            <button id="showMoreBatchesBtn" class="btn btn-primary" onclick="loadMoreBatches()">Show More</button>
+        </div>
     </div>
 </div>
 
@@ -331,7 +329,6 @@
 </div>
 
 <style>
-/* Back Button */
 .back-button-container {
     margin-bottom: 24px;
 }
@@ -359,7 +356,6 @@
     font-size: 12px;
 }
 
-/* Course Header */
 .course-header {
     display: flex;
     justify-content: space-between;
@@ -369,7 +365,6 @@
     border-bottom: 1px solid #e2e8f0;
 }
 
-/* Procedures Table Actions */
 .procedures-table .actions .btn {
     padding: 6px 12px;
     border-radius: 4px;
@@ -387,13 +382,8 @@
     font-size: 11px;
 }
 
-.procedures-table .actions .btn-danger {
-    background: #dc3545;
-    color: white;
-}
-
 .procedures-table .actions .btn-danger:hover {
-    background: #c82333;
+    background: #F16564;
 }
 
 .course-header-left h1 {
@@ -441,12 +431,12 @@
 }
 
 .course-header-right .btn-danger {
-    background: #dc3545;
+    background: #F16564;
     color: white;
 }
 
 .course-header-right .btn-danger:hover {
-    background: #c82333;
+    background: #F16564;
 }
 
 /* Course Overview */
@@ -546,7 +536,6 @@
     background: #f7fafc;
 }
 
-/* Tab Content */
 .tab-content {
     min-height: 400px;
 }
@@ -559,7 +548,6 @@
     display: block;
 }
 
-/* Procedures Tab */
 .procedures-header {
     display: flex;
     justify-content: space-between;
@@ -624,7 +612,6 @@
     font-weight: 500;
 }
 
-/* Batches Tab */
 .batches-header {
     display: flex;
     justify-content: space-between;
@@ -749,12 +736,12 @@
 }
 
 .actions .btn-danger {
-    background: #dc3545;
+    background: #F16564;
     color: white;
 }
 
 .actions .btn-danger:hover {
-    background: #c82333;
+    background: #F16564;
 }
 
 /* Modal Styles */
@@ -1160,7 +1147,6 @@
 .side-panel-actions {
     margin-top: auto;
     padding-top: 24px;
-    border-top: 1px solid #e2e8f0;
     display: flex;
     gap: 12px;
     justify-content: flex-end;
@@ -1242,6 +1228,751 @@
     height: 100%;
     background: rgba(0, 0, 0, 0.5);
     z-index: 999;
+}
+
+.btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    background: #edf2f7;
+    color: #4a5568;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.btn-icon:hover {
+    background: #e2e8f0;
+}
+
+.btn-icon.btn-danger {
+    color: #c53030;
+    background: #fff5f5;
+}
+
+.btn-icon.btn-danger:hover {
+    background: #fed7d7;
+}
+
+
+.back-button-container {
+    margin-bottom: 24px;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #4a5568;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.back-button:hover {
+    background-color: #f7fafc;
+    color: #2d3748;
+    text-decoration: none;
+}
+
+.back-button i {
+    font-size: 12px;
+}
+
+.course-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.course-header-left {
+    flex: 1;
+}
+
+.course-header-left h1 {
+    margin: 0 0 8px 0;
+    font-size: 32px;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.course-description {
+    color: #666;
+    font-size: 16px;
+    line-height: 1.5;
+    margin: 0;
+    max-width: 600px;
+}
+
+.course-header-right {
+    display: flex;
+    gap: 12px;
+}
+
+.course-header-right .btn {
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.course-header-right .btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.course-header-right .btn-danger:hover {
+    background: #c82333;
+}
+
+/* Batch Name Editable Styles */
+.batch-name-container {
+    position: relative;
+}
+
+.batch-name-display {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.batch-name-display h1 {
+    margin: 0 0 8px 0;
+    font-size: 32px;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.edit-name-btn {
+    background: none;
+    border: none;
+    color: #718096;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    font-size: 16px;
+}
+
+.edit-name-btn:hover {
+    background: #f7fafc;
+    color: #F16564;
+}
+
+.batch-name-edit {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.batch-name-input {
+    font-size: 32px;
+    font-weight: 600;
+    color: #2d3748;
+    border: 2px solid #F16564;
+    border-radius: 6px;
+    padding: 8px 12px;
+    background: white;
+    outline: none;
+    min-width: 300px;
+}
+
+.batch-name-input:focus {
+    box-shadow: 0 0 0 3px rgba(241, 101, 100, 0.1);
+}
+
+.edit-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.save-name-btn, .cancel-name-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    font-size: 16px;
+}
+
+.save-name-btn {
+    color: #38a169;
+}
+
+.save-name-btn:hover {
+    background: #f0fff4;
+    color: #2f855a;
+}
+
+.cancel-name-btn {
+    color: #e53e3e;
+}
+
+.cancel-name-btn:hover {
+    background: #fff5f5;
+    color: #c53030;
+}
+
+.course-overview {
+    margin-bottom: 32px;
+}
+
+.overview-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 24px;
+}
+
+.overview-card h3 {
+    margin: 0 0 20px 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.info-item label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.info-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: #2d3748;
+}
+
+.osce-types-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.osce-badge {
+    background: #edf2f7;
+    color: #4a5568;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.tab-navigation {
+    display: flex;
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 24px;
+}
+
+.tab-item {
+    padding: 12px 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #4a5568;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.tab-item:hover {
+    color: #F16564;
+    background: #f7fafc;
+}
+
+.tab-item.active {
+    color: #F16564;
+    border-bottom-color: #F16564;
+    background: #f7fafc;
+}
+
+.tab-content {
+    min-height: 400px;
+}
+
+.tab-panel {
+    display: none;
+}
+
+.tab-panel.active {
+    display: block;
+}
+
+.procedures-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+}
+
+.procedures-title h3 {
+    margin: 0 0 4px 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.procedures-controls {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+    align-items: center;
+}
+
+.search-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    max-width: 400px;
+}
+
+.search-box input {
+    border: none;
+    outline: none;
+    width: 100%;
+    font-size: 14px;
+}
+
+.procedures-table {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table th {
+    background: #f8fafc;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5568;
+    text-transform: uppercase;
+}
+
+.table td {
+    padding: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    background: #edf2f7;
+    color: #4a5568;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.btn-icon:hover {
+    background: #e2e8f0;
+}
+
+.btn-icon.btn-danger {
+    color: #c53030;
+    background: #fff5f5;
+}
+
+.btn-icon.btn-danger:hover {
+    background: #fed7d7;
+}
+
+.btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: #F16564;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #e45857;
+}
+
+.btn-light {
+    background: #f8f9fa;
+    color: #495057;
+    border: 1px solid #dee2e6;
+}
+
+.text-muted {
+    color: #666;
+}
+
+.side-panel {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
+
+.side-panel.active {
+    right: 0;
+}
+
+.side-panel-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.side-panel-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+}
+
+.side-panel-form {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.available-learners-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: white;
+}
+
+.learner-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.learner-item:last-child {
+    border-bottom: none;
+}
+
+.learner-item:hover {
+    background: #f7fafc;
+}
+
+.learner-item.current-learner {
+    background: #f0f9ff;
+    border-left: 3px solid #3b82f6;
+}
+
+.learner-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+}
+
+.learner-name {
+    font-weight: 500;
+    color: #2d3748;
+}
+
+.learner-email {
+    font-size: 12px;
+    color: #718096;
+}
+
+.current-learner-badge {
+    background: #3b82f6;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.custom-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.custom-checkbox input[type="checkbox"] {
+    display: none;
+}
+
+.custom-checkbox label {
+    position: relative;
+    padding-left: 28px;
+    cursor: pointer;
+    margin: 0;
+    width: 100%;
+}
+
+.custom-checkbox label:before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    border: 2px solid #e2e8f0;
+    border-radius: 4px;
+    background: white;
+}
+
+.custom-checkbox input[type="checkbox"]:checked + label:before {
+    background: #F16564;
+    border-color: #F16564;
+}
+
+.custom-checkbox input[type="checkbox"]:checked + label:after {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-75%) rotate(45deg);
+    width: 6px;
+    height: 11px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #2d3748;
+}
+
+.form-control {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #F16564;
+    box-shadow: 0 0 0 2px rgba(241, 101, 100, 0.1);
+}
+
+.text-danger {
+    color: #e53e3e;
+}
+
+.error-message {
+    color: #e53e3e;
+    font-size: 12px;
+    margin-top: 4px;
+    display: none;
+}
+
+.error-message.show {
+    display: block;
+}
+
+.side-panel-actions {
+    margin-top: auto;
+    padding-top: 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+}
+
+.panel-overlay.active {
+    display: block;
+}
+
+.available-courses-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: white;
+}
+
+.course-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.course-item:last-child {
+    border-bottom: none;
+}
+
+.course-item:hover {
+    background: #f7fafc;
+}
+
+.course-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.course-name {
+    font-weight: 500;
+    color: #2d3748;
+}
+
+.course-details {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: #718096;
+}
+
+.course-procedures {
+    color: #4a5568;
+}
+
+.course-osce {
+    color: #718096;
+}
+
+/* Current Course Badge */
+.current-course-badge {
+    background: #3b82f6;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.course-item.current-course {
+    background: #f0f9ff;
+    border-left: 3px solid #3b82f6;
+}
+
+.procedure-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.pill {
+    background: #f0f4f8;
+    color: #2d3748;
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    display: inline-block;
+}
+
+/* Loading Spinner Styles */
+.loading-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    color: #666;
+    font-size: 14px;
+}
+
+.spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #F16564;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin-bottom: 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 </style>
 
@@ -1959,8 +2690,8 @@ function validateEditForm() {
     
     // Validate course name
     const courseName = document.getElementById('editCourseName');
-    if (!courseName.value.trim() || courseName.value.trim().length < 3) {
-        showEditError('editCourseNameError', 'Course name must be at least 3 characters long');
+    if (!courseName.value.trim()) {
+        showEditError('editCourseNameError', 'Course name is required');
         courseName.classList.add('error');
         isValid = false;
     } else {
@@ -1990,13 +2721,29 @@ function showEditError(errorId, message) {
     errorElement.classList.add('show');
 }
 
-// Batches search and filter functionality
+// Batches lazy loading functionality
 
-let currentPage = 1;
-let totalPages = 1;
-const PAGE_SIZE = 10;
+let batchOffset = 0;
+const batchLimit = 10;
+let batchLoading = false;
+let allBatchesLoaded = false;
 
-function loadCourseBatches(page = 1) {
+function renderBatchRow(batch) {
+    return `
+        <tr>
+            <td><div class="batch-name"><span>${batch.batchName}</span></div></td>
+            <td><span class="unit-type-badge">${batch.unitType}</span></td>
+            <td><span class="unit-name">${batch.unitName}</span></td>
+            <td><span class="learner-count">${batch.learnerCount} Learners</span></td>
+        </tr>
+    `;
+}
+
+function loadMoreBatches() {
+    if (batchLoading || allBatchesLoaded) return;
+    batchLoading = true;
+    document.getElementById('showMoreBatchesBtn').innerText = 'Loading...';
+
     const courseId = '{{ course.id }}';
     const search = document.getElementById('batchSearch').value;
     const unitType = document.getElementById('unitTypeFilter').value;
@@ -2006,76 +2753,55 @@ function loadCourseBatches(page = 1) {
         search: search,
         unit_type: unitType,
         unit_name: unitName,
-        page: page,
-        page_size: PAGE_SIZE
+        offset: batchOffset,
+        limit: batchLimit
     });
 
     fetch(`/courses/${courseId}/batches/?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
-                renderCourseBatches(data.batches);
-                currentPage = data.page || 1;
-                totalPages = data.total_pages || 1;
-                updatePaginationControls();
-            } else {
-                renderCourseBatches([]);
-                currentPage = 1;
-                totalPages = 1;
-                updatePaginationControls();
+            const batches = data.batches || [];
+            if (batches.length < batchLimit) {
+                allBatchesLoaded = true;
+                document.getElementById('showMoreBatchesBtn').style.display = 'none';
+            }
+            batchOffset += batches.length;
+            const tbody = document.getElementById('batchesTableBody');
+            batches.forEach(batch => {
+                tbody.insertAdjacentHTML('beforeend', renderBatchRow(batch));
+            });
+            if (batchOffset === 0 && batches.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#666;">No batches found</td></tr>`;
+                document.getElementById('showMoreBatchesBtn').style.display = 'none';
             }
         })
-        .catch(() => {
-            renderCourseBatches([]);
-            currentPage = 1;
-            totalPages = 1;
-            updatePaginationControls();
+        .finally(() => {
+            batchLoading = false;
+            if (!allBatchesLoaded) document.getElementById('showMoreBatchesBtn').innerText = 'Show More';
         });
 }
 
-function renderCourseBatches(batches) {
-    const tbody = document.getElementById('batchesTableBody');
-    if (!batches.length) {
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#666;">No batches found</td></tr>`;
-        return;
-    }
-    tbody.innerHTML = '';
-    batches.forEach(batch => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td><div class="batch-name"><span>${batch.batchName}</span></div></td>
-            <td><span class="unit-type-badge">${batch.unitType}</span></td>
-            <td><span class="unit-name">${batch.unitName}</span></td>
-            <td><span class="learner-count">${batch.learnerCount} Learners</span></td>
-        `;
-        tbody.appendChild(row);
-    });
-}
-
-function updatePaginationControls() {
-    document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
-    document.getElementById('prevPageBtn').disabled = currentPage <= 1;
-    document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
+function resetBatches() {
+    batchOffset = 0;
+    allBatchesLoaded = false;
+    document.getElementById('batchesTableBody').innerHTML = '';
+    document.getElementById('showMoreBatchesBtn').style.display = 'block';
+    document.getElementById('showMoreBatchesBtn').innerText = 'Show More';
+    loadMoreBatches();
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('batchSearch').addEventListener('input', () => loadCourseBatches(1));
+    document.getElementById('batchSearch').addEventListener('input', () => resetBatches());
     document.getElementById('unitTypeFilter').addEventListener('change', function() {
         const unitType = this.value;
         loadUnitNames(unitType);
         document.getElementById('unitNameFilter').value = '';
-        loadCourseBatches(1);
+        resetBatches();
     });
-    document.getElementById('unitNameFilter').addEventListener('change', () => loadCourseBatches(1));
-    document.getElementById('prevPageBtn').addEventListener('click', function() {
-        if (currentPage > 1) loadCourseBatches(currentPage - 1);
-    });
-    document.getElementById('nextPageBtn').addEventListener('click', function() {
-        if (currentPage < totalPages) loadCourseBatches(currentPage + 1);
-    });
+    document.getElementById('unitNameFilter').addEventListener('change', () => resetBatches());
 
     // Initial load
-    loadCourseBatches(1);
+    resetBatches();
 });
 
 // --- Dynamic Unit Name Filter ---

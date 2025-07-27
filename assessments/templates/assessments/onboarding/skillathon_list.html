@@ -118,71 +118,14 @@
                 <th>Actions</th>
             </tr>
         </thead>
-        <tbody>
-            {% for event in events %}
-            <tr>
-                <td>
-                    <div class="institution">
-                        <span>{{ event.name }}</span>
-                    </div>
-                </td>
-                <td>{{ event.date|date:"d M Y" }}</td>
-                <td>{{ event.city }}, {{ event.state }}</td>
-                <td>
-                    <div class="actions">
-                        <a href="javascript:void(0);" class="btn-icon"
-                        onclick="openSkillathonFormPanel('{% url 'skillathon_edit' event.pk %}', 'Edit Skillathon')">
-                            <i class="fas fa-edit"></i>
-                        </a>
-                        <button type="button" 
-                                class="btn-icon btn-danger" 
-                                data-name="{{ event.name }}"
-                                data-url="{% url 'skillathon_delete' event.pk %}"
-                                onclick="confirmDelete(this)"
-                                title="Delete">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="7" class="empty">
-                    <i class="fas fa-calendar-alt"></i>
-                    <p>No skillathon events found</p>
-                    <a href="javascript:void(0);" class="btn btn-primary"
-           onclick="openSkillathonFormPanel('{% url 'skillathon_create' %}', 'Add Skillathon')">
-            Add Skillathon
-        </a>
-                </td>
-            </tr>
-            {% endfor %}
+        <tbody id="skillathonTableBody">
+    <!-- Skillathon rows will be loaded here by JS -->
         </tbody>
     </table>
+<div style="text-align:center; margin: 20px 0;">
+    <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreSkillathons()">Show More</button>
 </div>
-
-<!-- Pagination -->
-{% if events.has_other_pages %}
-<div class="pagination">
-    {% if events.has_previous %}
-    <a href="?page={{ events.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn-page">
-        <i class="fas fa-chevron-left"></i>
-    </a>
-    {% endif %}
-
-    {% for num in events.paginator.page_range %}
-    <a href="?page={{ num }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn-page {% if events.number == num %}active{% endif %}">
-        {{ num }}
-    </a>
-    {% endfor %}
-
-    {% if events.has_next %}
-    <a href="?page={{ events.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn-page">
-        <i class="fas fa-chevron-right"></i>
-    </a>
-    {% endif %}
 </div>
-{% endif %}
 
 <!-- Delete Modal -->
 <div class="modal fade" id="deleteModal" tabindex="-1">
@@ -813,6 +756,77 @@ document.addEventListener('submit', function(e) {
             }
         });
     }
+});
+
+let offset = 0;
+const limit = 10;
+let loading = false;
+let allLoaded = false;
+
+function renderSkillathonRow(event) {
+    return `
+    <tr>
+        <td><div class="institution"><span>${event.name}</span></div></td>
+        <td>${event.date}</td>
+        <td>${event.city}, ${event.state}</td>
+        <td>
+            <div class="actions">
+                <a href="javascript:void(0);" class="btn-icon"
+                   onclick="openSkillathonFormPanel('${event.edit_url}', 'Edit Skillathon')">
+                    <i class="fas fa-edit"></i>
+                </a>
+                <button type="button" 
+                        class="btn-icon btn-danger" 
+                        data-name="${event.name}"
+                        data-url="${event.delete_url}"
+                        onclick="confirmDelete(this)"
+                        title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </td>
+    </tr>
+    `;
+}
+
+function loadMoreSkillathons() {
+    if (loading || allLoaded) return;
+    loading = true;
+    document.getElementById('showMoreBtn').innerText = 'Loading...';
+    fetch(`/onboarding/skillathons/api/?offset=${offset}&limit=${limit}`)
+        .then(response => response.json())
+        .then(data => {
+            const events = data.events;
+            if (events.length < limit) {
+                allLoaded = true;
+                document.getElementById('showMoreBtn').style.display = 'none';
+            }
+            offset += events.length;
+            const tbody = document.getElementById('skillathonTableBody');
+            events.forEach(event => {
+                tbody.insertAdjacentHTML('beforeend', renderSkillathonRow(event));
+            });
+            if (offset === 0 && events.length === 0) {
+                tbody.innerHTML = `<tr>
+                    <td colspan="7" class="empty">
+                        <i class="fas fa-calendar-alt"></i>
+                        <p>No skillathon events found</p>
+                        <a href="javascript:void(0);" class="btn btn-primary"
+                           onclick="openSkillathonFormPanel('{% url 'skillathon_create' %}', 'Add Skillathon')">
+                         Add Skillathon
+                        </a>
+                    </td>
+                </tr>`;
+                document.getElementById('showMoreBtn').style.display = 'none';
+            }
+        })
+        .finally(() => {
+            loading = false;
+            if (!allLoaded) document.getElementById('showMoreBtn').innerText = 'Show More';
+        });
+}
+document.addEventListener('DOMContentLoaded', function() {
+    loadMoreSkillathons();
 });
 </script>
 {% endblock %}

@@ -745,9 +745,7 @@ def fetch_exam_metrics(request):
        if institution_name:
            base_query = base_query.where('institution', '==', institution_name)
 
-
        exam_assignments = list(base_query.stream())
-
 
        # --- Analytics Calculation ---
        total_students = set()
@@ -768,14 +766,12 @@ def fetch_exam_metrics(request):
        # Track completed procedures per student
        student_completed_procedures = defaultdict(set)
 
-
        for exam in exam_assignments:
            exam_doc = exam.to_dict()
            email = exam_doc.get('emailID')
            if not email:
                continue
            total_students.add(email)
-
 
            procedure_name = exam_doc.get('procedureName', 'Unknown')
            if procedure_name == "Unknown":
@@ -795,19 +791,15 @@ def fetch_exam_metrics(request):
                percentage = round((total_score / max_marks) * 100, 2)
            grade = get_grade_letter(percentage)
 
-
            # Procedure counts
            procedure_counts[procedure_name] += 1
-
 
            # Grade distribution
            grade_distribution[grade] += 1
 
-
            # Gender metrics
            gender_metrics["total"][gender] += 1
            gender_metrics["grade_wise"][grade][gender] += 1
-
 
            # Skill-wise metrics
            if procedure_name not in skill_wise_metrics:
@@ -821,7 +813,6 @@ def fetch_exam_metrics(request):
                    "common_missed_steps": {}
                }
            skill_wise_metrics[procedure_name]["grade_distribution"][grade] += 1
-
 
            # Critical steps
            critical_missed = 0
@@ -842,7 +833,6 @@ def fetch_exam_metrics(request):
                    skill_wise_metrics[procedure_name]["common_missed_steps"][step] = 0
                skill_wise_metrics[procedure_name]["common_missed_steps"][step] += 1
 
-
        # Calculate completed_all_procedures metric
        all_procedures = set(procedure_counts.keys())
        completed_all_procedures = sum(
@@ -850,17 +840,14 @@ def fetch_exam_metrics(request):
            if student_procedures == all_procedures
        )
 
-
        # Finalize all missed critical steps for each procedure
        for proc_name in skill_wise_metrics:
            common_steps = skill_wise_metrics[proc_name]["common_missed_steps"]
            if not common_steps:
                skill_wise_metrics[proc_name]["common_missed_steps"] = {}
 
-
        # --- Institute Table Calculation ---
        institute_metrics = {}
-
 
        for exam in exam_assignments:
            exam_doc = exam.to_dict()
@@ -875,7 +862,6 @@ def fetch_exam_metrics(request):
            )
            percentage = (total_score / max_marks) * 100 if max_marks > 0 else 0
 
-
            if institute not in institute_metrics:
                institute_metrics[institute] = {
                    "overall": {"students": set(), "total_score": 0, "count": 0},
@@ -886,14 +872,12 @@ def fetch_exam_metrics(request):
            institute_metrics[institute]["overall"]["total_score"] += percentage
            institute_metrics[institute]["overall"]["count"] += 1
 
-
            # Per station
            if procedure not in institute_metrics[institute]["stations"]:
                institute_metrics[institute]["stations"][procedure] = {"students": set(), "total_score": 0, "count": 0}
            institute_metrics[institute]["stations"][procedure]["students"].add(email)
            institute_metrics[institute]["stations"][procedure]["total_score"] += percentage
            institute_metrics[institute]["stations"][procedure]["count"] += 1
-
 
        # Prepare for JSON
        institute_table = []
@@ -2484,22 +2468,39 @@ def create_course(request):
 
 @csrf_exempt
 def fetch_courses(request):
-    """API endpoint to fetch all courses."""
+    """API endpoint to fetch all courses, with optional offset/limit for lazy loading and filtering."""
     try:
+        offset = int(request.GET.get('offset', 0))
+        limit = int(request.GET.get('limit', 10))
+        search = request.GET.get('search', '').strip().lower()
+        status_filters = request.GET.getlist('status')
+        status_filters = [s.lower() for s in status_filters if s]
         courses_ref = db.collection('Courses')
         courses = []
-        
-        for doc in courses_ref.stream():
+        all_docs = list(courses_ref.stream())
+        filtered_docs = []
+        for doc in all_docs:
+            course_data = doc.to_dict()
+            name = course_data.get('courseName', '').lower()
+            status = course_data.get('status', 'active').lower()
+            # Filter by search
+            if search and search not in name:
+                continue
+            # Filter by status
+            if status_filters and status not in status_filters:
+                continue
+            filtered_docs.append(doc)
+        total_courses = len(filtered_docs)
+        paginated_docs = filtered_docs[offset:offset+limit]
+        for doc in paginated_docs:
             course_data = doc.to_dict()
             procedure_refs = course_data.get('procedures', [])
-            
             # Get procedure names
             procedure_names = []
             for proc_ref in procedure_refs:
                 proc_doc = proc_ref.get()
                 if proc_doc.exists:
                     procedure_names.append(proc_doc.to_dict().get('procedureName', 'Unknown'))
-            
             courses.append({
                 'id': doc.id,
                 'name': course_data.get('courseName', 'N/A'),
@@ -2512,9 +2513,8 @@ def fetch_courses(request):
                 'created_at': course_data.get('createdAt'),
                 'updated_at': course_data.get('updatedAt')
             })
-        
-        return JsonResponse({'courses': courses}, status=200)
-        
+        all_loaded = offset + limit >= total_courses
+        return JsonResponse({'courses': courses, 'all_loaded': all_loaded}, status=200)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -2744,6 +2744,10 @@ def fetch_batches(request):
         # Get filter parameters from query string
         unit_type_param = request.GET.get('unitType', '').strip()
         status_param = request.GET.get('status', '').strip()
+        search = request.GET.get('search', '').strip().lower()
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 10))
+        
         unit_types = [u.strip().lower() for u in unit_type_param.split(',') if u.strip()] if unit_type_param else []
         statuses = [s.strip().lower() for s in status_param.split(',') if s.strip()] if status_param else []
 
@@ -2755,9 +2759,14 @@ def fetch_batches(request):
             # Filtering logic
             batch_unit_type = batch_data.get('unitType', '').lower()
             batch_status = batch_data.get('status', 'active').lower()
+            batch_name = batch_data.get('batchName', '').lower()
+            
+            # Apply filters
             if unit_types and batch_unit_type not in unit_types:
                 continue
             if statuses and batch_status not in statuses:
+                continue
+            if search and search not in batch_name:
                 continue
 
             # Get unit name
@@ -2785,9 +2794,19 @@ def fetch_batches(request):
                 'createdAt': batch_data.get('createdAt')
             })
 
+        # Apply pagination
+        total_count = len(batches)
+        start_index = (page - 1) * page_size
+        end_index = start_index + page_size
+        paginated_batches = batches[start_index:end_index]
+
         return JsonResponse({
             'success': True,
-            'batches': batches
+            'batches': paginated_batches,
+            'total_count': total_count,
+            'page': page,
+            'page_size': page_size,
+            'has_next': end_index < total_count
         }, status=200)
     except Exception as e:
         return JsonResponse({
@@ -3558,5 +3577,124 @@ def fetch_batches_for_course(request, course_id):
             'total_pages': total_pages,
             'total_batches': total_batches
         }, status=200)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@csrf_exempt
+def fetch_batch_learners(request, batch_id):
+    """API endpoint to fetch learners assigned to a batch with search and pagination."""
+    try:
+        # Get pagination and search parameters
+        offset = int(request.GET.get('offset', 0))
+        limit = int(request.GET.get('limit', 10))
+        search = request.GET.get('search', '').strip().lower()
+        
+        # Check if batch exists
+        batch_ref = db.collection('Batches').document(batch_id)
+        batch_doc = batch_ref.get()
+        
+        if not batch_doc.exists:
+            return JsonResponse({'success': False, 'error': 'Batch not found'}, status=404)
+        
+        batch_data = batch_doc.to_dict()
+        learner_refs = batch_data.get('learners', [])
+        
+        # Get learner details with filtering
+        learners = []
+        for learner_ref in learner_refs:
+            learner_doc = learner_ref.get()
+            if learner_doc.exists:
+                learner_data = learner_doc.to_dict()
+                learner_name = learner_data.get('username', '').lower()
+                learner_email = learner_data.get('emailID', '').lower()
+                
+                # Apply search filter
+                if search and search not in learner_name and search not in learner_email:
+                    continue
+                
+                learners.append({
+                    'id': learner_doc.id,
+                    'name': learner_data.get('username', 'N/A'),
+                    'email': learner_data.get('emailID', 'N/A')
+                })
+        
+        # Apply pagination
+        total_learners = len(learners)
+        paginated_learners = learners[offset:offset+limit]
+        
+        return JsonResponse({
+            'success': True,
+            'learners': paginated_learners,
+            'total': total_learners,
+            'offset': offset,
+            'limit': limit
+        }, status=200)
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@csrf_exempt
+def fetch_batch_courses_paginated(request, batch_id):
+    """API endpoint to fetch courses assigned to a batch with search and pagination."""
+    try:
+        # Get pagination and search parameters
+        offset = int(request.GET.get('offset', 0))
+        limit = int(request.GET.get('limit', 10))
+        search = request.GET.get('search', '').strip().lower()
+        
+        # Check if batch exists
+        batch_ref = db.collection('Batches').document(batch_id)
+        batch_doc = batch_ref.get()
+        
+        if not batch_doc.exists:
+            return JsonResponse({'success': False, 'error': 'Batch not found'}, status=404)
+        
+        batch_data = batch_doc.to_dict()
+        course_refs = batch_data.get('courses', [])
+        
+        # Get course details with filtering
+        courses = []
+        for course_ref in course_refs:
+            course_doc = course_ref.get()
+            if course_doc.exists:
+                course_data = course_doc.to_dict()
+                course_name = course_data.get('courseName', '').lower()
+                
+                # Apply search filter
+                if search and search not in course_name:
+                    continue
+                
+                procedure_refs = course_data.get('procedures', [])
+                
+                # Get procedure names
+                procedure_names = []
+                for proc_ref in procedure_refs:
+                    proc_doc = proc_ref.get()
+                    if proc_doc.exists:
+                        procedure_names.append(proc_doc.to_dict().get('procedureName', 'Unknown'))
+                
+                courses.append({
+                    'id': course_ref.id,
+                    'name': course_data.get('courseName', 'N/A'),
+                    'description': course_data.get('description', ''),
+                    'procedures': procedure_names,
+                    'procedure_count': len(procedure_names),
+                    'osce_types': course_data.get('osceTypes', []),
+                    'verification_required': course_data.get('verificationRequired', False),
+                    'status': course_data.get('status', 'active')
+                })
+        
+        # Apply pagination
+        total_courses = len(courses)
+        paginated_courses = courses[offset:offset+limit]
+        
+        return JsonResponse({
+            'success': True,
+            'courses': paginated_courses,
+            'total': total_courses,
+            'offset': offset,
+            'limit': limit
+        }, status=200)
+        
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
