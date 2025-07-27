@@ -119,78 +119,14 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for assessor in assessors %}
-                        <tr>
-                <td>
-                    <div class="institution">
-                        <span>{{ assessor.assessor_user.full_name }}</span>
-                    </div>
-                </td>
-                            <td>{{ assessor.assessor_user.email }}</td>
-                            <td>{{ assessor.assessor_user.phone_number }}</td>
-                            <td>{{ assessor.specialization }}</td>
-                            <td>{{ assessor.location }}</td>
-                            <td>
-                    <span class="badge {% if assessor.is_active %}active{% else %}inactive{% endif %}">
-                        {{ assessor.is_active|yesno:"Active,Inactive" }}
-                    </span>
-                            </td>
-                            <td>
-                    <div class="actions">
-                        <a href="javascript:void(0);" class="btn-icon"
-                        onclick="openAssessorFormPanel('{% url 'assessor_edit' assessor.id %}', 'Edit Assessor')">
-                                    <i class="fas fa-edit"></i>
-                                </a>
-                        <button type="button" 
-                                class="btn-icon btn-danger" 
-                                data-name="{{ assessor.full_name }}"
-                                data-url="{% url 'assessor_delete' assessor.id %}"
-                                onclick="confirmDelete(this)"
-                                title="Delete">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                    </div>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                <td colspan="7" class="empty">
-                    <i class="fas fa-user-tie"></i>
-                    <p>No assessors found</p>
-                    <a href="javascript:void(0);" class="btn btn-primary"
-           onclick="openAssessorFormPanel('{% url 'assessor_create' %}', 'Add Assessor')">
-            Add Assessor
-        </a>
-                </td>
-                        </tr>
-                        {% endfor %}
+                    <tbody id="assessorTableBody">
+                        <!-- Assessor rows will be loaded here by JS -->
                     </tbody>
                 </table>
+            <div style="text-align:center; margin: 20px 0;">
+                <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreAssessors()">Show More</button>
             </div>
-
-            <!-- Pagination -->
-{% if assessors.has_other_pages %}
-<div class="pagination">
-    {% if assessors.has_previous %}
-    <a href="?page={{ assessors.previous_page_number }}" class="btn-page">
-        <i class="fas fa-chevron-left"></i>
-    </a>
-                    {% endif %}
-
-    {% for num in assessors.paginator.page_range %}
-    <a href="?page={{ num }}" class="btn-page {% if assessors.number == num %}active{% endif %}">
-        {{ num }}
-    </a>
-                    {% endfor %}
-
-    {% if assessors.has_next %}
-    <a href="?page={{ assessors.next_page_number }}" class="btn-page">
-        <i class="fas fa-chevron-right"></i>
-    </a>
-                    {% endif %}
-</div>
-            {% endif %}
+            </div>
 
 <!-- Delete Modal -->
 <div class="modal fade" id="deleteModal" tabindex="-1">
@@ -773,5 +709,79 @@ function updateSelectionCount(category) {
     const label = category.charAt(0).toUpperCase() + category.slice(1);
     countElement.textContent = `${count} ${label} selected`;
 }
+
+let offset = 0;
+const limit = 10;
+let loading = false;
+let allLoaded = false;
+
+function renderAssessorRow(assessor) {
+    return `
+    <tr>
+        <td><div class="institution"><span>${assessor.full_name}</span></div></td>
+        <td>${assessor.email}</td>
+        <td>${assessor.phone_number}</td>
+        <td>${assessor.specialization}</td>
+        <td>${assessor.location}</td>
+        <td><span class="badge ${assessor.is_active ? 'active' : 'inactive'}">${assessor.is_active ? 'Active' : 'Inactive'}</span></td>
+        <td>
+            <div class="actions">
+                <a href="javascript:void(0);" class="btn-icon"
+                   onclick="openAssessorFormPanel('${assessor.edit_url}', 'Edit Assessor')">
+                    <i class="fas fa-edit"></i>
+                </a>
+                <button type="button" 
+                        class="btn-icon btn-danger" 
+                        data-name="${assessor.full_name}"
+                        data-url="${assessor.delete_url}"
+                        onclick="confirmDelete(this)"
+                        title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </td>
+    </tr>
+    `;
+}
+
+function loadMoreAssessors() {
+    if (loading || allLoaded) return;
+    loading = true;
+    document.getElementById('showMoreBtn').innerText = 'Loading...';
+    fetch(`/onboarding/assessors/api/?offset=${offset}&limit=${limit}`)
+        .then(response => response.json())
+        .then(data => {
+            const assessors = data.assessors;
+            if (assessors.length < limit) {
+                allLoaded = true;
+                document.getElementById('showMoreBtn').style.display = 'none';
+            }
+            offset += assessors.length;
+            const tbody = document.getElementById('assessorTableBody');
+            assessors.forEach(assessor => {
+                tbody.insertAdjacentHTML('beforeend', renderAssessorRow(assessor));
+            });
+            if (offset === 0 && assessors.length === 0) {
+                tbody.innerHTML = `<tr>
+                    <td colspan="7" class="empty">
+                        <i class="fas fa-user-tie"></i>
+                        <p>No assessors found</p>
+                        <a href="javascript:void(0);" class="btn btn-primary"
+                           onclick="openAssessorFormPanel('{% url 'assessor_create' %}', 'Add Assessor')">
+                         Add Assessor
+                        </a>
+                    </td>
+                </tr>`;
+                document.getElementById('showMoreBtn').style.display = 'none';
+            }
+        })
+        .finally(() => {
+            loading = false;
+            if (!allLoaded) document.getElementById('showMoreBtn').innerText = 'Show More';
+        });
+}
+document.addEventListener('DOMContentLoaded', function() {
+    loadMoreAssessors();
+});
 </script>
 {% endblock %} 

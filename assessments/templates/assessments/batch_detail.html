@@ -34,7 +34,7 @@
         <p class="course-description">{{ batch.unit_name }}</p>
     </div>
     <div class="course-header-right">
-        <button class="btn btn-danger" onclick="deleteBatch()">
+        <button class="btn btn-danger" onclick="deleteBatch()" style="background: #F16564; color: white; border-color: #F16564;">
             <i class="fas fa-trash"></i>
             Delete Batch
         </button>
@@ -182,25 +182,16 @@
                     </tr>
                 </thead>
                 <tbody id="learnersTableBody">
-                    {% for learner in batch.learners %}
-                    <tr data-learner-id="{{ learner.id }}">
-                        <td>{{ learner.name }}</td>
-                        <td>{{ learner.email }}</td>
-                        <td>
-                            <div class="actions">
-                                <button class="btn-icon btn-danger" onclick="removeLearner('{{ learner.id }}')">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="3" style="text-align: center; color: #666;">No learners found</td>
-                    </tr>
-                    {% endfor %}
+                    <!-- Learners will be loaded dynamically -->
                 </tbody>
             </table>
+            <div id="learnersLoadingSpinner" class="loading-spinner" style="display: none;">
+                <div class="spinner"></div>
+                <p>Loading learners...</p>
+            </div>
+            <div style="text-align:center; margin: 20px 0;">
+                <button id="showMoreLearnersBtn" class="btn btn-primary" onclick="loadMoreLearners()">Show More</button>
+            </div>
         </div>
     </div>
 
@@ -221,7 +212,7 @@
         <div class="procedures-controls">
             <div class="search-box">
                 <i class="fas fa-search"></i>
-                <input type="text" placeholder="Search courses..." id="courseSearch">
+                <input type="text" placeholder="Search courses..." id="courseSearch" oninput="filterCoursesTable(this.value)">
             </div>
         </div>
 
@@ -237,32 +228,16 @@
                     </tr>
                 </thead>
                 <tbody id="coursesTableBody">
-                    {% for course in batch.courses %}
-                    <tr data-course-id="{{ course.id }}">
-                        <td>{{ course.name }}</td>
-                        <td>
-                            <div class="procedure-pills">
-                                {% for proc in course.procedures %}
-                                    <span class="pill">{{ proc }}</span>
-                                {% endfor %}
-                            </div>
-                        </td>
-                        <td>{{ course.osce_types|join:", " }}</td>
-                        <td>
-                            <div class="actions">
-                                <button class="btn-icon btn-danger" onclick="removeCourse('{{ course.id }}')">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="4" style="text-align: center; color: #666;">No courses assigned to this batch</td>
-                    </tr>
-                    {% endfor %}
+                    <!-- Courses will be loaded dynamically -->
                 </tbody>
             </table>
+            <div id="coursesLoadingSpinner" class="loading-spinner" style="display: none;">
+                <div class="spinner"></div>
+                <p>Loading courses...</p>
+            </div>
+            <div style="text-align:center; margin: 20px 0;">
+                <button id="showMoreCoursesBtn" class="btn btn-primary" onclick="loadMoreCourses()">Show More</button>
+            </div>
         </div>
     </div>
 </div>
@@ -975,10 +950,49 @@
     font-weight: 500;
     display: inline-block;
 }
-```
+
+/* Loading Spinner Styles */
+.loading-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    color: #666;
+    font-size: 14px;
+}
+
+.spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #F16564;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin-bottom: 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
 </style>
 
 <script>
+// Lazy loading variables for learners
+let learnerOffset = 0;
+const learnerLimit = 10;
+let learnerLoading = false;
+let allLearnersLoaded = false;
+let currentLearnerSearch = '';
+
+// Lazy loading variables for courses
+let courseOffset = 0;
+const courseLimit = 10;
+let courseLoading = false;
+let allCoursesLoaded = false;
+let currentCourseSearch = '';
+
 function switchTab(tabName) {
     // Remove active class from all tabs and panels
     document.querySelectorAll('.tab-item').forEach(tab => {
@@ -991,7 +1005,182 @@ function switchTab(tabName) {
     // Add active class to selected tab and panel
     document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
     document.getElementById(`${tabName}-panel`).classList.add('active');
+    
+    // Load data when tab is switched
+    if (tabName === 'learners') {
+        resetLearnersAndLoad();
+    } else if (tabName === 'courses') {
+        resetCoursesAndLoad();
+    }
 }
+
+// Learners lazy loading functions
+function renderLearnerRow(learner) {
+    return `
+        <tr data-learner-id="${learner.id}">
+            <td>${learner.name}</td>
+            <td>${learner.email}</td>
+            <td>
+                <div class="actions">
+                    <button class="btn-icon btn-danger" onclick="removeLearner('${learner.id}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `;
+}
+
+function loadMoreLearners() {
+    if (learnerLoading || allLearnersLoaded) return;
+    learnerLoading = true;
+    
+    // Show loading spinner and hide button
+    document.getElementById('learnersLoadingSpinner').style.display = 'flex';
+    document.getElementById('showMoreLearnersBtn').style.display = 'none';
+
+    const batchId = '{{ batch.id }}';
+    const params = new URLSearchParams({
+        offset: learnerOffset,
+        limit: learnerLimit,
+        search: currentLearnerSearch
+    });
+
+    fetch(`/api/batches/${batchId}/learners/?${params.toString()}`)
+        .then(response => response.json())
+        .then(data => {
+            const learners = data.learners || [];
+            if (learners.length < learnerLimit) {
+                allLearnersLoaded = true;
+                document.getElementById('showMoreLearnersBtn').style.display = 'none';
+            }
+            learnerOffset += learners.length;
+            const tbody = document.getElementById('learnersTableBody');
+            learners.forEach(learner => {
+                tbody.insertAdjacentHTML('beforeend', renderLearnerRow(learner));
+            });
+            if (learnerOffset === 0 && learners.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:#666;">No learners found</td></tr>`;
+                document.getElementById('showMoreLearnersBtn').style.display = 'none';
+            } else if (!allLearnersLoaded) {
+                document.getElementById('showMoreLearnersBtn').style.display = 'block';
+            }
+        })
+        .finally(() => {
+            learnerLoading = false;
+            document.getElementById('learnersLoadingSpinner').style.display = 'none';
+        });
+}
+
+function resetLearnersAndLoad() {
+    learnerOffset = 0;
+    allLearnersLoaded = false;
+    document.getElementById('learnersTableBody').innerHTML = '';
+    document.getElementById('showMoreLearnersBtn').style.display = 'none';
+    document.getElementById('learnersLoadingSpinner').style.display = 'flex';
+    loadMoreLearners();
+}
+
+function filterLearnersTable(searchText) {
+    currentLearnerSearch = searchText || '';
+    resetLearnersAndLoad();
+}
+
+// Courses lazy loading functions
+function renderCourseRow(course) {
+    return `
+        <tr data-course-id="${course.id}">
+            <td>${course.name}</td>
+            <td>
+                <div class="procedure-pills">
+                    ${course.procedures && course.procedures.length > 0 
+                        ? course.procedures.map(proc => `<span class="pill">${proc}</span>`).join('')
+                        : '<span class="pill" style="background:#f8d7da;color:#721c24;">No procedures</span>'}
+                </div>
+            </td>
+            <td>${course.osce_types.join(', ')}</td>
+            <td>
+                <div class="actions">
+                    <button class="btn-icon btn-danger" onclick="removeCourse('${course.id}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `;
+}
+
+function loadMoreCourses() {
+    if (courseLoading || allCoursesLoaded) return;
+    courseLoading = true;
+    
+    // Show loading spinner and hide button
+    document.getElementById('coursesLoadingSpinner').style.display = 'flex';
+    document.getElementById('showMoreCoursesBtn').style.display = 'none';
+
+    const batchId = '{{ batch.id }}';
+    const params = new URLSearchParams({
+        offset: courseOffset,
+        limit: courseLimit,
+        search: currentCourseSearch
+    });
+
+    fetch(`/api/batches/${batchId}/courses-paginated/?${params.toString()}`)
+        .then(response => response.json())
+        .then(data => {
+            const courses = data.courses || [];
+            if (courses.length < courseLimit) {
+                allCoursesLoaded = true;
+                document.getElementById('showMoreCoursesBtn').style.display = 'none';
+            }
+            courseOffset += courses.length;
+            const tbody = document.getElementById('coursesTableBody');
+            courses.forEach(course => {
+                tbody.insertAdjacentHTML('beforeend', renderCourseRow(course));
+            });
+            if (courseOffset === 0 && courses.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#666;">No courses found</td></tr>`;
+                document.getElementById('showMoreCoursesBtn').style.display = 'none';
+            } else if (!allCoursesLoaded) {
+                document.getElementById('showMoreCoursesBtn').style.display = 'block';
+            }
+        })
+        .finally(() => {
+            courseLoading = false;
+            document.getElementById('coursesLoadingSpinner').style.display = 'none';
+        });
+}
+
+function resetCoursesAndLoad() {
+    courseOffset = 0;
+    allCoursesLoaded = false;
+    document.getElementById('coursesTableBody').innerHTML = '';
+    document.getElementById('showMoreCoursesBtn').style.display = 'none';
+    document.getElementById('coursesLoadingSpinner').style.display = 'flex';
+    loadMoreCourses();
+}
+
+function filterCoursesTable(searchText) {
+    currentCourseSearch = searchText || '';
+    resetCoursesAndLoad();
+}
+
+// Initialize data loading
+document.addEventListener('DOMContentLoaded', function() {
+    // Load initial data based on active tab
+    const activeTab = document.querySelector('.tab-item.active');
+    if (activeTab) {
+        const tabName = activeTab.getAttribute('data-tab');
+        if (tabName === 'learners') {
+            resetLearnersAndLoad();
+        } else if (tabName === 'courses') {
+            resetCoursesAndLoad();
+        }
+    } else {
+        // Default to learners tab
+        resetLearnersAndLoad();
+    }
+});
 
 // Batch Name Edit Functions
 function enableBatchNameEdit() {
@@ -1067,9 +1256,9 @@ function saveBatchName() {
             cancelBatchNameEdit();
             
             // Show success message
-            showSuccessMessage('Batch name updated successfully!');
+            showSuccess('Batch name updated successfully!');
         } else {
-            alert('Error updating batch name: ' + data.error);
+            showError('Error updating batch name: ' + data.error);
             // Reset input to original value
             input.value = originalName;
         }
@@ -1086,28 +1275,45 @@ function saveBatchName() {
     });
 }
 
-function showSuccessMessage(message) {
-    // Create a temporary success message
-    const successDiv = document.createElement('div');
-    successDiv.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #38a169;
-        color: white;
-        padding: 12px 20px;
-        border-radius: 6px;
-        z-index: 10000;
-        font-weight: 500;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    `;
-    successDiv.textContent = message;
-    document.body.appendChild(successDiv);
+function showError(message) {
+    console.log("showError", message);
+    // Create a simple notification
+    const notification = $(`
+        <div class="alert alert-danger alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-exclamation-triangle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
     
-    // Remove after 3 seconds
-    setTimeout(() => {
-        successDiv.remove();
-    }, 3000);
+    $('body').append(notification);
+    
+    // Auto remove after 5 seconds
+    setTimeout(function() {
+        notification.alert('close');
+    }, 2000);
+}
+
+function showSuccess(message) {
+    // Create a simple notification
+    const notification = $(`
+        <div class="alert alert-success alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-check-circle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    
+    $('body').append(notification);
+    
+    // Auto remove after 5 seconds
+    setTimeout(function() {
+        notification.alert('close');
+    }, 2000);
 }
 
 function getCookie(name) {
@@ -1494,6 +1700,39 @@ function removeCourse(courseId) {
     }
 }
 
+function removeLearner(learnerId) {
+    if (confirm('Are you sure you want to remove this learner from the batch?')) {
+        // Prepare form data
+        const formData = {
+            learnerIds: [learnerId]
+        };
+        
+        // Submit to API
+        fetch(`/api/batches/{{ batch.id }}/remove-learners/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Learner removed successfully!');
+                // Reload the page to show updated data
+                window.location.reload();
+            } else {
+                alert('Error removing learner: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error removing learner');
+        });
+    }
+}
+
 function deleteBatch() {
     if (confirm('Are you sure you want to delete this batch? This action cannot be undone.')) {
         fetch(`/api/batches/{{ batch.id }}/delete/`, {
@@ -1506,10 +1745,10 @@ function deleteBatch() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert('Batch deleted successfully!');
+                showSuccess('Batch deleted successfully!');
                 window.location.href = '{% url "batch_management" %}';
             } else {
-                alert('Error deleting batch: ' + data.error);
+                showError('Error deleting batch: ' + data.error);
             }
         })
         .catch(error => {
@@ -1568,26 +1807,6 @@ function displayBatchCourses(courses) {
         `;
         tableBody.appendChild(row);
     });
-}
-
-// Load courses when courses tab is clicked
-function switchTab(tabName) {
-    // Remove active class from all tabs and panels
-    document.querySelectorAll('.tab-item').forEach(tab => {
-        tab.classList.remove('active');
-    });
-    document.querySelectorAll('.tab-panel').forEach(panel => {
-        panel.classList.remove('active');
-    });
-    
-    // Add active class to selected tab and panel
-    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
-    document.getElementById(`${tabName}-panel`).classList.add('active');
-    
-    // Load courses if courses tab is selected
-    if (tabName === 'courses') {
-        loadBatchCourses();
-    }
 }
 
 // Add keyboard support for batch name editing

@@ -164,88 +164,14 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for institution in institutions %}
-                        <tr>
-                <td>
-                    <div class="institution">
-                        <span>{{ institution.name }}</span>
-                    </div>
-                </td>
-                            <td>{{ institution.group.name|default:"-" }}</td>
-                <td>{{ institution.state|default:"-" }}</td>
-                
-                <td>{{ institution.total_strength|default:"0" }}</td>
-                <td>
-                    {% if institution.unit_head %}
-                    <div class="unit-head">
-                        <span>{{ institution.unit_head.get_full_name }}</span>
-                        <small>{{ institution.unit_head.email }}</small>
-                    </div>
-                    {% else %}
-                    <span class="text-muted">Not Assigned</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <span class="badge {% if institution.is_active %}active{% else %}inactive{% endif %}">
-                        {% if institution.is_active %}Active{% else %}Inactive{% endif %}
-                                </span>
-                            </td>
-                            <td>
-                    <div class="actions">
-                        <a href="javascript:void(0);" class="btn-icon"
-                           onclick="openInstitutionFormPanel('{% url 'institution_edit' institution.pk %}', 'Edit Institution')">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                        <button type="button" 
-                                class="btn-icon btn-danger" 
-                                data-name="{{ institution.name }}"
-                                data-url="{% url 'institution_delete' institution.pk %}"
-                                onclick="confirmDelete(this)"
-                                title="Delete">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                <td colspan="7" class="empty">
-                    <i class="fas fa-school"></i>
-                    <p>No institutions found</p>
-                    <a href="javascript:void(0);" class="btn btn-primary"
-                                onclick="openInstitutionFormPanel('{% url 'institution_create' %}', 'Add Institution')">
-                     Add New Institution
-                    </a>
-                </td>
-                        </tr>
-                        {% endfor %}
+        <tbody id="institutionTableBody">
+            <!-- Institution rows will be loaded here by JS -->
                     </tbody>
                 </table>
+    <div style="text-align:center; margin: 20px 0;">
+        <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreInstitutions()">Show More</button>
             </div>
-
-<!-- Pagination -->
-            {% if institutions.has_other_pages %}
-<div class="pagination">
-                    {% if institutions.has_previous %}
-    <a href="?page={{ institutions.previous_page_number }}" class="btn-page">
-        <i class="fas fa-chevron-left"></i>
-    </a>
-                    {% endif %}
-
-                    {% for num in institutions.paginator.page_range %}
-    <a href="?page={{ num }}" class="btn-page {% if institutions.number == num %}active{% endif %}">
-        {{ num }}
-    </a>
-                    {% endfor %}
-
-                    {% if institutions.has_next %}
-    <a href="?page={{ institutions.next_page_number }}" class="btn-page">
-        <i class="fas fa-chevron-right"></i>
-    </a>
-            {% endif %}
 </div>
-{% endif %}
 
 <!-- Delete Modal -->
 <div class="modal fade" id="deleteModal" tabindex="-1">
@@ -420,6 +346,88 @@ document.addEventListener('submit', function(e) {
             }
         });
     }
+});
+
+let offset = 0;
+const limit = 10;
+let loading = false;
+let allLoaded = false;
+
+function renderInstitutionRow(inst) {
+    return `
+    <tr>
+        <td><div class="institution"><span>${inst.name}</span></div></td>
+        <td>${inst.group}</td>
+        <td>${inst.state}</td>
+        <td>${inst.total_strength}</td>
+        <td>
+            ${inst.unit_head ? `<div class="unit-head"><span>${inst.unit_head}</span><small>${inst.unit_head_email}</small></div>` : '<span class="text-muted">Not Assigned</span>'}
+        </td>
+        <td>
+            <span class="badge ${inst.is_active ? 'active' : 'inactive'}">
+                ${inst.is_active ? 'Active' : 'Inactive'}
+            </span>
+        </td>
+        <td>
+            <div class="actions">
+                <a href="javascript:void(0);" class="btn-icon"
+                   onclick="openInstitutionFormPanel('${inst.edit_url}', 'Edit Institution')">
+                    <i class="fas fa-edit"></i>
+                </a>
+                <button type="button" 
+                        class="btn-icon btn-danger" 
+                        data-name="${inst.name}"
+                        data-url="${inst.delete_url}"
+                        onclick="confirmDelete(this)"
+                        title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </td>
+    </tr>
+    `;
+}
+
+function loadMoreInstitutions() {
+    if (loading || allLoaded) return;
+    loading = true;
+    document.getElementById('showMoreBtn').innerText = 'Loading...';
+    fetch(`/onboarding/institutions/api/?offset=${offset}&limit=${limit}`)
+        .then(response => response.json())
+        .then(data => {
+            const institutions = data.institutions;
+            if (institutions.length < limit) {
+                allLoaded = true;
+                document.getElementById('showMoreBtn').style.display = 'none';
+            }
+            offset += institutions.length;
+            const tbody = document.getElementById('institutionTableBody');
+            institutions.forEach(inst => {
+                tbody.insertAdjacentHTML('beforeend', renderInstitutionRow(inst));
+            });
+            // If no institutions at all, show empty state
+            if (offset === 0 && institutions.length === 0) {
+                tbody.innerHTML = `<tr>
+                    <td colspan="7" class="empty">
+                        <i class="fas fa-school"></i>
+                        <p>No institutions found</p>
+                        <a href="javascript:void(0);" class="btn btn-primary"
+                           onclick="openInstitutionFormPanel('{% url 'institution_create' %}', 'Add Institution')">
+                         Add New Institution
+                        </a>
+                    </td>
+                </tr>`;
+                document.getElementById('showMoreBtn').style.display = 'none';
+            }
+        })
+        .finally(() => {
+            loading = false;
+            if (!allLoaded) document.getElementById('showMoreBtn').innerText = 'Show More';
+        });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadMoreInstitutions();
 });
 </script>
 {% endblock %} 

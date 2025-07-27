@@ -163,85 +163,14 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for hospital in hospitals %}
-                        <tr>
-                <td>
-                    <div class="institution">
-                        <span>{{ hospital.name }}</span>
-                    </div>
-                </td>
-                            <td>{{ hospital.group.name|default:"-" }}</td>
-                <td>{{ hospital.state|default:"-" }}</td>
-                <td>{{ hospital.nurse_strength|default:"0" }}</td>
-                <td>
-                    {% if hospital.unit_head %}
-                    <div class="unit-head">
-                        <span>{{ hospital.unit_head.get_full_name }}</span>
-                        <small>{{ hospital.unit_head.email }}</small>
-                    </div>
-                    {% else %}
-                    <span class="text-muted">Not Assigned</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <span class="badge {% if hospital.is_active %}active{% else %}inactive{% endif %}">
-                                    {{ hospital.is_active|yesno:"Active,Inactive" }}
-                                </span>
-                            </td>
-                            <td>
-                    <div class="actions">
-                        <a href="javascript:void(0);" class="btn-icon"
-                           onclick="openHospitalFormPanel('{% url 'hospital_edit' hospital.pk %}', 'Edit Hospital')">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                        <button type="button" 
-                                class="btn-icon btn-danger" 
-                                data-name="{{ hospital.name }}"
-                                data-url="{% url 'hospital_delete' hospital.pk %}"
-                                onclick="confirmDelete(this)"
-                                title="Delete">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                <td colspan="7" class="empty">
-                    <i class="fas fa-hospital"></i>
-                    <p>No hospitals found</p>
-                    <a href="javascript:void(0);" onclick="openHospitalFormPanel('{% url 'hospital_create' %}', 'Add Hospital')" class="btn btn-primary">Add New Hospital</a>
-                    
-                </td>
-                        </tr>
-                        {% endfor %}
+                    <tbody id="hospitalTableBody">
+    <!-- Hospital rows will be loaded here by JS -->
                     </tbody>
                 </table>
+<div style="text-align:center; margin: 20px 0;">
+    <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreHospitals()">Show More</button>
             </div>
-
-<!-- Pagination -->
-            {% if hospitals.has_other_pages %}
-<div class="pagination">
-                    {% if hospitals.has_previous %}
-    <a href="?page={{ hospitals.previous_page_number }}" class="btn-page">
-        <i class="fas fa-chevron-left"></i>
-    </a>
-                    {% endif %}
-
-                    {% for num in hospitals.paginator.page_range %}
-    <a href="?page={{ num }}" class="btn-page {% if hospitals.number == num %}active{% endif %}">
-        {{ num }}
-    </a>
-                    {% endfor %}
-
-                    {% if hospitals.has_next %}
-    <a href="?page={{ hospitals.next_page_number }}" class="btn-page">
-        <i class="fas fa-chevron-right"></i>
-    </a>
-            {% endif %}
 </div>
-{% endif %}
 
 <!-- Delete Modal -->
 <div class="modal fade" id="deleteModal" tabindex="-1">
@@ -418,6 +347,83 @@ document.addEventListener('submit', function(e) {
             }
         });
     }
+});
+
+let offset = 0;
+const limit = 10;
+let loading = false;
+let allLoaded = false;
+
+function renderHospitalRow(hosp) {
+    return `
+    <tr>
+        <td><div class="institution"><span>${hosp.name}</span></div></td>
+        <td>${hosp.group}</td>
+        <td>${hosp.state}</td>
+        <td>${hosp.nurse_strength}</td>
+        <td>
+            ${hosp.unit_head ? `<div class=\"unit-head\"><span>${hosp.unit_head}</span><small>${hosp.unit_head_email}</small></div>` : '<span class="text-muted">Not Assigned</span>'}
+        </td>
+        <td>
+            <span class="badge ${hosp.is_active ? 'active' : 'inactive'}">
+                ${hosp.is_active ? 'Active' : 'Inactive'}
+            </span>
+        </td>
+        <td>
+            <div class="actions">
+                <a href="javascript:void(0);" class="btn-icon"
+                   onclick="openHospitalFormPanel('${hosp.edit_url}', 'Edit Hospital')">
+                    <i class="fas fa-edit"></i>
+                </a>
+                <button type="button" 
+                        class="btn-icon btn-danger" 
+                        data-name="${hosp.name}"
+                        data-url="${hosp.delete_url}"
+                        onclick="confirmDelete(this)"
+                        title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </td>
+    </tr>
+    `;
+}
+
+function loadMoreHospitals() {
+    if (loading || allLoaded) return;
+    loading = true;
+    document.getElementById('showMoreBtn').innerText = 'Loading...';
+    fetch(`/onboarding/hospitals/api/?offset=${offset}&limit=${limit}`)
+        .then(response => response.json())
+        .then(data => {
+            const hospitals = data.hospitals;
+            if (hospitals.length < limit) {
+                allLoaded = true;
+                document.getElementById('showMoreBtn').style.display = 'none';
+            }
+            offset += hospitals.length;
+            const tbody = document.getElementById('hospitalTableBody');
+            hospitals.forEach(hosp => {
+                tbody.insertAdjacentHTML('beforeend', renderHospitalRow(hosp));
+            });
+            if (offset === 0 && hospitals.length === 0) {
+                tbody.innerHTML = `<tr>
+                    <td colspan="7" class="empty">
+                        <i class="fas fa-hospital"></i>
+                        <p>No hospitals found</p>
+                        <a href="javascript:void(0);" onclick="openHospitalFormPanel('{% url 'hospital_create' %}', 'Add Hospital')" class="btn btn-primary">Add New Hospital</a>
+                    </td>
+                </tr>`;
+                document.getElementById('showMoreBtn').style.display = 'none';
+            }
+        })
+        .finally(() => {
+            loading = false;
+            if (!allLoaded) document.getElementById('showMoreBtn').innerText = 'Show More';
+        });
+}
+document.addEventListener('DOMContentLoaded', function() {
+    loadMoreHospitals();
 });
 
 </script>

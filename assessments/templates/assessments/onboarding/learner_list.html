@@ -146,91 +146,14 @@
                 <th>Actions</th>
             </tr>
         </thead>
-        <tbody>
-            {% for learner in learners %}
-            <tr>
-                <td>
-                    <div class="institution">
-                        <span>{{ learner.learner_user.full_name }}</span>
-                    </div>
-                </td>
-                <td>{{ learner.learner_user.email }}</td>
-                <td>{{ learner.learner_user.phone_number }}</td>
-                <td>{{ learner.get_learner_type_display }}</td>
-                <td>
-                    {% if learner.learner_type == 'student' %}
-                        {{ learner.college.name|default:"-" }}
-                    {% else %}
-                        {{ learner.hospital.name|default:"-" }}
-                    {% endif %}
-                </td>
-                <td>
-                    {% if learner.skillathon_event %}
-                        {{ learner.skillathon_event.name }}
-                    {% else %}
-                        -
-                    {% endif %}
-                </td>
-                <td>
-                    <span class="badge {% if learner.is_active %}active{% else %}inactive{% endif %}">
-                                    {{ learner.is_active|yesno:"Active,Inactive" }}
-                                </span>
-                            </td>
-                            <td>
-                    <div class="actions">
-                        <a href="javascript:void(0);" class="btn-icon"
-                        onclick="openLearnerFormPanel('{% url 'learner_edit' learner.pk %}', 'Edit Learner')">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                        <button type="button" 
-                                class="btn-icon btn-danger" 
-                                data-name="{{ learner.full_name }}"
-                                data-url="{% url 'learner_delete' learner.pk %}"
-                                onclick="confirmDelete(this)"
-                                title="Delete">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                <td colspan="8" class="empty">
-                    <i class="fas fa-user-graduate"></i>
-                    <p>No learners found</p>
-                    <a href="javascript:void(0);" class="btn btn-primary"
-           onclick="openLearnerFormPanel('{% url 'learner_create' %}', 'Add Learner')">
-            Add Learner
-                    </a>
-                </td>
-                        </tr>
-                        {% endfor %}
+        <tbody id="learnerTableBody">
+            <!-- Learner rows will be loaded here by JS -->
                     </tbody>
                 </table>
+    <div style="text-align:center; margin: 20px 0;">
+    <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreLearners()">Show More</button>
             </div>
-
-<!-- Pagination -->
-            {% if learners.has_other_pages %}
-<div class="pagination">
-                    {% if learners.has_previous %}
-    <a href="?page={{ learners.previous_page_number }}" class="btn-page">
-        <i class="fas fa-chevron-left"></i>
-    </a>
-                    {% endif %}
-
-                    {% for num in learners.paginator.page_range %}
-    <a href="?page={{ num }}" class="btn-page {% if learners.number == num %}active{% endif %}">
-        {{ num }}
-    </a>
-                    {% endfor %}
-
-                    {% if learners.has_next %}
-    <a href="?page={{ learners.next_page_number }}" class="btn-page">
-        <i class="fas fa-chevron-right"></i>
-    </a>
-            {% endif %}
         </div>
-{% endif %}
 
 <!-- Delete Modal -->
 <div class="modal fade" id="deleteModal" tabindex="-1">
@@ -2379,6 +2302,88 @@ document.addEventListener('submit', function(e) {
             }
         });
     }
+});
+
+let offset = 0;
+const limit = 10;
+let loading = false;
+let allLoaded = false;
+
+function renderLearnerRow(learner) {
+    return `
+    <tr>
+        <td><div class="institution"><span>${learner.full_name}</span></div></td>
+        <td>${learner.email}</td>
+        <td>${learner.phone_number}</td>
+        <td>${learner.learner_type}</td>
+        <td>${learner.institution}</td>
+        <td>${learner.skillathon}</td>
+        <td>
+            <span class="badge ${learner.is_active ? 'active' : 'inactive'}">
+                ${learner.is_active ? 'Active' : 'Inactive'}
+            </span>
+        </td>
+        <td>
+            <div class="actions">
+                <a href="javascript:void(0);" class="btn-icon"
+                   onclick="openLearnerFormPanel('${learner.edit_url}', 'Edit Learner')">
+                    <i class="fas fa-edit"></i>
+                </a>
+                <button type="button" 
+                        class="btn-icon btn-danger" 
+                        data-name="${learner.full_name}"
+                        data-url="${learner.delete_url}"
+                        onclick="confirmDelete(this)"
+                        title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </td>
+    </tr>
+    `;
+}
+
+function loadMoreLearners() {
+    if (loading || allLoaded) return;
+    loading = true;
+    document.getElementById('showMoreBtn').innerText = 'Loading...';
+    fetch(`/onboarding/learners/api/?offset=${offset}&limit=${limit}`)
+        .then(response => response.json())
+        .then(data => {
+            const learners = data.learners;
+            if (learners.length < limit) {
+                allLoaded = true;
+                document.getElementById('showMoreBtn').style.display = 'none';
+            }
+            offset += learners.length;
+            const tbody = document.getElementById('learnerTableBody');
+            learners.forEach(learner => {
+                tbody.insertAdjacentHTML('beforeend', renderLearnerRow(learner));
+            });
+            // If no learners at all, show empty state
+            if (offset === 0 && learners.length === 0) {
+                tbody.innerHTML = `<tr>
+                    <td colspan="8" class="empty">
+                        <i class="fas fa-user-graduate"></i>
+                        <p>No learners found</p>
+                        <a href="javascript:void(0);" class="btn btn-primary"
+                           onclick="openLearnerFormPanel('{% url 'learner_create' %}', 'Add Learner')">
+                            Add Learner
+                        </a>
+                    </td>
+                </tr>`;
+                document.getElementById('showMoreBtn').style.display = 'none';
+            }
+        })
+        .finally(() => {
+            loading = false;
+            if (!allLoaded) document.getElementById('showMoreBtn').innerText = 'Show More';
+        });
+}
+
+// Initial load
+document.addEventListener('DOMContentLoaded', function() {
+    loadMoreLearners();
 });
 </script>
 {% endblock %} 
