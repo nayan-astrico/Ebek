@@ -26,7 +26,6 @@ from django.urls import reverse
 from assessments.onboarding_views import *
 from collections import defaultdict
 
-
 logger = logging.getLogger(__name__)
 
 # Initialize Firestore client

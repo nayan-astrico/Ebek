@@ -102,5 +102,7 @@ urlpatterns = [
     path('onboarding/hospitals/api/', views.hospital_list_api, name='hospital_list_api'),
     path('onboarding/groups/api/', views.group_list_api, name='group_list_api'),
     path('onboarding/assessors/api/', views.assessor_list_api, name='assessor_list_api'),
+    path('onboarding/assessors/get-institutions-hospitals/', views.get_institutions_hospitals, name='get_institutions_hospitals'),
     path('onboarding/skillathons/api/', views.skillathon_list_api, name='skillathon_list_api'),
+    path('onboarding/sync-strength-counts/', views.sync_strength_counts, name='sync_strength_counts'),
 ]

@@ -189,7 +189,19 @@ def on_institute_save(sender, instance, created, **kwargs):
     data = {
         "instituteName": instance.name,
         "created_at": instance.created_at.isoformat() if instance.created_at else None,
-        "onboarding_type": instance.onboarding_type
+        "onboarding_type": instance.onboarding_type,
+        "is_active": instance.is_active,  # Add is_active field
+        "state": instance.state,
+        "district": instance.district,
+        "address": instance.address,
+        "pin_code": instance.pin_code,
+        "total_strength": instance.total_strength,
+        "group_id": str(instance.group.id) if instance.group else None,
+        "group_name": instance.group.name if instance.group else None,
+        "unit_head_name": instance.unit_head.full_name if instance.unit_head else None,
+        "unit_head_email": instance.unit_head.email if instance.unit_head else None,
+        "unit_head_phone": instance.unit_head.phone_number if instance.unit_head else None,
+        "updated_at": instance.updated_at.isoformat() if instance.updated_at else None
     }
 
     db.collection("InstituteNames").document(str(instance.id)).set(data)
@@ -205,6 +217,8 @@ def on_institute_save(sender, instance, created, **kwargs):
             # Update the first matching document
             user_data = {
                 "institute": instance.name,
+                "institute_id": str(instance.id),
+                "institute_active": instance.is_active,  # Add institute active status
             }
             docs[0].reference.update(user_data)
 
@@ -255,7 +269,20 @@ def on_hospital_save(sender, instance, created, **kwargs):
     data = {
         "hospitalName": instance.name,
         "created_at": instance.created_at.isoformat() if instance.created_at else None,
-        "onboarding_type": instance.onboarding_type
+        "onboarding_type": instance.onboarding_type,
+        "is_active": instance.is_active,  # Add is_active field
+        "state": instance.state,
+        "district": instance.district,
+        "address": instance.address,
+        "pin_code": instance.pin_code,
+        "nurse_strength": instance.nurse_strength,
+        "number_of_beds": instance.number_of_beds,
+        "group_id": str(instance.group.id) if instance.group else None,
+        "group_name": instance.group.name if instance.group else None,
+        "unit_head_name": instance.unit_head.full_name if instance.unit_head else None,
+        "unit_head_email": instance.unit_head.email if instance.unit_head else None,
+        "unit_head_phone": instance.unit_head.phone_number if instance.unit_head else None,
+        "updated_at": instance.updated_at.isoformat() if instance.updated_at else None
     }
     db.collection("HospitalNames").document(str(instance.id)).set(data)
     
@@ -270,6 +297,8 @@ def on_hospital_save(sender, instance, created, **kwargs):
             # Update the first matching document
             user_data = {
                 "hospital": instance.name,
+                "hospital_id": str(instance.id),
+                "hospital_active": instance.is_active,  # Add hospital active status
             }
             docs[0].reference.update(user_data)
 
@@ -305,55 +334,94 @@ def on_hospital_delete(sender, instance, **kwargs):
 # --- Group Sync ---
 @receiver(post_save, sender=Group)
 def on_group_save(sender, instance, created, **kwargs):
-    data = {
-        "name": instance.name,
-        "type": instance.type
-    }
-    
-    db.collection("Groups").document(str(instance.id)).set(data)
-    
-    # Update group head's user record with group name
-    if instance.group_head:
-        # Find user document by email
-        users_ref = db.collection("Users")
-        query = users_ref.where("emailID", "==", instance.group_head.email).limit(1)
-        docs = query.get()
+    try:
+        data = {
+            "name": instance.name,
+            "type": instance.type,
+            "is_active": instance.is_active,  # Add is_active field
+            "created_at": instance.created_at.isoformat() if instance.created_at else None,
+            "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
+            "group_head_name": instance.group_head.full_name if instance.group_head else None,
+            "group_head_email": instance.group_head.email if instance.group_head else None,
+            "group_head_phone": instance.group_head.phone_number if instance.group_head else None,
+        }
         
-        if docs:
-            # Update the first matching document
-            user_data = {
-                "group": instance.name
-            }
-            docs[0].reference.update(user_data)
+        db.collection("Groups").document(str(instance.id)).set(data)
+        print(f"✓ Group synced to Firebase: {instance.name} (ID: {instance.id})")
+        
+        # Update group head's user record with group name and active status
+        if instance.group_head:
+            try:
+                # Find user document by email
+                users_ref = db.collection("Users")
+                query = users_ref.where("emailID", "==", instance.group_head.email).limit(1)
+                docs = query.get()
+                
+                if docs:
+                    # Update the first matching document
+                    user_data = {
+                        "group": instance.name,
+                        "group_active": instance.is_active,  # Add group active status
+                    }
+                    docs[0].reference.update(user_data)
+                    print(f"✓ Updated user record for group head: {instance.group_head.email}")
+                else:
+                    print(f"⚠ User document not found for group head: {instance.group_head.email}")
+            except Exception as e:
+                print(f"✗ Error updating user record for group head {instance.group_head.email}: {str(e)}")
+                
+    except Exception as e:
+        print(f"✗ Error syncing group {instance.name} (ID: {instance.id}) to Firebase: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 @receiver(post_delete, sender=Group)
 def on_group_delete(sender, instance, **kwargs):
-    # Delete from Firestore
-    db.collection("Groups").document(str(instance.id)).delete()
-    
-    # Delete group head user if exists
-    if instance.group_head:
-        # Delete from Firebase Auth
-        try:
-            fb_user = auth.get_user_by_email(instance.group_head.email)
-            auth.delete_user(fb_user.uid)
-        except auth.UserNotFoundError:
-            pass
-        
+    try:
         # Delete from Firestore
-        users_ref = db.collection("Users")
-        query = users_ref.where("emailID", "==", instance.group_head.email).limit(1)
-        docs = query.get()
-        if docs:
-            docs[0].reference.delete()
+        db.collection("Groups").document(str(instance.id)).delete()
+        print(f"✓ Group deleted from Firebase: {instance.name} (ID: {instance.id})")
         
-        # Delete from Django admin
-        User = get_user_model()
-        try:
-            user = User.objects.get(email=instance.group_head.email)
-            user.delete()
-        except User.DoesNotExist:
-            pass
+        # Delete group head user if exists
+        if instance.group_head:
+            try:
+                # Delete from Firebase Auth
+                fb_user = auth.get_user_by_email(instance.group_head.email)
+                auth.delete_user(fb_user.uid)
+                print(f"✓ Deleted group head from Firebase Auth: {instance.group_head.email}")
+            except auth.UserNotFoundError:
+                print(f"⚠ Group head not found in Firebase Auth: {instance.group_head.email}")
+            except Exception as e:
+                print(f"✗ Error deleting group head from Firebase Auth {instance.group_head.email}: {str(e)}")
+            
+            try:
+                # Delete from Firestore
+                users_ref = db.collection("Users")
+                query = users_ref.where("emailID", "==", instance.group_head.email).limit(1)
+                docs = query.get()
+                if docs:
+                    docs[0].reference.delete()
+                    print(f"✓ Deleted group head from Firestore: {instance.group_head.email}")
+                else:
+                    print(f"⚠ Group head not found in Firestore: {instance.group_head.email}")
+            except Exception as e:
+                print(f"✗ Error deleting group head from Firestore {instance.group_head.email}: {str(e)}")
+            
+            try:
+                # Delete from Django admin
+                User = get_user_model()
+                user = User.objects.get(email=instance.group_head.email)
+                user.delete()
+                print(f"✓ Deleted group head from Django: {instance.group_head.email}")
+            except User.DoesNotExist:
+                print(f"⚠ Group head not found in Django: {instance.group_head.email}")
+            except Exception as e:
+                print(f"✗ Error deleting group head from Django {instance.group_head.email}: {str(e)}")
+                
+    except Exception as e:
+        print(f"✗ Error deleting group {instance.name} (ID: {instance.id}) from Firebase: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 # --- Learner Sync ---
 @receiver(post_save, sender=Learner)
@@ -416,53 +484,88 @@ def on_learner_delete(sender, instance, **kwargs):
 # --- Assessor Sync ---
 @receiver(post_save, sender=Assessor)
 def on_assessor_save(sender, instance, created, **kwargs):
-    if instance.assessor_user:
-        # Find user document by email
-        users_ref = db.collection("Users")
-        query = users_ref.where("emailID", "==", instance.assessor_user.email).limit(1)
-        docs = query.get()
+    try:
+        print(f"Syncing assessor to Firebase: {instance.assessor_user.email if instance.assessor_user else 'No user'}")
         
-        if docs:
-            # Update the first matching document with all assessor data
-            user_data = {
-                "assessor_type": instance.assessor_type,
-                "qualification": instance.qualification,
-                "designation": instance.designation,
-                "specialization": instance.specialization,
-                "is_verifier": instance.is_verifier
-            }
+        if instance.assessor_user:
+            # Find user document by email
+            users_ref = db.collection("Users")
+            query = users_ref.where("emailID", "==", instance.assessor_user.email).limit(1)
+            docs = query.get()
             
-            # Add institution/hospital specific data
-            if instance.institution:
-                user_data["institution"] = instance.institution.name
-            if instance.hospital:
-                user_data["hospital"] = instance.hospital.name
+            if docs:
+                # Update the first matching document with all assessor data
+                user_data = {
+                    "assessor_type": instance.assessor_type,
+                    "qualification": instance.qualification,
+                    "designation": instance.designation,
+                    "specialization": instance.specialization,
+                    "is_verifier": instance.is_verifier,
+                    "assessor_active": instance.is_active,
+                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
+                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
+                }
+                
+                # Add institution/hospital specific data
+                if instance.institution:
+                    user_data["institution"] = instance.institution.name
+                if instance.hospital:
+                    user_data["hospital"] = instance.hospital.name
+                
+                # Add internal/external specific data
+                if instance.assessor_type == 'internal':
+                    user_data["staff_id"] = instance.staff_id
+                    user_data["branch"] = instance.branch
+                else:  # external
+                    user_data["location"] = instance.location
+                
+                docs[0].reference.update(user_data)
+                print(f"✓ Successfully synced assessor: {instance.assessor_user.email}")
+            else:
+                print(f"⚠ Warning: No user document found for assessor: {instance.assessor_user.email}")
+        else:
+            print(f"⚠ Warning: Assessor has no associated user")
             
-            # Add internal/external specific data
-            if instance.assessor_type == 'internal':
-                user_data["staff_id"] = instance.staff_id
-                user_data["branch"] = instance.branch
-            else:  # external
-                user_data["location"] = instance.location
-            
-            docs[0].reference.update(user_data)
+    except Exception as e:
+        print(f"✗ Error syncing assessor to Firebase: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 @receiver(post_delete, sender=Assessor)
 def on_assessor_delete(sender, instance, **kwargs):
-    if instance.assessor_user:
-        # Delete from Firebase Auth
-        try:
-            fb_user = auth.get_user_by_email(instance.assessor_user.email)
-            auth.delete_user(fb_user.uid)
-        except auth.UserNotFoundError:
-            pass
+    try:
+        print(f"Deleting assessor from Firebase: {instance.assessor_user.email if instance.assessor_user else 'No user'}")
         
-        # Delete from Firestore
-        users_ref = db.collection("Users")
-        query = users_ref.where("emailID", "==", instance.assessor_user.email).limit(1)
-        docs = query.get()
-        if docs:
-            docs[0].reference.delete()
+        if instance.assessor_user:
+            # Delete from Firebase Auth
+            try:
+                fb_user = auth.get_user_by_email(instance.assessor_user.email)
+                auth.delete_user(fb_user.uid)
+                print(f"✓ Successfully deleted assessor from Firebase Auth: {instance.assessor_user.email}")
+            except auth.UserNotFoundError:
+                print(f"⚠ Warning: User not found in Firebase Auth: {instance.assessor_user.email}")
+            except Exception as e:
+                print(f"✗ Error deleting from Firebase Auth: {str(e)}")
+            
+            # Delete from Firestore
+            try:
+                users_ref = db.collection("Users")
+                query = users_ref.where("emailID", "==", instance.assessor_user.email).limit(1)
+                docs = query.get()
+                if docs:
+                    docs[0].reference.delete()
+                    print(f"✓ Successfully deleted assessor from Firestore: {instance.assessor_user.email}")
+                else:
+                    print(f"⚠ Warning: No user document found in Firestore: {instance.assessor_user.email}")
+            except Exception as e:
+                print(f"✗ Error deleting from Firestore: {str(e)}")
+        else:
+            print(f"⚠ Warning: Assessor has no associated user")
+            
+    except Exception as e:
+        print(f"✗ Error deleting assessor from Firebase: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 def batch_sync_users_to_firestore(users):
     try:

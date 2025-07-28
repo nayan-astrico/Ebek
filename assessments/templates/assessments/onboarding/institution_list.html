@@ -21,16 +21,18 @@
 <!-- Search and Filter Bar -->
 <div class="search-filter-bar">
     <div class="search-box">
-        <i class="fas fa-search"></i>
-        <input type="text" placeholder="Search institutions...">
+        <input type="text" 
+               placeholder="Search institutions..." 
+               value="{{ search_query }}"
+               id="institutionSearchInput"
+               oninput="filterInstitutions(this.value)">
     </div>
     <button class="btn-filter" onclick="toggleFilterPanel()">
         <i class="fas fa-filter"></i>
-        Filters
+        <span>Filters</span>
     </button>
 </div>
 
-<!-- Filter Side Panel -->
 <div class="filter-panel" id="filterPanel">
     <div class="filter-header">
         <h3>Filter Institutions</h3>
@@ -38,18 +40,17 @@
     
     <form method="get" class="filter-form">
         <div class="filter-layout">
-            <!-- Main Filter Types (30%) -->
             <div class="filter-types">
                 <div class="filter-type {% if active_filter == 'group' %}active{% endif %}" 
                      data-filter="group" 
                      onclick="switchFilter('group')">
                     <span>Group</span>
                 </div>
-                <div class="filter-type {% if active_filter == 'institution' %}active{% endif %}" 
+                <!-- <div class="filter-type {% if active_filter == 'institution' %}active{% endif %}" 
                      data-filter="institution" 
                      onclick="switchFilter('institution')">
                     <span>Institution</span>
-                </div>
+                </div> -->
                 <div class="filter-type {% if active_filter == 'state' %}active{% endif %}" 
                      data-filter="state" 
                      onclick="switchFilter('state')">
@@ -151,26 +152,45 @@
 </div>
 
 <!-- Table -->
-    <div class="card">
+<div class="card">
     <table class="table">
-                    <thead>
-                        <tr>
+        <thead>
+            <tr>
                 <th>Institution</th>
-                            <th>Group</th>
+                <th>Group</th>
                 <th>State</th>
                 <th>Learners</th>
-                            <th>Unit Head</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
+                <th>Unit Head</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
         <tbody id="institutionTableBody">
             <!-- Institution rows will be loaded here by JS -->
-                    </tbody>
-                </table>
+        </tbody>
+    </table>
+    
+    <!-- Empty State -->
+    <div id="emptyState" class="empty-state">
+        <div class="empty-state-content">
+            <i class="fas fa-school"></i>
+            <p>No institutions found</p>
+            <a href="javascript:void(0);" class="btn btn-primary"
+               onclick="openInstitutionFormPanel('{% url 'institution_create' %}', 'Add Institution')">
+                Add New Institution
+            </a>
+        </div>
+    </div>
+    
+    <!-- Loading and Show More -->
     <div style="text-align:center; margin: 20px 0;">
-        <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreInstitutions()">Show More</button>
-            </div>
+        <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreInstitutions()">
+            Show More
+        </button>
+        <div id="institutionLoadingSpinner" class="spinner-border text-primary" role="status" style="display: none;">
+            <span class="sr-only">Loading...</span>
+        </div>
+    </div>
 </div>
 
 <!-- Delete Modal -->
@@ -334,28 +354,139 @@ document.addEventListener('submit', function(e) {
                 'X-CSRFToken': getCookie('csrftoken')
             }
         })
-        .then(response => response.text())
+        .then(response => {
+            // Check if response is JSON (error) or HTML (form)
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                return response.json().then(data => {
+                    // Handle JSON error response
+                    throw new Error(data.error || 'An error occurred');
+                });
+            } else {
+                return response.text();
+            }
+        })
         .then(html => {
             if (html.includes('form-group')) {
                 // Form has errors, re-render it
                 document.getElementById('institutionFormContainer').innerHTML = html;
             } else {
-                // Success: close panel and reload page
+                // Success: close panel and show success message
                 closeInstitutionFormPanel();
-                location.reload(); // <--- This reloads the page
+                showSuccess('Institution saved successfully!');
+                // Reload the page after a short delay to show the success message
+                setTimeout(() => {
+                    location.reload();
+                }, 1000);
             }
+        })
+        .catch(error => {
+            // Handle JSON error responses
+            console.error('Error:', error);
+            showError(error.message);
         });
     }
 });
 
+// Add the notification functions
+function showSuccess(message) {
+    // Create a simple notification
+    const notification = $(`
+        <div class="alert alert-success alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-check-circle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    
+    $('body').append(notification);
+    
+    // Auto remove after 5 seconds
+    setTimeout(function() {
+        notification.alert('close');
+    }, 5000);
+}
+
+function showError(message) {
+    // Create a simple notification
+    const notification = $(`
+        <div class="alert alert-danger alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-exclamation-triangle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    
+    $('body').append(notification);
+    
+    // Auto remove after 5 seconds
+    setTimeout(function() {
+        notification.alert('close');
+    }, 5000);
+}
+
+// Global variables for pagination and loading
 let offset = 0;
 const limit = 10;
 let loading = false;
 let allLoaded = false;
+let searchQuery = '';
 
+// Helper function to safely get elements
+function getElement(id) {
+    return document.getElementById(id);
+}
+
+// Helper function to safely set element style
+function setElementStyle(id, property, value) {
+    const element = getElement(id);
+    if (element) {
+        element.style[property] = value;
+    }
+}
+
+// Helper function to safely set element text
+function setElementText(id, text) {
+    const element = getElement(id);
+    if (element) {
+        element.innerText = text;
+    }
+}
+
+// Build query parameters for API calls
+function buildInstitutionQueryParams() {
+    const params = new URLSearchParams({
+        offset: offset,
+        limit: limit
+    });
+    
+    if (searchQuery && searchQuery.trim() !== '') {
+        params.append('search', searchQuery.trim());
+        console.log('DEBUG: Adding search parameter:', searchQuery.trim());
+    }
+    
+    // Add filter parameters
+    const selectedGroups = Array.from(document.querySelectorAll('input[name="group"]:checked')).map(cb => cb.value);
+    const selectedStates = Array.from(document.querySelectorAll('input[name="state"]:checked')).map(cb => cb.value);
+    const selectedStatuses = Array.from(document.querySelectorAll('input[name="status"]:checked')).map(cb => cb.value);
+    
+    selectedGroups.forEach(group => params.append('group', group));
+    selectedStates.forEach(state => params.append('state', state));
+    selectedStatuses.forEach(status => params.append('status', status));
+    
+    console.log('DEBUG: API URL params:', params.toString());
+    return params.toString();
+}
+
+// Render institution row
 function renderInstitutionRow(inst) {
-    return `
-    <tr>
+    const row = document.createElement('tr');
+    row.setAttribute('data-institution-id', inst.id);
+    row.innerHTML = `
         <td><div class="institution"><span>${inst.name}</span></div></td>
         <td>${inst.group}</td>
         <td>${inst.state}</td>
@@ -371,7 +502,8 @@ function renderInstitutionRow(inst) {
         <td>
             <div class="actions">
                 <a href="javascript:void(0);" class="btn-icon"
-                   onclick="openInstitutionFormPanel('${inst.edit_url}', 'Edit Institution')">
+                   onclick="openInstitutionFormPanel('${inst.edit_url}', 'Edit Institution')"
+                   title="Edit">
                     <i class="fas fa-edit"></i>
                 </a>
                 <button type="button" 
@@ -384,49 +516,166 @@ function renderInstitutionRow(inst) {
                 </button>
             </div>
         </td>
-    </tr>
     `;
+    return row;
 }
 
+// Load institutions with improved error handling and loading states
 function loadMoreInstitutions() {
-    if (loading || allLoaded) return;
+    if (loading || allLoaded) return Promise.resolve();
+    
     loading = true;
-    document.getElementById('showMoreBtn').innerText = 'Loading...';
-    fetch(`/onboarding/institutions/api/?offset=${offset}&limit=${limit}`)
+    setElementText('showMoreBtn', 'Loading...');
+    setElementStyle('showMoreBtn', 'disabled', 'true');
+    setElementStyle('institutionLoadingSpinner', 'display', 'inline-block');
+    
+    const apiUrl = `/onboarding/institutions/api/?${buildInstitutionQueryParams()}`;
+    console.log('DEBUG: Making API call to:', apiUrl);
+    
+    return fetch(apiUrl)
         .then(response => response.json())
         .then(data => {
-            const institutions = data.institutions;
-            if (institutions.length < limit) {
+            console.log('DEBUG: API response:', data);
+            
+            const institutions = data.institutions || [];
+            
+            if (institutions.length < limit || data.all_loaded) {
                 allLoaded = true;
-                document.getElementById('showMoreBtn').style.display = 'none';
+                setElementStyle('showMoreBtn', 'display', 'none');
             }
+            
             offset += institutions.length;
-            const tbody = document.getElementById('institutionTableBody');
-            institutions.forEach(inst => {
-                tbody.insertAdjacentHTML('beforeend', renderInstitutionRow(inst));
-            });
-            // If no institutions at all, show empty state
-            if (offset === 0 && institutions.length === 0) {
-                tbody.innerHTML = `<tr>
-                    <td colspan="7" class="empty">
-                        <i class="fas fa-school"></i>
-                        <p>No institutions found</p>
-                        <a href="javascript:void(0);" class="btn btn-primary"
-                           onclick="openInstitutionFormPanel('{% url 'institution_create' %}', 'Add Institution')">
-                         Add New Institution
-                        </a>
-                    </td>
-                </tr>`;
-                document.getElementById('showMoreBtn').style.display = 'none';
+            
+            const tbody = getElement('institutionTableBody');
+            const emptyState = getElement('emptyState');
+            
+            if (tbody) {
+                institutions.forEach(inst => {
+                    tbody.appendChild(renderInstitutionRow(inst));
+                });
+                
+                // Handle empty state
+                if (offset === 0 && institutions.length === 0) {
+                    tbody.innerHTML = '';
+                    if (emptyState) {
+                        emptyState.style.display = 'flex';
+                        emptyState.classList.add('show');
+                    }
+                    setElementStyle('showMoreBtn', 'display', 'none');
+                } else {
+                    if (emptyState) {
+                        emptyState.style.display = 'none';
+                        emptyState.classList.remove('show');
+                    }
+                }
             }
+            
+            // Show/hide "Show More" button
+            if (!allLoaded && institutions.length > 0) {
+                setElementStyle('showMoreBtn', 'display', 'inline-block');
+                setElementText('showMoreBtn', 'Show More');
+                setElementStyle('showMoreBtn', 'disabled', 'false');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading institutions:', error);
+            showError('Failed to load institutions. Please try again.');
         })
         .finally(() => {
             loading = false;
-            if (!allLoaded) document.getElementById('showMoreBtn').innerText = 'Show More';
+            setElementStyle('institutionLoadingSpinner', 'display', 'none');
         });
 }
 
+// Real-time search function (like courses)
+function filterInstitutions(searchText) {
+    searchQuery = searchText || '';
+    console.log('DEBUG: Real-time search triggered with:', searchQuery);
+    resetInstitutionList();
+    loadMoreInstitutions();
+}
+
+// Apply search with reset functionality (for button click)
+function applySearch() {
+    const searchInput = document.querySelector('.search-box input');
+    if (searchInput) {
+        searchQuery = searchInput.value.trim();
+        console.log('DEBUG: Search button clicked, applying search:', searchQuery);
+    }
+    
+    // Reset pagination and data
+    resetInstitutionList();
+    
+    // Load institutions with search
+    loadMoreInstitutions();
+}
+
+// Reset institution list for new searches/filters
+function resetInstitutionList() {
+    offset = 0;
+    allLoaded = false;
+    
+    // Clear existing table content
+    const tbody = getElement('institutionTableBody');
+    if (tbody) {
+        tbody.innerHTML = '';
+    }
+    
+    // Hide empty state initially
+    const emptyState = getElement('emptyState');
+    if (emptyState) {
+        emptyState.style.display = 'none';
+        emptyState.classList.remove('show');
+    }
+    
+    // Reset show more button
+    setElementStyle('showMoreBtn', 'display', 'inline-block');
+    setElementText('showMoreBtn', 'Show More');
+    setElementStyle('showMoreBtn', 'disabled', 'false');
+}
+
+// Apply filters with reset functionality
+function applyFilters() {
+    resetInstitutionList();
+    loadMoreInstitutions();
+}
+
+// Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize search
+    const searchInput = document.querySelector('.search-box input');
+    if (searchInput) {
+        // Set initial search query from URL params
+        const urlParams = new URLSearchParams(window.location.search);
+        searchQuery = urlParams.get('search') || '';
+        searchInput.value = searchQuery;
+        
+        // Add Enter key event listener for search (optional, since we have real-time search)
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                console.log('DEBUG: Enter key pressed, applying search');
+                applySearch();
+            }
+        });
+        
+        // Add search button event listener
+        const searchButton = document.querySelector('.btn-search');
+        if (searchButton) {
+            searchButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('DEBUG: Search button clicked, applying search');
+                applySearch();
+            });
+        }
+    }
+    
+    // Initialize selection counts
+    ['group', 'state', 'status'].forEach(category => {
+        updateSelectionCount(category);
+    });
+    
+    // Load initial data
     loadMoreInstitutions();
 });
 </script>
