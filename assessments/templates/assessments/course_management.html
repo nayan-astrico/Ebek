@@ -1059,26 +1059,18 @@ function resetCoursesAndLoad() {
 // Hook up search and filter to lazy loading
 function filterCourses(searchText) {
     currentSearch = searchText || '';
-    // Get current status filters
     currentStatusFilters = Array.from(document.querySelectorAll('#filterStatusOptions input[type="checkbox"]:checked')).map(cb => cb.value);
     resetCoursesAndLoad();
 }
 
 function applyFilters() {
-    // Get selected statuses
     const selectedStatuses = Array.from(document.querySelectorAll('#filterStatusOptions input[type="checkbox"]:checked')).map(cb => cb.value);
     currentStatusFilters = selectedStatuses;
-    // Get current search
     currentSearch = document.getElementById('searchInput').value;
-    // Update currentFilters for UI
     currentFilters.status = selectedStatuses;
-    // Apply filters to current search
     resetCoursesAndLoad();
-    // Update filter badge
     updateFilterBadge();
-    // Close filter panel
     toggleFilterPanel();
-    // Show filter applied notification
     const totalFilters = currentStatusFilters.length;
     if (totalFilters > 0) {
         showSuccess(`${totalFilters} filter(s) applied successfully!`);

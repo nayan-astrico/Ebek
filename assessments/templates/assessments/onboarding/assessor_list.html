@@ -22,12 +22,15 @@
 <!-- Search and Filter Bar -->
 <div class="search-filter-bar">
     <div class="search-box">
-        <i class="fas fa-search"></i>
-        <input type="text" placeholder="Search assessors...">
+        <input type="text" 
+               placeholder="Search assessors..." 
+               value="{{ search_query }}"
+               id="assessorSearchInput"
+               oninput="filterAssessors(this.value)">
     </div>
     <button class="btn-filter" onclick="toggleFilterPanel()">
         <i class="fas fa-filter"></i>
-        Filters
+        <span>Filters</span>
     </button>
 </div>
 
@@ -100,7 +103,7 @@
         <!-- Filter Actions -->
         <div class="filter-actions">
             <button type="button" class="btn btn-light" onclick="toggleFilterPanel()">Cancel</button>
-            <button type="submit" class="btn btn-primary">Apply filter</button>
+            <button type="button" class="btn btn-primary" onclick="applyFiltersAndClose()">Apply filter</button>
         </div>
     </form>
     </div>
@@ -123,9 +126,20 @@
                         <!-- Assessor rows will be loaded here by JS -->
                     </tbody>
                 </table>
-            <div style="text-align:center; margin: 20px 0;">
+    <div id="assessorLoadingSpinner" class="spinner-border text-primary" role="status" style="display: none; text-align: center; margin: 20px 0;">
+        <span class="sr-only">Loading...</span>
+    </div>
+    <div style="text-align: center; margin: 20px 0;">
                 <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreAssessors()">Show More</button>
             </div>
+    <div id="assessorEmptyState" style="display: none; text-align:center; padding: 48px;">
+        <i class="fas fa-user-tie" style="font-size: 48px; color: #a0aec0; margin-bottom: 16px;"></i>
+        <p style="margin: 0 0 16px; color: #4a5568;">No assessors found</p>
+        <a href="javascript:void(0);" class="btn btn-primary"
+           onclick="openAssessorFormPanel('{% url 'assessor_create' %}', 'Add Assessor')">
+            Add Assessor
+        </a>
+    </div>
             </div>
 
 <!-- Delete Modal -->
@@ -621,11 +635,35 @@ function openAssessorFormPanel(url, title) {
     document.getElementById('formPanelTitle').textContent = title;
     document.getElementById('assessorFormPanel').classList.add('active');
     document.getElementById('sidePanelOverlay').classList.add('active');
-    fetch(url)
+    fetch(url, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
         .then(response => response.text())
         .then(html => {
             console.log(html);
             document.getElementById('assessorFormContainer').innerHTML = html;
+            
+            // After form loads, check if we need to show institution/hospital fields
+            setTimeout(() => {
+                const institutionSelect = document.getElementById('institution-select');
+                const hospitalSelect = document.getElementById('hospital-select');
+                
+                if (institutionSelect && institutionSelect.value) {
+                    // Institution is selected, show institution field
+                    document.getElementById('institution-field').style.display = 'block';
+                    document.getElementById('hospital-field').style.display = 'none';
+                    // Populate with all institutions
+                    loadInstitutionsHospitals('institution');
+                } else if (hospitalSelect && hospitalSelect.value) {
+                    // Hospital is selected, show hospital field
+                    document.getElementById('hospital-field').style.display = 'block';
+                    document.getElementById('institution-field').style.display = 'none';
+                    // Populate with all hospitals
+                    loadInstitutionsHospitals('hospital');
+                }
+            }, 200);
         });
 }
 
@@ -689,6 +727,12 @@ document.addEventListener('DOMContentLoaded', function() {
     ['speciality', 'status'].forEach(category => {
         updateSelectionCount(category);
     });
+    
+    // Load all institutions and hospitals on page load
+    loadAllInstitutionsAndHospitals();
+    
+    // Initialize assessor list
+    loadMoreAssessors();
 });
 
 function filterOptions(category) {
@@ -710,10 +754,44 @@ function updateSelectionCount(category) {
     countElement.textContent = `${count} ${label} selected`;
 }
 
+// Helper functions for DOM manipulation
+function setElementText(elementId, text) {
+    const element = document.getElementById(elementId);
+    if (element) element.textContent = text;
+}
+
+function setElementStyle(elementId, property, value) {
+    const element = document.getElementById(elementId);
+    if (element) element.style[property] = value;
+}
+
 let offset = 0;
 const limit = 10;
 let loading = false;
 let allLoaded = false;
+let currentSearchQuery = '';
+let currentFilters = {};
+
+function buildAssessorQueryParams() {
+    const params = new URLSearchParams();
+    params.append('offset', offset);
+    params.append('limit', limit);
+    
+    if (currentSearchQuery) {
+        params.append('search', currentSearchQuery);
+    }
+    
+    // Add filters
+    Object.keys(currentFilters).forEach(key => {
+        if (currentFilters[key] && currentFilters[key].length > 0) {
+            currentFilters[key].forEach(value => {
+                params.append(key, value);
+            });
+        }
+    });
+    
+    return params.toString();
+}
 
 function renderAssessorRow(assessor) {
     return `
@@ -745,43 +823,267 @@ function renderAssessorRow(assessor) {
 }
 
 function loadMoreAssessors() {
-    if (loading || allLoaded) return;
+    if (loading || allLoaded) return Promise.resolve();
+    
     loading = true;
-    document.getElementById('showMoreBtn').innerText = 'Loading...';
-    fetch(`/onboarding/assessors/api/?offset=${offset}&limit=${limit}`)
+    setElementText('showMoreBtn', 'Loading...');
+    setElementStyle('showMoreBtn', 'disabled', 'true');
+    setElementStyle('assessorLoadingSpinner', 'display', 'inline-block');
+    
+    const queryParams = buildAssessorQueryParams();
+    return fetch(`/onboarding/assessors/api/?${queryParams}`)
         .then(response => response.json())
         .then(data => {
             const assessors = data.assessors;
-            if (assessors.length < limit) {
-                allLoaded = true;
-                document.getElementById('showMoreBtn').style.display = 'none';
+            allLoaded = data.all_loaded;
+            
+            if (allLoaded) {
+                setElementStyle('showMoreBtn', 'display', 'none');
             }
+            
             offset += assessors.length;
             const tbody = document.getElementById('assessorTableBody');
+            
+            if (offset === 0 && assessors.length === 0) {
+                setElementStyle('assessorEmptyState', 'display', 'block');
+                setElementStyle('showMoreBtn', 'display', 'none');
+            } else {
+                setElementStyle('assessorEmptyState', 'display', 'none');
             assessors.forEach(assessor => {
                 tbody.insertAdjacentHTML('beforeend', renderAssessorRow(assessor));
             });
-            if (offset === 0 && assessors.length === 0) {
-                tbody.innerHTML = `<tr>
-                    <td colspan="7" class="empty">
-                        <i class="fas fa-user-tie"></i>
-                        <p>No assessors found</p>
-                        <a href="javascript:void(0);" class="btn btn-primary"
-                           onclick="openAssessorFormPanel('{% url 'assessor_create' %}', 'Add Assessor')">
-                         Add Assessor
-                        </a>
-                    </td>
-                </tr>`;
-                document.getElementById('showMoreBtn').style.display = 'none';
             }
+        })
+        .catch(error => {
+            console.error('Error loading assessors:', error);
         })
         .finally(() => {
             loading = false;
-            if (!allLoaded) document.getElementById('showMoreBtn').innerText = 'Show More';
+            setElementStyle('assessorLoadingSpinner', 'display', 'none');
+            if (!allLoaded) {
+                setElementStyle('showMoreBtn', 'display', 'inline-block');
+                setElementText('showMoreBtn', 'Show More');
+                setElementStyle('showMoreBtn', 'disabled', 'false');
+            }
         });
 }
-document.addEventListener('DOMContentLoaded', function() {
+
+function filterAssessors(searchQuery) {
+    currentSearchQuery = searchQuery;
+    resetAssessorList();
+    applySearch();
+}
+
+function applySearch() {
+    offset = 0;
+    allLoaded = false;
+    document.getElementById('assessorTableBody').innerHTML = '';
+    setElementStyle('showMoreBtn', 'display', 'block');
+    setElementStyle('assessorEmptyState', 'display', 'none');
     loadMoreAssessors();
-});
+}
+
+function resetAssessorList() {
+    offset = 0;
+    allLoaded = false;
+    document.getElementById('assessorTableBody').innerHTML = '';
+    setElementStyle('showMoreBtn', 'display', 'block');
+    setElementStyle('assessorEmptyState', 'display', 'none');
+}
+
+function applyFilters() {
+    // Collect current filter values
+    currentFilters = {};
+    
+    // Get speciality filters
+    const specialityCheckboxes = document.querySelectorAll('input[name="speciality"]:checked');
+    if (specialityCheckboxes.length > 0) {
+        currentFilters.speciality = Array.from(specialityCheckboxes).map(cb => cb.value);
+        console.log('Speciality filters:', currentFilters.speciality);
+    }
+    
+    // Get status filters
+    const statusCheckboxes = document.querySelectorAll('input[name="status"]:checked');
+    if (statusCheckboxes.length > 0) {
+        currentFilters.status = Array.from(statusCheckboxes).map(cb => cb.value);
+        console.log('Status filters:', currentFilters.status);
+    }
+    
+    console.log('Current filters:', currentFilters);
+    resetAssessorList();
+    loadMoreAssessors();
+}
+
+function applyFiltersAndClose() {
+    applyFilters();
+    toggleFilterPanel();
+}
+
+function showSuccess(message) {
+    // You can implement a toast notification here
+    console.log('Success:', message);
+}
+
+function showError(message) {
+    // You can implement a toast notification here
+    console.error('Error:', message);
+}
+
+function submitAssessorForm(event, form) {
+    event.preventDefault();
+    
+    const formData = new FormData(form);
+    const submitButton = form.querySelector('button[type="submit"]');
+    const originalText = submitButton.textContent;
+    
+    submitButton.disabled = true;
+    submitButton.textContent = 'Saving...';
+    
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+        }
+    })
+    .then(response => {
+        if (response.ok) {
+            // Success - close panel and reload list
+            closeAssessorFormPanel();
+            // Reload the assessor list
+            resetAssessorList();
+            loadMoreAssessors();
+            // Show success message
+            showSuccess('Assessor saved successfully!');
+        } else {
+            // Validation errors - replace form content with error form
+            return response.text().then(html => {
+                document.getElementById('assessorFormContainer').innerHTML = html;
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showError('An error occurred while saving the assessor.');
+    })
+    .finally(() => {
+        submitButton.disabled = false;
+        submitButton.textContent = originalText;
+    });
+}
+
+function toggleAssessorFields(value) {
+    if (value === 'internal') {
+        document.getElementById('internal-fields').style.display = 'block';
+        document.getElementById('external-fields').style.display = 'none';
+        document.getElementById('external-unit-fields').style.display = 'none';
+    } else if (value === 'external') {
+        document.getElementById('internal-fields').style.display = 'none';
+        document.getElementById('external-fields').style.display = 'block';
+        document.getElementById('external-unit-fields').style.display = 'block';
+    } else {
+        document.getElementById('internal-fields').style.display = 'none';
+        document.getElementById('external-fields').style.display = 'none';
+        document.getElementById('external-unit-fields').style.display = 'none';
+    }
+}
+
+function toggleUnitTypeFields() {
+    var unitType = document.querySelector('input[name="unit_type"]:checked');
+    if (unitType) {
+        if (unitType.value === 'institution') {
+            document.getElementById('institution-field').style.display = 'block';
+            document.getElementById('hospital-field').style.display = 'none';
+        } else if (unitType.value === 'hospital') {
+            document.getElementById('institution-field').style.display = 'none';
+            document.getElementById('hospital-field').style.display = 'block';
+        }
+    } else {
+        document.getElementById('institution-field').style.display = 'none';
+        document.getElementById('hospital-field').style.display = 'none';
+    }
+}
+
+// Global variables to store institutions and hospitals
+let allInstitutions = [];
+let allHospitals = [];
+
+// Load all institutions and hospitals on page load
+function loadAllInstitutionsAndHospitals() {
+    console.log('Loading all institutions and hospitals...');
+    
+    // Load institutions
+    fetch('/onboarding/assessors/get-institutions-hospitals/?unit_type=institution')
+        .then(response => response.json())
+        .then(data => {
+            allInstitutions = data.institutions || [];
+            console.log('Institutions loaded:', allInstitutions.length);
+        })
+        .catch(error => {
+            console.error('Error loading institutions:', error);
+        });
+    
+    // Load hospitals
+    fetch('/onboarding/assessors/get-institutions-hospitals/?unit_type=hospital')
+        .then(response => response.json())
+        .then(data => {
+            allHospitals = data.hospitals || [];
+            console.log('Hospitals loaded:', allHospitals.length);
+        })
+        .catch(error => {
+            console.error('Error loading hospitals:', error);
+        });
+}
+
+function loadInstitutionsHospitals(unitType) {
+    if (!unitType) return;
+    
+    console.log('Loading institutions/hospitals for unit type:', unitType);
+    
+    setTimeout(() => {
+        if (unitType === 'institution') {
+            const institutionSelect = document.getElementById('institution-select');
+            document.getElementById('institution-field').style.display = 'block';
+            document.getElementById('hospital-field').style.display = 'none';
+            console.log(institutionSelect);
+            if (institutionSelect) {
+                // Save current value if any
+                const currentValue = institutionSelect.value;
+                console.log('Populating institution select with', allInstitutions.length, 'institutions');
+                institutionSelect.innerHTML = '<option value="">Select Institution</option>';
+                allInstitutions.forEach(institution => {
+                    const option = document.createElement('option');
+                    option.value = institution.id;
+                    option.textContent = institution.name;
+                    institutionSelect.appendChild(option);
+                });
+                // Restore selected value if editing
+                if (currentValue) {
+                    institutionSelect.value = currentValue;
+                }
+            }
+        } else if (unitType === 'hospital') {
+            const hospitalSelect = document.getElementById('hospital-select');
+            document.getElementById('hospital-field').style.display = 'block';
+            document.getElementById('institution-field').style.display = 'none';
+            if (hospitalSelect) {
+                // Save current value if any
+                const currentValue = hospitalSelect.value;
+                console.log('Populating hospital select with', allHospitals.length, 'hospitals');
+                hospitalSelect.innerHTML = '<option value="">Select Hospital</option>';
+                allHospitals.forEach(hospital => {
+                    const option = document.createElement('option');
+                    option.value = hospital.id;
+                    option.textContent = hospital.name;
+                    hospitalSelect.appendChild(option);
+                });
+                // Restore selected value if editing
+                if (currentValue) {
+                    hospitalSelect.value = currentValue;
+                }
+            }
+        }
+    }, 100);
+}
 </script>
 {% endblock %} 

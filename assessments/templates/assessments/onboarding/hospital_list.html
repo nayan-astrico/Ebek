@@ -3,11 +3,12 @@
 {% block content %}
 
 <link href="{% static 'assessments/css/list.css' %}" rel="stylesheet">
+
 <!-- Header -->
 <div class="header">
     <div class="header-left">
         <h1>Hospitals</h1>
-        <p class="text-muted">Manage your hospital facilities</p>
+        <p class="text-muted">Manage your hospitals</p>
     </div>
     <div class="header-right">
         <a href="javascript:void(0);" class="btn btn-primary"
@@ -20,12 +21,19 @@
 <!-- Search and Filter Bar -->
 <div class="search-filter-bar">
     <div class="search-box">
+        <input type="text" 
+               placeholder="Search hospitals..." 
+               value="{{ search_query }}"
+               id="hospitalSearchInput"
+               oninput="filterHospitals(this.value)">
+        <!-- <button class="btn-search" type="button" onclick="applySearch()">
         <i class="fas fa-search"></i>
-        <input type="text" placeholder="Search hospitals...">
+            <span class="search-text">Search</span>
+        </button> -->
     </div>
     <button class="btn-filter" onclick="toggleFilterPanel()">
         <i class="fas fa-filter"></i>
-        Filters
+        <span>Filters</span>
     </button>
 </div>
 
@@ -43,11 +51,6 @@
                      data-filter="group" 
                      onclick="switchFilter('group')">
                     <span>Group</span>
-                </div>
-                <div class="filter-type {% if active_filter == 'hospital' %}active{% endif %}" 
-                     data-filter="hospital" 
-                     onclick="switchFilter('hospital')">
-                    <span>Hospital</span>
                 </div>
                 <div class="filter-type {% if active_filter == 'state' %}active{% endif %}" 
                      data-filter="state" 
@@ -76,24 +79,6 @@
                                    {% if group.id in selected_groups %}checked{% endif %}
                                    onchange="updateSelectionCount('group')">
                             <span>{{ group.name }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                </div>
-
-                <!-- Hospital Content -->
-                <div class="filter-content" id="hospital-content">
-                    <div class="filter-search">
-                        <input type="text" placeholder="Search hospitals" onkeyup="filterOptions('hospital')">
-                        <div class="selection-count">0 Hospital selected</div>
-                    </div>
-                    <div class="options-list" id="hospital-options">
-                        {% for hospital in all_hospitals %}
-                        <label class="option-item">
-                            <input type="checkbox" name="hospital" value="{{ hospital.id }}"
-                                   {% if hospital.id in selected_hospitals %}checked{% endif %}
-                                   onchange="updateSelectionCount('hospital')">
-                            <span>{{ hospital.name }}</span>
                         </label>
                         {% endfor %}
                     </div>
@@ -154,10 +139,10 @@
     <table class="table">
                     <thead>
                         <tr>
-                            <th>Hospital Name</th>
+                <th>Hospital</th>
                             <th>Group</th>
                 <th>State</th>
-                <th>Learners</th>
+                <th>Nurses</th>
                             <th>Unit Head</th>
                             <th>Status</th>
                             <th>Actions</th>
@@ -167,8 +152,27 @@
     <!-- Hospital rows will be loaded here by JS -->
                     </tbody>
                 </table>
+    
+    <!-- Empty State -->
+    <div id="emptyState" class="empty-state">
+        <div class="empty-state-content">
+            <i class="fas fa-hospital"></i>
+            <p>No hospitals found</p>
+            <a href="javascript:void(0);" class="btn btn-primary"
+               onclick="openHospitalFormPanel('{% url 'hospital_create' %}', 'Add Hospital')">
+                Add New Hospital
+            </a>
+        </div>
+    </div>
+    
+    <!-- Loading and Show More -->
 <div style="text-align:center; margin: 20px 0;">
-    <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreHospitals()">Show More</button>
+        <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreHospitals()">
+            Show More
+        </button>
+        <div id="hospitalLoadingSpinner" class="spinner-border text-primary" role="status" style="display: none;">
+            <span class="sr-only">Loading...</span>
+        </div>
             </div>
 </div>
 
@@ -209,42 +213,294 @@
 <div id="sidePanelOverlay" class="side-panel-overlay" onclick="closeHospitalFormPanel()"></div>
 
 <script>
+// Global variables for pagination and loading
+let offset = 0;
+const limit = 10;
+let loading = false;
+let allLoaded = false;
+let searchQuery = '';
 
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            // Does this cookie string begin with the name we want?
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
+// Helper function to safely get elements
+function getElement(id) {
+    return document.getElementById(id);
 }
 
-function openHospitalFormPanel(url, title) {
-    document.getElementById('formPanelTitle').textContent = title;
-    document.getElementById('hospitalFormPanel').classList.add('active');
-    document.getElementById('sidePanelOverlay').classList.add('active');
-    fetch(url)
-        .then(response => response.text())
-        .then(html => {
-            console.log(html);
-            document.getElementById('hospitalFormContainer').innerHTML = html;
+// Helper function to safely set element style
+function setElementStyle(id, property, value) {
+    const element = getElement(id);
+    if (element) {
+        element.style[property] = value;
+    }
+}
+
+// Helper function to safely set element text
+function setElementText(id, text) {
+    const element = getElement(id);
+    if (element) {
+        element.innerText = text;
+    }
+}
+
+// Build query parameters for API calls
+function buildHospitalQueryParams() {
+    const params = new URLSearchParams({
+        offset: offset,
+        limit: limit
+    });
+    
+    if (searchQuery && searchQuery.trim() !== '') {
+        params.append('search', searchQuery.trim());
+        console.log('DEBUG: Adding hospital search parameter:', searchQuery.trim());
+    }
+    
+    // Add filter parameters
+    const selectedGroups = Array.from(document.querySelectorAll('input[name="group"]:checked')).map(cb => cb.value);
+    const selectedStates = Array.from(document.querySelectorAll('input[name="state"]:checked')).map(cb => cb.value);
+    const selectedStatuses = Array.from(document.querySelectorAll('input[name="status"]:checked')).map(cb => cb.value);
+    
+    selectedGroups.forEach(group => params.append('group', group));
+    selectedStates.forEach(state => params.append('state', state));
+    selectedStatuses.forEach(status => params.append('status', status));
+    
+    console.log('DEBUG: Hospital API URL params:', params.toString());
+    return params.toString();
+}
+
+// Render hospital row
+function renderHospitalRow(hospital) {
+    const row = document.createElement('tr');
+    row.setAttribute('data-hospital-id', hospital.id);
+    row.innerHTML = `
+        <td><div class="institution"><span>${hospital.name}</span></div></td>
+        <td>${hospital.group}</td>
+        <td>${hospital.state}</td>
+        <td>${hospital.nurse_strength}</td>
+        <td>
+            ${hospital.unit_head ? `<div class="unit-head"><span>${hospital.unit_head}</span><small>${hospital.unit_head_email}</small></div>` : '<span class="text-muted">Not Assigned</span>'}
+        </td>
+        <td>
+            <span class="badge ${hospital.is_active ? 'active' : 'inactive'}">
+                ${hospital.is_active ? 'Active' : 'Inactive'}
+            </span>
+        </td>
+        <td>
+            <div class="actions">
+                <a href="javascript:void(0);" class="btn-icon"
+                   onclick="openHospitalFormPanel('${hospital.edit_url}', 'Edit Hospital')"
+                   title="Edit">
+                    <i class="fas fa-edit"></i>
+                </a>
+                <button type="button" 
+                        class="btn-icon btn-danger" 
+                        data-name="${hospital.name}"
+                        data-url="${hospital.delete_url}"
+                        onclick="confirmDelete(this)"
+                        title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </td>
+    `;
+    return row;
+}
+
+// Load hospitals with improved error handling and loading states
+function loadMoreHospitals() {
+    if (loading || allLoaded) return Promise.resolve();
+    
+    loading = true;
+    setElementText('showMoreBtn', 'Loading...');
+    setElementStyle('showMoreBtn', 'disabled', 'true');
+    setElementStyle('hospitalLoadingSpinner', 'display', 'inline-block');
+    
+    const apiUrl = `/onboarding/hospitals/api/?${buildHospitalQueryParams()}`;
+    console.log('DEBUG: Making hospital API call to:', apiUrl);
+    
+    return fetch(apiUrl)
+        .then(response => response.json())
+        .then(data => {
+            console.log('DEBUG: Hospital API response:', data);
+            
+            const hospitals = data.hospitals || [];
+            
+            if (hospitals.length < limit || data.all_loaded) {
+                allLoaded = true;
+                setElementStyle('showMoreBtn', 'display', 'none');
+            }
+            
+            offset += hospitals.length;
+            
+            const tbody = getElement('hospitalTableBody');
+            const emptyState = getElement('emptyState');
+            
+            if (tbody) {
+                hospitals.forEach(hospital => {
+                    tbody.appendChild(renderHospitalRow(hospital));
+                });
+                
+                // Handle empty state
+                if (offset === 0 && hospitals.length === 0) {
+                    tbody.innerHTML = '';
+                    if (emptyState) {
+                        emptyState.style.display = 'flex';
+                        emptyState.classList.add('show');
+                    }
+                    setElementStyle('showMoreBtn', 'display', 'none');
+                } else {
+                    if (emptyState) {
+                        emptyState.style.display = 'none';
+                        emptyState.classList.remove('show');
+                    }
+                }
+            }
+            
+            // Show/hide "Show More" button
+            if (!allLoaded && hospitals.length > 0) {
+                setElementStyle('showMoreBtn', 'display', 'inline-block');
+                setElementText('showMoreBtn', 'Show More');
+                setElementStyle('showMoreBtn', 'disabled', 'false');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading hospitals:', error);
+            showError('Failed to load hospitals. Please try again.');
+        })
+        .finally(() => {
+            loading = false;
+            setElementStyle('hospitalLoadingSpinner', 'display', 'none');
         });
 }
 
-function closeHospitalFormPanel() {
-    document.getElementById('hospitalFormPanel').classList.remove('active');
-    document.getElementById('sidePanelOverlay').classList.remove('active');
-    document.getElementById('hospitalFormContainer').innerHTML = '';
+// Real-time search function
+function filterHospitals(searchText) {
+    searchQuery = searchText || '';
+    console.log('DEBUG: Real-time hospital search triggered with:', searchQuery);
+    resetHospitalList();
+    loadMoreHospitals();
 }
 
+// Apply search with reset functionality
+function applySearch() {
+    const searchInput = document.querySelector('.search-box input');
+    if (searchInput) {
+        searchQuery = searchInput.value.trim();
+        console.log('DEBUG: Hospital search button clicked, applying search:', searchQuery);
+    }
+    
+    // Reset pagination and data
+    resetHospitalList();
+    
+    // Load hospitals with search
+    loadMoreHospitals();
+}
 
+// Reset hospital list for new searches/filters
+function resetHospitalList() {
+    offset = 0;
+    allLoaded = false;
+    
+    // Clear existing table content
+    const tbody = getElement('hospitalTableBody');
+    if (tbody) {
+        tbody.innerHTML = '';
+    }
+    
+    // Hide empty state initially
+    const emptyState = getElement('emptyState');
+    if (emptyState) {
+        emptyState.style.display = 'none';
+        emptyState.classList.remove('show');
+    }
+    
+    // Reset show more button
+    setElementStyle('showMoreBtn', 'display', 'inline-block');
+    setElementText('showMoreBtn', 'Show More');
+    setElementStyle('showMoreBtn', 'disabled', 'false');
+}
+
+// Apply filters with reset functionality
+function applyFilters() {
+    resetHospitalList();
+    loadMoreHospitals();
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize search
+    const searchInput = document.querySelector('.search-box input');
+    if (searchInput) {
+        // Set initial search query from URL params
+        const urlParams = new URLSearchParams(window.location.search);
+        searchQuery = urlParams.get('search') || '';
+        searchInput.value = searchQuery;
+        
+        // Add Enter key event listener for search
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                console.log('DEBUG: Enter key pressed, applying hospital search');
+                applySearch();
+            }
+        });
+        
+        // Add search button event listener
+        const searchButton = document.querySelector('.btn-search');
+        if (searchButton) {
+            searchButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('DEBUG: Hospital search button clicked, applying search');
+                applySearch();
+            });
+        }
+    }
+    
+    // Initialize selection counts
+    ['group', 'state', 'status'].forEach(category => {
+        updateSelectionCount(category);
+    });
+    
+    // Load initial data
+    loadMoreHospitals();
+});
+
+// Add the notification functions
+function showSuccess(message) {
+    const notification = $(`
+        <div class="alert alert-success alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-check-circle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    
+    $('body').append(notification);
+    
+    setTimeout(function() {
+        notification.alert('close');
+    }, 5000);
+}
+
+function showError(message) {
+    const notification = $(`
+        <div class="alert alert-danger alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-exclamation-triangle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    
+    $('body').append(notification);
+    
+    setTimeout(function() {
+        notification.alert('close');
+    }, 5000);
+}
+
+// Filter panel functions
 function confirmDelete(button) {
     const name = button.dataset.name;
     const url = button.dataset.url;
@@ -296,7 +552,7 @@ document.addEventListener('DOMContentLoaded', function() {
     switchFilter('group');
     
     // Initialize selection counts
-    ['group', 'hospital', 'state', 'status'].forEach(category => {
+    ['group', 'state', 'status'].forEach(category => {
         updateSelectionCount(category);
     });
 });
@@ -320,7 +576,40 @@ function updateSelectionCount(category) {
     countElement.textContent = `${count} ${label} selected`;
 }
 
-// Intercept form submission (optional, for AJAX submit)
+function openHospitalFormPanel(url, title) {
+    document.getElementById('formPanelTitle').textContent = title;
+    document.getElementById('hospitalFormPanel').classList.add('active');
+    document.getElementById('sidePanelOverlay').classList.add('active');
+    fetch(url)
+        .then(response => response.text())
+        .then(html => {
+            console.log(html);
+            document.getElementById('hospitalFormContainer').innerHTML = html;
+        });
+}
+
+function closeHospitalFormPanel() {
+    document.getElementById('hospitalFormPanel').classList.remove('active');
+    document.getElementById('sidePanelOverlay').classList.remove('active');
+    document.getElementById('hospitalFormContainer').innerHTML = '';
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Intercept form submission
 document.addEventListener('submit', function(e) {
     if (e.target.closest('#hospitalFormPanel form')) {
         e.preventDefault();
@@ -335,96 +624,39 @@ document.addEventListener('submit', function(e) {
                 'X-CSRFToken': getCookie('csrftoken')
             }
         })
-        .then(response => response.text())
+        .then(response => {
+            // Check if response is JSON (error) or HTML (form)
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                return response.json().then(data => {
+                    console.log(data);
+                    // Handle JSON error response
+                    throw new Error(data.error || 'An error occurred');
+                });
+            } else {
+                return response.text();
+            }
+        })
         .then(html => {
             if (html.includes('form-group')) {
                 // Form has errors, re-render it
                 document.getElementById('hospitalFormContainer').innerHTML = html;
             } else {
-                // Success: close panel and reload page
+                // Success: close panel and show success message
                 closeHospitalFormPanel();
-                location.reload(); // <--- This reloads the page
+                showSuccess('Hospital saved successfully!');
+                // Reload the page after a short delay to show the success message
+                setTimeout(() => {
+                    location.reload();
+                }, 1000);
             }
+        })
+        .catch(error => {
+            // Handle JSON error responses
+            console.error('Error:', error);
+            showError(error.message);
         });
     }
 });
-
-let offset = 0;
-const limit = 10;
-let loading = false;
-let allLoaded = false;
-
-function renderHospitalRow(hosp) {
-    return `
-    <tr>
-        <td><div class="institution"><span>${hosp.name}</span></div></td>
-        <td>${hosp.group}</td>
-        <td>${hosp.state}</td>
-        <td>${hosp.nurse_strength}</td>
-        <td>
-            ${hosp.unit_head ? `<div class=\"unit-head\"><span>${hosp.unit_head}</span><small>${hosp.unit_head_email}</small></div>` : '<span class="text-muted">Not Assigned</span>'}
-        </td>
-        <td>
-            <span class="badge ${hosp.is_active ? 'active' : 'inactive'}">
-                ${hosp.is_active ? 'Active' : 'Inactive'}
-            </span>
-        </td>
-        <td>
-            <div class="actions">
-                <a href="javascript:void(0);" class="btn-icon"
-                   onclick="openHospitalFormPanel('${hosp.edit_url}', 'Edit Hospital')">
-                    <i class="fas fa-edit"></i>
-                </a>
-                <button type="button" 
-                        class="btn-icon btn-danger" 
-                        data-name="${hosp.name}"
-                        data-url="${hosp.delete_url}"
-                        onclick="confirmDelete(this)"
-                        title="Delete">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        </td>
-    </tr>
-    `;
-}
-
-function loadMoreHospitals() {
-    if (loading || allLoaded) return;
-    loading = true;
-    document.getElementById('showMoreBtn').innerText = 'Loading...';
-    fetch(`/onboarding/hospitals/api/?offset=${offset}&limit=${limit}`)
-        .then(response => response.json())
-        .then(data => {
-            const hospitals = data.hospitals;
-            if (hospitals.length < limit) {
-                allLoaded = true;
-                document.getElementById('showMoreBtn').style.display = 'none';
-            }
-            offset += hospitals.length;
-            const tbody = document.getElementById('hospitalTableBody');
-            hospitals.forEach(hosp => {
-                tbody.insertAdjacentHTML('beforeend', renderHospitalRow(hosp));
-            });
-            if (offset === 0 && hospitals.length === 0) {
-                tbody.innerHTML = `<tr>
-                    <td colspan="7" class="empty">
-                        <i class="fas fa-hospital"></i>
-                        <p>No hospitals found</p>
-                        <a href="javascript:void(0);" onclick="openHospitalFormPanel('{% url 'hospital_create' %}', 'Add Hospital')" class="btn btn-primary">Add New Hospital</a>
-                    </td>
-                </tr>`;
-                document.getElementById('showMoreBtn').style.display = 'none';
-            }
-        })
-        .finally(() => {
-            loading = false;
-            if (!allLoaded) document.getElementById('showMoreBtn').innerText = 'Show More';
-        });
-}
-document.addEventListener('DOMContentLoaded', function() {
-    loadMoreHospitals();
-});
-
 </script>
 {% endblock %} 

@@ -21,12 +21,15 @@
 <!-- Search and Filter Bar -->
 <div class="search-filter-bar">
     <div class="search-box">
-        <i class="fas fa-search"></i>
-        <input type="text" placeholder="Search skillathon events...">
+        <input type="text" 
+               placeholder="Search skillathon events..." 
+               value="{{ state }}"
+               id="skillathonSearchInput"
+               oninput="filterSkillathons(this.value)">
     </div>
     <button class="btn-filter" onclick="toggleFilterPanel()">
         <i class="fas fa-filter"></i>
-        Filters
+        <span>Filters</span>
     </button>
 </div>
 
@@ -45,15 +48,15 @@
                      onclick="switchFilter('date')">
                     <span>Date</span>
                 </div>
-                <div class="filter-type {% if active_filter == 'location' %}active{% endif %}" 
-                     data-filter="location" 
-                     onclick="switchFilter('location')">
-                    <span>Location</span>
+                <div class="filter-type {% if active_filter == 'city' %}active{% endif %}" 
+                     data-filter="city" 
+                     onclick="switchFilter('city')">
+                    <span>City</span>
                 </div>
-                <div class="filter-type {% if active_filter == 'status' %}active{% endif %}" 
-                     data-filter="status" 
-                     onclick="switchFilter('status')">
-                    <span>Status</span>
+                <div class="filter-type {% if active_filter == 'state' %}active{% endif %}" 
+                     data-filter="state" 
+                     onclick="switchFilter('state')">
+                    <span>State</span>
                 </div>
             </div>
 
@@ -65,36 +68,50 @@
                         <div class="date-range">
                             <div class="form-group">
                                 <label>From Date</label>
-                                <input type="date" name="date_from" value="{{ request.GET.date_from }}" class="form-control">
+                                <input type="date" name="date_from" value="{{ date_from }}" class="form-control">
                             </div>
                             <div class="form-group">
                                 <label>To Date</label>
-                                <input type="date" name="date_to" value="{{ request.GET.date_to }}" class="form-control">
+                                <input type="date" name="date_to" value="{{ date_to }}" class="form-control">
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Location Content -->
-                <div class="filter-content" id="location-content">
+                <!-- City Content -->
+                <div class="filter-content" id="city-content">
                     <div class="filter-search">
-                        <input type="text" placeholder="Search location" onkeyup="filterOptions('location')">
-                        <div class="selection-count">0 Location selected</div>
+                        <input type="text" placeholder="Search cities" onkeyup="filterOptions('city')">
+                        <div class="selection-count">0 City selected</div>
                     </div>
-                    <div class="options-list" id="location-options">
+                    <div class="options-list" id="city-options">
+                        {% for city in all_cities %}
                         <label class="option-item">
-                            <input type="text" name="location" value="{{ request.GET.location }}" placeholder="Enter city or state">
+                            <input type="checkbox" name="city" value="{{ city }}"
+                                   {% if city in selected_cities %}checked{% endif %}
+                                   onchange="updateSelectionCount('city')">
+                            <span>{{ city }}</span>
                         </label>
+                        {% endfor %}
                     </div>
                 </div>
 
-                <!-- Status Content -->
-                <div class="filter-content" id="status-content">
+                <!-- State Content -->
+                <div class="filter-content" id="state-content">
                     <div class="filter-search">
-                        <input type="text" placeholder="Search status" onkeyup="filterOptions('status')">
-                        <div class="selection-count">0 Status selected</div>
+                        <input type="text" placeholder="Search states" onkeyup="filterOptions('state')">
+                        <div class="selection-count">0 State selected</div>
                     </div>
-                    
+                    <div class="options-list" id="state-options">
+                        {% for state in all_states %}
+                        <label class="option-item">
+                            <input type="checkbox" name="state" value="{{ state }}"
+                                   {% if state in selected_states %}checked{% endif %}
+                                   onchange="updateSelectionCount('state')">
+                            <span>{{ state }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -102,7 +119,7 @@
         <!-- Filter Actions -->
         <div class="filter-actions">
             <button type="button" class="btn btn-light" onclick="toggleFilterPanel()">Cancel</button>
-            <button type="submit" class="btn btn-primary">Apply filter</button>
+            <button type="button" class="btn btn-primary" onclick="applyFiltersAndClose()">Apply filter</button>
         </div>
     </form>
 </div>
@@ -122,7 +139,10 @@
     <!-- Skillathon rows will be loaded here by JS -->
         </tbody>
     </table>
-<div style="text-align:center; margin: 20px 0;">
+<div id="skillathonLoadingSpinner" class="spinner-border text-primary" role="status" style="display: none; text-align: center; margin: 20px 0;">
+    <span class="sr-only">Loading...</span>
+</div>
+<div style="text-align: center; margin: 20px 0;">
     <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreSkillathons()">Show More</button>
 </div>
 </div>
@@ -701,12 +721,17 @@ function switchFilter(filterType) {
     document.getElementById(`${filterType}-content`).classList.add('active');
 }
 
+function applyFiltersAndClose() {
+    applyFilters();
+    toggleFilterPanel();
+}
+
 // Initialize the first filter as active
 document.addEventListener('DOMContentLoaded', function() {
     switchFilter('date');
     
     // Initialize selection counts
-    ['date', 'location', 'status'].forEach(category => {
+    ['date', 'city', 'state'].forEach(category => {
         updateSelectionCount(category);
     });
 });
@@ -758,10 +783,96 @@ document.addEventListener('submit', function(e) {
     }
 });
 
+// Helper functions for DOM manipulation
+function setElementText(elementId, text) {
+    const element = document.getElementById(elementId);
+    if (element) element.textContent = text;
+}
+
+function setElementStyle(elementId, property, value) {
+    const element = document.getElementById(elementId);
+    if (element) element.style[property] = value;
+}
+
 let offset = 0;
 const limit = 10;
 let loading = false;
 let allLoaded = false;
+let currentSearchQuery = '';
+let currentFilters = {};
+
+function buildSkillathonQueryParams() {
+    const params = new URLSearchParams();
+    params.append('offset', offset);
+    params.append('limit', limit);
+    
+    if (currentSearchQuery) {
+        params.append('search', currentSearchQuery);
+    }
+    
+    // Add filters
+    Object.keys(currentFilters).forEach(key => {
+        if (currentFilters[key] && currentFilters[key].length > 0) {
+            currentFilters[key].forEach(value => {
+                params.append(key, value);
+            });
+        }
+    });
+    
+    return params.toString();
+}
+
+// Search functionality
+function filterSkillathons(searchQuery) {
+    currentSearchQuery = searchQuery;
+    resetSkillathonList();
+    applySearch();
+}
+
+// Filter application
+function applyFilters() {
+    currentFilters = {};
+    
+    // Date filters
+    const dateFromInput = document.querySelector('#date-content input[name="date_from"]');
+    const dateToInput = document.querySelector('#date-content input[name="date_to"]');
+    if (dateFromInput && dateFromInput.value) {
+        currentFilters.date_from = [dateFromInput.value];
+    }
+    if (dateToInput && dateToInput.value) {
+        currentFilters.date_to = [dateToInput.value];
+    }
+    
+    // City filters
+    const cityCheckboxes = document.querySelectorAll('#city-options input[type="checkbox"]:checked');
+    if (cityCheckboxes.length > 0) {
+        currentFilters.city = Array.from(cityCheckboxes).map(cb => cb.value);
+    }
+    
+    // State filters
+    const stateCheckboxes = document.querySelectorAll('#state-options input[type="checkbox"]:checked');
+    if (stateCheckboxes.length > 0) {
+        currentFilters.state = Array.from(stateCheckboxes).map(cb => cb.value);
+    }
+    
+    resetSkillathonList();
+    loadMoreSkillathons();
+}
+
+function applySearch() {
+    offset = 0;
+    allLoaded = false;
+    document.getElementById('skillathonTableBody').innerHTML = '';
+    setElementStyle('showMoreBtn', 'display', 'block');
+    loadMoreSkillathons();
+}
+
+function resetSkillathonList() {
+    offset = 0;
+    allLoaded = false;
+    document.getElementById('skillathonTableBody').innerHTML = '';
+    setElementStyle('showMoreBtn', 'display', 'block');
+}
 
 function renderSkillathonRow(event) {
     return `
@@ -792,23 +903,27 @@ function renderSkillathonRow(event) {
 function loadMoreSkillathons() {
     if (loading || allLoaded) return;
     loading = true;
-    document.getElementById('showMoreBtn').innerText = 'Loading...';
-    fetch(`/onboarding/skillathons/api/?offset=${offset}&limit=${limit}`)
+    setElementText('showMoreBtn', 'Loading...');
+    setElementStyle('showMoreBtn', 'disabled', 'true');
+    setElementStyle('skillathonLoadingSpinner', 'display', 'inline-block');
+    
+    const queryParams = buildSkillathonQueryParams();
+    fetch(`/onboarding/skillathons/api/?${queryParams}`)
         .then(response => response.json())
         .then(data => {
             const events = data.events;
-            if (events.length < limit) {
-                allLoaded = true;
-                document.getElementById('showMoreBtn').style.display = 'none';
+            allLoaded = data.all_loaded;
+            
+            if (allLoaded) {
+                setElementStyle('showMoreBtn', 'display', 'none');
             }
+            
             offset += events.length;
             const tbody = document.getElementById('skillathonTableBody');
-            events.forEach(event => {
-                tbody.insertAdjacentHTML('beforeend', renderSkillathonRow(event));
-            });
+            
             if (offset === 0 && events.length === 0) {
                 tbody.innerHTML = `<tr>
-                    <td colspan="7" class="empty">
+                    <td colspan="4" class="empty">
                         <i class="fas fa-calendar-alt"></i>
                         <p>No skillathon events found</p>
                         <a href="javascript:void(0);" class="btn btn-primary"
@@ -817,12 +932,24 @@ function loadMoreSkillathons() {
                         </a>
                     </td>
                 </tr>`;
-                document.getElementById('showMoreBtn').style.display = 'none';
+                setElementStyle('showMoreBtn', 'display', 'none');
+            } else {
+                events.forEach(event => {
+                    tbody.insertAdjacentHTML('beforeend', renderSkillathonRow(event));
+                });
             }
+        })
+        .catch(error => {
+            console.error('Error loading skillathons:', error);
         })
         .finally(() => {
             loading = false;
-            if (!allLoaded) document.getElementById('showMoreBtn').innerText = 'Show More';
+            setElementStyle('skillathonLoadingSpinner', 'display', 'none');
+            if (!allLoaded) {
+                setElementStyle('showMoreBtn', 'display', 'inline-block');
+                setElementText('showMoreBtn', 'Show More');
+                setElementStyle('showMoreBtn', 'disabled', 'false');
+            }
         });
 }
 document.addEventListener('DOMContentLoaded', function() {

@@ -91,6 +91,7 @@
     border-radius: 8px;
     border: 1px solid #e2e8f0;
     overflow: hidden;
+    min-height: 400px; /* Ensure minimum height for empty state */
 }
 
 .table {
@@ -212,6 +213,71 @@
 .empty p {
     margin: 0 0 16px;
     color: #4a5568;
+}
+
+/* Enhanced Empty State Styles */
+.empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    text-align: center;
+    min-height: 300px;
+    width: 100%;
+}
+
+.empty-state-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    max-width: 400px;
+}
+
+.empty-state-content i {
+    font-size: 3rem;
+    color: #94a3b8;
+    margin-bottom: 8px;
+}
+
+.empty-state-content p {
+    color: #64748b;
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin: 0;
+    margin-bottom: 8px;
+}
+
+.empty-state-content .btn {
+    margin-top: 8px;
+}
+
+/* Table container with minimum height for empty state */
+#emptyState {
+    display: none; /* Hidden by default */
+    width: 100%;
+    height: 100%;
+    min-height: 300px;
+}
+
+#emptyState.show {
+    display: flex;
+}
+
+/* Responsive adjustments for empty state */
+@media (max-width: 768px) {
+    .empty-state {
+        padding: 40px 16px;
+        min-height: 250px;
+    }
+    
+    .empty-state-content i {
+        font-size: 2.5rem;
+    }
+    
+    .empty-state-content p {
+        font-size: 1rem;
+    }
 }
 
 /* Pagination */

@@ -13,6 +13,20 @@ class GroupForm(forms.ModelForm):
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'type': forms.Select(attrs={'class': 'form-control'}),
         }
+    
+    def clean_name(self):
+        name = self.cleaned_data.get('name')
+        if name:
+            # Check if a group with this name already exists
+            existing_group = Group.objects.filter(name__iexact=name)
+            if self.instance.pk:
+                # Exclude current instance when editing
+                existing_group = existing_group.exclude(pk=self.instance.pk)
+            
+            if existing_group.exists():
+                raise forms.ValidationError('A group with this name already exists.')
+        
+        return name
 
 class InstitutionForm(forms.ModelForm):
     unit_head_name = forms.CharField(label='Unit Head Name', max_length=255, required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
@@ -106,8 +120,7 @@ class AssessorForm(forms.ModelForm):
         fields = [
             'assessor_type',
             'staff_id', 'branch', 'location',
-            'qualification', 'designation', 'specialization', 'is_verifier', 'is_active',
-            'institution', 'hospital'
+            'qualification', 'designation', 'specialization', 'is_verifier', 'is_active'
         ]
         widgets = {
             'assessor_type': forms.Select(attrs={'class': 'form-control'}),
@@ -126,6 +139,46 @@ class AssessorForm(forms.ModelForm):
         self.fields['assessor_type'].widget.attrs.update({
             'onchange': 'toggleAssessorFields(this.value)'
         })
+        
+        # Add onclick handlers to unit_type radio buttons
+        self.fields['unit_type'].widget.attrs.update({
+            'onclick': 'loadInstitutionsHospitals(this.value)'
+        })
+        
+        # Set unit_type based on instance data when editing
+        if self.instance and self.instance.pk:
+            if self.instance.institution:
+                self.fields['unit_type'].initial = 'institution'
+            elif self.instance.hospital:
+                self.fields['unit_type'].initial = 'hospital'
+
+    def clean_assessor_email(self):
+        email = self.cleaned_data.get('assessor_email')
+        if email:
+            # Check if an assessor with this email already exists
+            existing_assessor = Assessor.objects.filter(assessor_user__email__iexact=email)
+            if self.instance.pk:
+                # Exclude current instance when editing
+                existing_assessor = existing_assessor.exclude(pk=self.instance.pk)
+            
+            if existing_assessor.exists():
+                raise forms.ValidationError('An assessor with this email already exists.')
+        
+        return email
+
+    def clean_assessor_phone(self):
+        phone = self.cleaned_data.get('assessor_phone')
+        if phone:
+            # Check if an assessor with this phone number already exists
+            existing_assessor = Assessor.objects.filter(assessor_user__phone_number=phone)
+            if self.instance.pk:
+                # Exclude current instance when editing
+                existing_assessor = existing_assessor.exclude(pk=self.instance.pk)
+            
+            if existing_assessor.exists():
+                raise forms.ValidationError('An assessor with this phone number already exists.')
+        
+        return phone
 
 class SkillathonEventForm(forms.ModelForm):
     class Meta:

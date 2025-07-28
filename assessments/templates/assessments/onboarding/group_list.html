@@ -21,12 +21,15 @@
 <!-- Search and Filter Bar -->
 <div class="search-filter-bar">
     <div class="search-box">
-        <i class="fas fa-search"></i>
-        <input type="text" placeholder="Search groups...">
+        <input type="text" 
+               placeholder="Search groups..." 
+               value="{{ search_query }}"
+               id="groupSearchInput"
+               oninput="filterGroups(this.value)">
     </div>
     <button class="btn-filter" onclick="toggleFilterPanel()">
         <i class="fas fa-filter"></i>
-        Filters
+        <span>Filters</span>
     </button>
 </div>
 
@@ -40,11 +43,6 @@
         <div class="filter-layout">
             <!-- Main Filter Types (30%) -->
             <div class="filter-types">
-                <div class="filter-type {% if active_filter == 'group' %}active{% endif %}" 
-                     data-filter="group" 
-                     onclick="switchFilter('group')">
-                    <span>Group</span>
-                </div>
                 <div class="filter-type {% if active_filter == 'type' %}active{% endif %}" 
                      data-filter="type" 
                      onclick="switchFilter('type')">
@@ -59,24 +57,6 @@
 
             <!-- Filter Content (70%) -->
             <div class="filter-content-wrapper">
-                <!-- Group Content -->
-                <div class="filter-content" id="group-content">
-                    <div class="filter-search">
-                        <input type="text" placeholder="Search groups" onkeyup="filterOptions('group')">
-                        <div class="selection-count">0 Group selected</div>
-                    </div>
-                    <div class="options-list" id="group-options">
-                        {% for group in all_groups %}
-                        <label class="option-item">
-                            <input type="checkbox" name="group" value="{{ group.id }}"
-                                   {% if group.id in selected_groups %}checked{% endif %}
-                                   onchange="updateSelectionCount('group')">
-                            <span>{{ group.name }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                </div>
-
                 <!-- Type Content -->
                 <div class="filter-content" id="type-content">
                     <div class="filter-search">
@@ -132,26 +112,45 @@
 </div>
 
 <!-- Table -->
-    <div class="card">
+<div class="card">
     <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Group Name</th>
-                            <th>Type</th>
-                            <th>No. of Units</th>
-                            <th>Group Head</th>
-                            <th>Email</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="groupTableBody">
-    <!-- Group rows will be loaded here by JS -->
-                    </tbody>
-                </table>
-<div style="text-align:center; margin: 20px 0;">
-    <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreGroups()">Show More</button>
-            </div>
+        <thead>
+            <tr>
+                <th>Group Name</th>
+                <th>Type</th>
+                <th>No. of Units</th>
+                <th>Group Head</th>
+                <th>Email</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="groupTableBody">
+            <!-- Group rows will be loaded here by JS -->
+        </tbody>
+    </table>
+    
+    <!-- Empty State -->
+    <div id="emptyState" class="empty-state">
+        <div class="empty-state-content">
+            <i class="fas fa-users"></i>
+            <p>No groups found</p>
+            <a href="javascript:void(0);" class="btn btn-primary"
+               onclick="openGroupFormPanel('{% url 'group_create' %}', 'Add Group')">
+                Add New Group
+            </a>
+        </div>
+    </div>
+    
+    <!-- Loading and Show More -->
+    <div style="text-align:center; margin: 20px 0;">
+        <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreGroups()">
+            Show More
+        </button>
+        <div id="groupLoadingSpinner" class="spinner-border text-primary" role="status" style="display: none;">
+            <span class="sr-only">Loading...</span>
+        </div>
+    </div>
 </div>
 
 <!-- Delete Modal -->
@@ -179,7 +178,7 @@
     </div>
 </div>
 
-<!-- Hospital Form Side Panel -->
+<!-- Group Form Side Panel -->
 <div id="groupFormPanel" class="side-panel">
     <div class="side-panel-header">
         <h3 id="formPanelTitle">Add Group</h3>
@@ -191,6 +190,290 @@
 <div id="sidePanelOverlay" class="side-panel-overlay" onclick="closeGroupFormPanel()"></div>
 
 <script>
+// Global variables for pagination and loading
+let offset = 0;
+const limit = 10;
+let loading = false;
+let allLoaded = false;
+let searchQuery = '';
+
+// Helper function to safely get elements
+function getElement(id) {
+    return document.getElementById(id);
+}
+
+// Helper function to safely set element style
+function setElementStyle(id, property, value) {
+    const element = getElement(id);
+    if (element) {
+        element.style[property] = value;
+    }
+}
+
+// Helper function to safely set element text
+function setElementText(id, text) {
+    const element = getElement(id);
+    if (element) {
+        element.innerText = text;
+    }
+}
+
+// Build query parameters for API calls
+function buildGroupQueryParams() {
+    const params = new URLSearchParams({
+        offset: offset,
+        limit: limit
+    });
+    
+    if (searchQuery && searchQuery.trim() !== '') {
+        params.append('search', searchQuery.trim());
+        console.log('DEBUG: Adding group search parameter:', searchQuery.trim());
+    }
+    
+    // Add filter parameters
+    const selectedTypes = Array.from(document.querySelectorAll('input[name="type"]:checked')).map(cb => cb.value);
+    const selectedStatuses = Array.from(document.querySelectorAll('input[name="status"]:checked')).map(cb => cb.value);
+    
+    selectedTypes.forEach(type => params.append('type', type));
+    selectedStatuses.forEach(status => params.append('status', status));
+    
+    console.log('DEBUG: Group API URL params:', params.toString());
+    return params.toString();
+}
+
+// Render group row
+function renderGroupRow(group) {
+    const row = document.createElement('tr');
+    row.setAttribute('data-group-id', group.id);
+    row.innerHTML = `
+        <td><div class="institution"><span>${group.name}</span></div></td>
+        <td>${group.type}</td>
+        <td>${group.unit_count}</td>
+        <td>
+            ${group.group_head ? `<div class="unit-head"><span>${group.group_head}</span><small>${group.group_head_email}</small></div>` : '<span class="text-muted">Not Assigned</span>'}
+        </td>
+        <td>${group.group_head_email || '-'}</td>
+        <td>
+            <span class="badge ${group.is_active ? 'active' : 'inactive'}">
+                ${group.is_active ? 'Active' : 'Inactive'}
+            </span>
+        </td>
+        <td>
+            <div class="actions">
+                <a href="javascript:void(0);" class="btn-icon"
+                   onclick="openGroupFormPanel('${group.edit_url}', 'Edit Group')"
+                   title="Edit">
+                    <i class="fas fa-edit"></i>
+                </a>
+                <button type="button" 
+                        class="btn-icon btn-danger" 
+                        data-name="${group.name}"
+                        data-url="${group.delete_url}"
+                        onclick="confirmDelete(this)"
+                        title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </td>
+    `;
+    return row;
+}
+
+// Load groups with improved error handling and loading states
+function loadMoreGroups() {
+    if (loading || allLoaded) return Promise.resolve();
+    
+    loading = true;
+    setElementText('showMoreBtn', 'Loading...');
+    setElementStyle('showMoreBtn', 'disabled', 'true');
+    setElementStyle('groupLoadingSpinner', 'display', 'inline-block');
+    
+    const apiUrl = `/onboarding/groups/api/?${buildGroupQueryParams()}`;
+    console.log('DEBUG: Making group API call to:', apiUrl);
+    
+    return fetch(apiUrl)
+        .then(response => response.json())
+        .then(data => {
+            console.log('DEBUG: Group API response:', data);
+            
+            const groups = data.groups || [];
+            
+            if (groups.length < limit || data.all_loaded) {
+                allLoaded = true;
+                setElementStyle('showMoreBtn', 'display', 'none');
+            }
+            
+            offset += groups.length;
+            
+            const tbody = getElement('groupTableBody');
+            const emptyState = getElement('emptyState');
+            
+            if (tbody) {
+                groups.forEach(group => {
+                    tbody.appendChild(renderGroupRow(group));
+                });
+                
+                // Handle empty state
+                if (offset === 0 && groups.length === 0) {
+                    tbody.innerHTML = '';
+                    if (emptyState) {
+                        emptyState.style.display = 'flex';
+                        emptyState.classList.add('show');
+                    }
+                    setElementStyle('showMoreBtn', 'display', 'none');
+                } else {
+                    if (emptyState) {
+                        emptyState.style.display = 'none';
+                        emptyState.classList.remove('show');
+                    }
+                }
+            }
+            
+            // Show/hide "Show More" button
+            if (!allLoaded && groups.length > 0) {
+                setElementStyle('showMoreBtn', 'display', 'inline-block');
+                setElementText('showMoreBtn', 'Show More');
+                setElementStyle('showMoreBtn', 'disabled', 'false');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading groups:', error);
+            showError('Failed to load groups. Please try again.');
+        })
+        .finally(() => {
+            loading = false;
+            setElementStyle('groupLoadingSpinner', 'display', 'none');
+        });
+}
+
+// Real-time search function
+function filterGroups(searchText) {
+    searchQuery = searchText || '';
+    console.log('DEBUG: Real-time group search triggered with:', searchQuery);
+    resetGroupList();
+    loadMoreGroups();
+}
+
+// Apply search with reset functionality
+function applySearch() {
+    const searchInput = document.querySelector('.search-box input');
+    if (searchInput) {
+        searchQuery = searchInput.value.trim();
+        console.log('DEBUG: Group search button clicked, applying search:', searchQuery);
+    }
+    
+    // Reset pagination and data
+    resetGroupList();
+    
+    // Load groups with search
+    loadMoreGroups();
+}
+
+// Reset group list for new searches/filters
+function resetGroupList() {
+    offset = 0;
+    allLoaded = false;
+    
+    // Clear existing table content
+    const tbody = getElement('groupTableBody');
+    if (tbody) {
+        tbody.innerHTML = '';
+    }
+    
+    // Hide empty state initially
+    const emptyState = getElement('emptyState');
+    if (emptyState) {
+        emptyState.style.display = 'none';
+        emptyState.classList.remove('show');
+    }
+    
+    // Reset show more button
+    setElementStyle('showMoreBtn', 'display', 'inline-block');
+    setElementText('showMoreBtn', 'Show More');
+    setElementStyle('showMoreBtn', 'disabled', 'false');
+}
+
+// Apply filters with reset functionality
+function applyFilters() {
+    resetGroupList();
+    loadMoreGroups();
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize search
+    const searchInput = document.querySelector('.search-box input');
+    if (searchInput) {
+        // Set initial search query from URL params
+        const urlParams = new URLSearchParams(window.location.search);
+        searchQuery = urlParams.get('search') || '';
+        searchInput.value = searchQuery;
+        
+        // Add Enter key event listener for search
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                console.log('DEBUG: Enter key pressed, applying group search');
+                applySearch();
+            }
+        });
+        
+        // Add search button event listener
+        const searchButton = document.querySelector('.btn-search');
+        if (searchButton) {
+            searchButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('DEBUG: Group search button clicked, applying search');
+                applySearch();
+            });
+        }
+    }
+    
+    // Initialize selection counts
+    ['type', 'status'].forEach(category => {
+        updateSelectionCount(category);
+    });
+    
+    // Load initial data
+    loadMoreGroups();
+});
+
+// Add the notification functions
+function showSuccess(message) {
+    const notification = $(`
+        <div class="alert alert-success alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-check-circle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    
+    $('body').append(notification);
+    
+    setTimeout(function() {
+        notification.alert('close');
+    }, 5000);
+}
+
+function showError(message) {
+    const notification = $(`
+        <div class="alert alert-danger alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-exclamation-triangle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    
+    $('body').append(notification);
+    
+    setTimeout(function() {
+        notification.alert('close');
+    }, 5000);
+}
 
 function getCookie(name) {
     let cookieValue = null;
@@ -198,7 +481,6 @@ function getCookie(name) {
         const cookies = document.cookie.split(';');
         for (let i = 0; i < cookies.length; i++) {
             const cookie = cookies[i].trim();
-            // Does this cookie string begin with the name we want?
             if (cookie.substring(0, name.length + 1) === (name + '=')) {
                 cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
                 break;
@@ -274,10 +556,10 @@ function switchFilter(filterType) {
 
 // Initialize the first filter as active
 document.addEventListener('DOMContentLoaded', function() {
-    switchFilter('group');
+    switchFilter('type');
     
     // Initialize selection counts
-    ['group', 'type', 'status'].forEach(category => {
+    ['type', 'status'].forEach(category => {
         updateSelectionCount(category);
     });
 });
@@ -301,8 +583,7 @@ function updateSelectionCount(category) {
     countElement.textContent = `${count} ${label} selected`;
 }
 
-
-// Intercept form submission (optional, for AJAX submit)
+// Intercept form submission
 document.addEventListener('submit', function(e) {
     if (e.target.closest('#groupFormPanel form')) {
         e.preventDefault();
@@ -317,92 +598,38 @@ document.addEventListener('submit', function(e) {
                 'X-CSRFToken': getCookie('csrftoken')
             }
         })
-        .then(response => response.text())
+        .then(response => {
+            // Check if response is JSON (error) or HTML (form)
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                return response.json().then(data => {
+                    console.log(data);
+                    throw new Error(data.error || 'An error occurred');
+                });
+            } else {
+                return response.text();
+            }
+        })
         .then(html => {
             if (html.includes('form-group')) {
                 // Form has errors, re-render it
                 document.getElementById('groupFormContainer').innerHTML = html;
             } else {
-                // Success: close panel and reload page
+                // Success: close panel and show success message
                 closeGroupFormPanel();
-                location.reload(); // <--- This reloads the page
-            }
-        });
-    }
-});
-
-let offset = 0;
-const limit = 10;
-let loading = false;
-let allLoaded = false;
-
-function renderGroupRow(group) {
-    return `
-    <tr>
-        <td><div class="institution"><span>${group.name}</span></div></td>
-        <td>${group.type}</td>
-        <td>${group.unit_count}</td>
-        <td><div class="unit-head"><span>${group.group_head}</span>${group.group_head_email && group.group_head_email !== '-' ? `<small>${group.group_head_email}</small>` : ''}</div></td>
-        <td>${group.group_head_email || '-'}</td>
-        <td><span class="badge ${group.is_active ? 'active' : 'inactive'}">${group.is_active ? 'Active' : 'Inactive'}</span></td>
-        <td>
-            <div class="actions">
-                <a href="javascript:void(0);" class="btn-icon"
-                   onclick="openGroupFormPanel('${group.edit_url}', 'Edit Group')">
-                    <i class="fas fa-edit"></i>
-                </a>
-                <button type="button" 
-                        class="btn-icon btn-danger" 
-                        data-name="${group.name}"
-                        data-url="${group.delete_url}"
-                        onclick="confirmDelete(this)"
-                        title="Delete">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        </td>
-    </tr>
-    `;
-}
-
-function loadMoreGroups() {
-    if (loading || allLoaded) return;
-    loading = true;
-    document.getElementById('showMoreBtn').innerText = 'Loading...';
-    fetch(`/onboarding/groups/api/?offset=${offset}&limit=${limit}`)
-        .then(response => response.json())
-        .then(data => {
-            const groups = data.groups;
-            if (groups.length < limit) {
-                allLoaded = true;
-                document.getElementById('showMoreBtn').style.display = 'none';
-            }
-            offset += groups.length;
-            const tbody = document.getElementById('groupTableBody');
-            groups.forEach(group => {
-                tbody.insertAdjacentHTML('beforeend', renderGroupRow(group));
-            });
-            if (offset === 0 && groups.length === 0) {
-                tbody.innerHTML = `<tr>
-                    <td colspan="7" class="empty">
-                        <i class="fas fa-users"></i>
-                        <p>No groups found</p>
-                        <a href="javascript:void(0);" class="btn btn-primary"
-                           onclick="openGroupFormPanel('{% url 'group_create' %}', 'Add Group')">
-                         Add New Group
-                        </a>
-                    </td>
-                </tr>`;
-                document.getElementById('showMoreBtn').style.display = 'none';
+                showSuccess('Group saved successfully!');
+                // Reload the page after a short delay to show the success message
+                setTimeout(() => {
+                    location.reload();
+                }, 1000);
             }
         })
-        .finally(() => {
-            loading = false;
-            if (!allLoaded) document.getElementById('showMoreBtn').innerText = 'Show More';
+        .catch(error => {
+            // Handle JSON error responses
+            console.error('Error:', error);
+            showError(error.message);
         });
-}
-document.addEventListener('DOMContentLoaded', function() {
-    loadMoreGroups();
+    }
 });
 </script>
 {% endblock %} 
