@@ -58,9 +58,21 @@
 
                 <div class="form-group">
                     <label>Unit <span class="text-danger">*</span></label>
-                    <select class="form-control" id="unitSelect" name="unitId" required disabled>
-                        <option value="">Select Unit</option>
-                    </select>
+                    <div class="custom-dropdown-container">
+                        <div class="custom-dropdown-input" onclick="toggleUnitDropdown()" id="unitDropdownInput">
+                            <span class="placeholder" id="unitPlaceholder">Select Unit</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <div class="custom-dropdown-list" id="unitDropdownList" style="display: none;">
+                            <div class="search-container">
+                                <input type="text" placeholder="Search units..." id="unitSearchInput" oninput="filterUnits(this.value)">
+                            </div>
+                            <div class="options-container" id="unitOptionsContainer">
+                                <!-- Units will be loaded here -->
+                            </div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="unitSelect" name="unitId" required>
                     <div class="error-message" id="unitError"></div>
                 </div>
 
@@ -75,6 +87,12 @@
                         <div class="multiselect-dropdown" id="learnersDropdown">
                             <div class="search-container">
                                 <input type="text" placeholder="Search learners..." oninput="filterLearners(this.value)">
+                            </div>
+                            <div class="select-all-container">
+                                <label class="select-all-item">
+                                    <input type="checkbox" id="selectAllLearners" onchange="toggleSelectAllLearners()">
+                                    <span class="select-all-text">Select All</span>
+                                </label>
                             </div>
                             <div class="options-container" id="learnersOptions">
                                 <!-- Learners will be loaded here -->
@@ -166,6 +184,19 @@
             </div>
             <div style="text-align:center; margin: 20px 0;">
                 <button id="showMoreBatchesBtn" class="btn btn-primary" onclick="loadMoreBatches()">Show More</button>
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="empty-state" style="display: none;">
+                <div class="empty-icon">
+                    <i class="fas fa-box"></i>
+                </div>
+                <h3>No batches found</h3>
+                <p>Get started by creating your first batch</p>
+                <button class="btn btn-primary" onclick="toggleAddBatchPanel()">
+                    <i class="fas fa-plus"></i>
+                    Create Batch
+                </button>
             </div>
         </div>
     </div>
@@ -760,6 +791,190 @@
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.empty-icon {
+    font-size: 48px;
+    color: #cbd5e0;
+    margin-bottom: 16px;
+}
+
+.empty-state h3 {
+    margin: 0 0 8px 0;
+    color: #4a5568;
+    font-size: 18px;
+}
+
+.empty-state p {
+    margin: 0 0 24px 0;
+    color: #718096;
+}
+
+/* Custom Dropdown Styles */
+.custom-dropdown-container {
+    position: relative;
+    width: 100%;
+}
+
+.custom-dropdown-input {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-height: 38px;
+}
+
+.custom-dropdown-input:hover {
+    border-color: #F16564;
+}
+
+.custom-dropdown-input.focused {
+    border-color: #F16564;
+    box-shadow: 0 0 0 2px rgba(241, 101, 100, 0.1);
+}
+
+.custom-dropdown-input .placeholder {
+    color: #9ca3af;
+}
+
+.custom-dropdown-input .selected-value {
+    color: #2d3748;
+    font-weight: 500;
+}
+
+.custom-dropdown-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    max-height: 300px;
+    overflow: hidden;
+}
+
+.search-container {
+    padding: 12px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.search-container input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    font-size: 14px;
+    outline: none;
+}
+
+.search-container input:focus {
+    border-color: #F16564;
+    box-shadow: 0 0 0 2px rgba(241, 101, 100, 0.1);
+}
+
+.options-container {
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.unit-option {
+    padding: 12px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.2s ease;
+}
+
+.unit-option:hover {
+    background-color: #f7fafc;
+}
+
+.unit-option.selected {
+    background-color: #f0f9ff;
+    border-left: 3px solid #3b82f6;
+}
+
+.unit-option .unit-name {
+    font-weight: 500;
+    color: #2d3748;
+}
+
+.unit-option .unit-details {
+    font-size: 12px;
+    color: #718096;
+    margin-top: 2px;
+}
+
+.no-results {
+    padding: 16px;
+    text-align: center;
+    color: #666;
+    font-style: italic;
+}
+
+/* Loading state */
+.loading-units {
+    padding: 16px;
+    text-align: center;
+    color: #666;
+}
+
+.loading-units .spinner {
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #F16564;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 8px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* New styles for select all */
+.select-all-container {
+    padding: 8px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.select-all-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    margin: 0;
+    padding: 4px 0;
+}
+
+.select-all-item input[type="checkbox"] {
+    margin: 0;
+}
+
+.select-all-text {
+    font-weight: 500;
+    color: #2d3748;
+    font-size: 14px;
+}
+
+.select-all-item:hover .select-all-text {
+    color: #F16564;
+}
 </style>
 
 <script>
@@ -769,6 +984,11 @@ let currentPage = 1;
 let totalBatches = 0;
 let allBatches = [];
 const batchesPerPage = 10;
+
+// Custom dropdown variables
+let unitDropdownOpen = false;
+let availableUnits = [];
+let selectedUnit = null;
 
 // Load batches on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -830,8 +1050,10 @@ function displayBatches(batches) {
     tbody.innerHTML = '';
     
     if (batches.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #666;">No batches found</td></tr>';
-        return;
+        document.getElementById('emptyState').style.display = 'block';
+        document.getElementById('showMoreBatchesBtn').style.display = 'none';
+    } else {
+        document.getElementById('emptyState').style.display = 'none';
     }
     
     batches.forEach(batch => {
@@ -918,23 +1140,34 @@ function toggleAddBatchPanel() {
 
 function handleUnitTypeChange() {
     const unitType = document.getElementById('unitType').value;
-    const unitSelect = document.getElementById('unitSelect');
+    const unitDropdownInput = document.getElementById('unitDropdownInput');
     const learnersInput = document.getElementById('learnersInput');
     const learnersRequired = document.getElementById('learnersRequired');
     
-    unitSelect.innerHTML = '<option value="">Select Unit</option>';
+    // Reset unit selection
+    selectedUnit = null;
+    document.getElementById('unitPlaceholder').textContent = 'Select Unit';
+    document.getElementById('unitPlaceholder').className = 'placeholder';
+    document.getElementById('unitSelect').value = '';
     
     if (unitType) {
-        unitSelect.disabled = false;
-        loadUnits(unitType);
+        unitDropdownInput.style.pointerEvents = 'auto';
+        unitDropdownInput.style.opacity = '1';
         learnersInput.style.pointerEvents = 'auto';
         learnersInput.style.opacity = '1';
         learnersRequired.style.display = 'inline';
+        
+        // Load units for the selected type
+        loadUnits(unitType);
     } else {
-        unitSelect.disabled = true;
+        unitDropdownInput.style.pointerEvents = 'none';
+        unitDropdownInput.style.opacity = '0.5';
         learnersInput.style.pointerEvents = 'none';
         learnersInput.style.opacity = '0.5';
         learnersRequired.style.display = 'none';
+        
+        // Clear unit options
+        document.getElementById('unitOptionsContainer').innerHTML = '';
     }
     
     // Clear learners when unit type changes
@@ -947,36 +1180,75 @@ function handleUnitTypeChange() {
 
 function loadUnits(unitType) {
     const endpoint = unitType === 'hospital' ? '/api/fetch-hospitals/' : '/fetch-institutes/';
+    const container = document.getElementById('unitOptionsContainer');
+    
+    console.log('Loading units for type:', unitType, 'from endpoint:', endpoint);
+    
+    // Show loading state
+    container.innerHTML = `
+        <div class="loading-units">
+            <div class="spinner"></div>
+            <div>Loading units...</div>
+        </div>
+    `;
     
     fetch(endpoint)
-        .then(response => response.json())
+        .then(response => {
+            console.log('Response status:', response.status);
+            return response.json();
+        })
         .then(data => {
-            if (data.success || data.institutes) {
-                const unitSelect = document.getElementById('unitSelect');
-                const units = data.units || data.institutes;
-                units.forEach(unit => {
-                    const option = document.createElement('option');
-                    option.value = unit.id;
-                    option.textContent = unit.name || unit.instituteName;
-                    unitSelect.appendChild(option);
-                });
+            console.log('API response:', data);
+            
+            let units = [];
+            if (unitType === 'hospital' && data.success && data.units) {
+                units = data.units;
+            } else if (unitType === 'institution' && data.institutes) {
+                units = data.institutes;
             }
+            
+            console.log('Available units:', units);
+            availableUnits = units;
+            displayUnits(availableUnits);
         })
         .catch(error => {
             console.error('Error loading units:', error);
+            container.innerHTML = '<div class="no-results">Error loading units</div>';
         });
 }
 
-function loadAvailableLearners() {
-    const unitSelect = document.getElementById('unitSelect');
-    const unitType = document.getElementById('unitType').value;
+function displayUnits(units) {
+    const container = document.getElementById('unitOptionsContainer');
+    console.log('Displaying units:', units);
+    container.innerHTML = '';
     
-    if (!unitSelect.value) {
+    if (!units || units.length === 0) {
+        container.innerHTML = '<div class="no-results">No units found</div>';
+        return;
+    }
+    
+    units.forEach(unit => {
+        console.log('Creating option for unit:', unit);
+        const option = document.createElement('div');
+        option.className = 'unit-option';
+        const unitName = unit.name || unit.instituteName || 'Unnamed Unit';
+        option.onclick = () => selectUnit(unit.id, unitName);
+        option.innerHTML = `
+            <div class="unit-name">${unitName}</div>
+        `;
+        container.appendChild(option);
+    });
+}
+
+function loadAvailableLearners() {
+    if (!selectedUnit) {
         console.log('No unit selected');
         return;
     }
     
-    const unitId = unitSelect.value;
+    const unitType = document.getElementById('unitType').value;
+    const unitId = selectedUnit.id;
+    
     fetch(`/api/fetch-learners/${unitType}/${unitId}/`)
         .then(response => response.json())
         .then(data => {
@@ -995,6 +1267,11 @@ function loadAvailableLearners() {
 function displayLearners(learners) {
     const container = document.getElementById('learnersOptions');
     container.innerHTML = '';
+    
+    if (learners.length === 0) {
+        container.innerHTML = '<div style="padding: 16px; text-align: center; color: #666;">No learners found</div>';
+        return;
+    }
     
     learners.forEach(learner => {
         const option = document.createElement('div');
@@ -1019,6 +1296,9 @@ function displayLearners(learners) {
         });
         container.appendChild(option);
     });
+    
+    // Update select all checkbox state
+    updateSelectAllState();
 }
 
 function toggleLearnersDropdown() {
@@ -1037,6 +1317,11 @@ function filterLearners(searchText) {
         learner.email.toLowerCase().includes(searchText.toLowerCase())
     );
     displayLearners(filtered);
+    
+    // Update select all checkbox state after filtering
+    setTimeout(() => {
+        updateSelectAllState();
+    }, 0);
 }
 
 function updateSelectedLearners() {
@@ -1064,6 +1349,9 @@ function updateSelectedLearners() {
     } else {
         placeholder.style.display = 'block';
     }
+    
+    // Update select all checkbox state
+    updateSelectAllState();
 }
 
 function removeLearner(value) {
@@ -1269,6 +1557,85 @@ document.addEventListener('click', function(event) {
     }
 });
 
+// Custom dropdown functionality
+function toggleUnitDropdown() {
+    const dropdownList = document.getElementById('unitDropdownList');
+    const dropdownInput = document.getElementById('unitDropdownInput');
+    const searchInput = document.getElementById('unitSearchInput');
+    
+    if (unitDropdownOpen) {
+        dropdownList.style.display = 'none';
+        dropdownInput.classList.remove('focused');
+        unitDropdownOpen = false;
+    } else {
+        dropdownList.style.display = 'block';
+        dropdownInput.classList.add('focused');
+        unitDropdownOpen = true;
+        
+        // Focus the search input
+        setTimeout(() => {
+            searchInput.focus();
+        }, 100);
+    }
+}
+
+function filterUnits(searchTerm) {
+    const optionsContainer = document.getElementById('unitOptionsContainer');
+    const unitOptions = optionsContainer.querySelectorAll('.unit-option');
+    let hasVisibleOptions = false;
+    
+    unitOptions.forEach(option => {
+        const unitName = option.querySelector('.unit-name').textContent.toLowerCase();
+        if (unitName.includes(searchTerm.toLowerCase())) {
+            option.style.display = 'block';
+            hasVisibleOptions = true;
+        } else {
+            option.style.display = 'none';
+        }
+    });
+    
+    // Show/hide no results message
+    const noResults = optionsContainer.querySelector('.no-results');
+    if (noResults) {
+        noResults.style.display = hasVisibleOptions ? 'none' : 'block';
+    }
+}
+
+function selectUnit(unitId, unitName) {
+    selectedUnit = { id: unitId, name: unitName };
+    
+    // Update the display
+    const placeholder = document.getElementById('unitPlaceholder');
+    placeholder.textContent = unitName;
+    placeholder.className = 'selected-value';
+    
+    // Update the hidden input
+    document.getElementById('unitSelect').value = unitId;
+    
+    // Close dropdown
+    toggleUnitDropdown();
+    
+    // Clear search
+    document.getElementById('unitSearchInput').value = '';
+    
+    // Load learners for the selected unit
+    loadAvailableLearners();
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(event) {
+    const dropdownContainer = document.querySelector('.custom-dropdown-container');
+    if (dropdownContainer && !dropdownContainer.contains(event.target)) {
+        const dropdownList = document.getElementById('unitDropdownList');
+        const dropdownInput = document.getElementById('unitDropdownInput');
+        if (unitDropdownOpen) {
+            dropdownList.style.display = 'none';
+            dropdownInput.classList.remove('focused');
+            unitDropdownOpen = false;
+        }
+    }
+});
+
 
 function showError(message) {
     console.log("showError", message);
@@ -1309,6 +1676,43 @@ function showSuccess(message) {
     setTimeout(function() {
         notification.alert('close');
     }, 2000);
+}
+
+function toggleSelectAllLearners() {
+    const selectAllCheckbox = document.getElementById('selectAllLearners');
+    const checkboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]');
+
+    if (selectAllCheckbox.checked) {
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = true;
+        });
+        updateSelectedLearners(); // Update the selected tags display
+    } else {
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        updateSelectedLearners(); // Update the selected tags display
+    }
+}
+
+function updateSelectAllState() {
+    const selectAllCheckbox = document.getElementById('selectAllLearners');
+    const learnerCheckboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]');
+    const checkedCheckboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]:checked');
+    
+    if (learnerCheckboxes.length === 0) {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = false;
+    } else if (checkedCheckboxes.length === 0) {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = false;
+    } else if (checkedCheckboxes.length === learnerCheckboxes.length) {
+        selectAllCheckbox.checked = true;
+        selectAllCheckbox.indeterminate = false;
+    } else {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = true;
+    }
 }
 </script>
 {% endblock %}

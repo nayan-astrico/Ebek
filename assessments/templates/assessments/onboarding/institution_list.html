@@ -346,6 +346,14 @@ document.addEventListener('submit', function(e) {
         const form = e.target;
         const url = form.action;
         const formData = new FormData(form);
+        
+        // Get the save button and add loading state
+        const saveButton = form.querySelector('button[type="submit"]');
+        if (saveButton) {
+            document.getElementById("save-button").innerText = "Loading..."
+            saveButton.classList.add('btn-loading');
+        }
+        
         fetch(url, {
             method: 'POST',
             body: formData,
@@ -367,6 +375,11 @@ document.addEventListener('submit', function(e) {
             }
         })
         .then(html => {
+            // Remove loading state from button
+            if (saveButton) {
+                saveButton.classList.remove('btn-loading');
+            }
+            
             if (html.includes('form-group')) {
                 // Form has errors, re-render it
                 document.getElementById('institutionFormContainer').innerHTML = html;
@@ -381,6 +394,11 @@ document.addEventListener('submit', function(e) {
             }
         })
         .catch(error => {
+            // Remove loading state from button on error
+            if (saveButton) {
+                saveButton.classList.remove('btn-loading');
+            }
+            
             // Handle JSON error responses
             console.error('Error:', error);
             showError(error.message);
@@ -488,9 +506,9 @@ function renderInstitutionRow(inst) {
     row.setAttribute('data-institution-id', inst.id);
     row.innerHTML = `
         <td><div class="institution"><span>${inst.name}</span></div></td>
-        <td>${inst.group}</td>
-        <td>${inst.state}</td>
-        <td>${inst.total_strength}</td>
+        <td>${inst.group ? inst.group : '-'}</td>
+        <td>${inst.state ? inst.state : '-'}</td>
+        <td>${inst.total_strength ? inst.total_strength : '-'}</td>
         <td>
             ${inst.unit_head ? `<div class="unit-head"><span>${inst.unit_head}</span><small>${inst.unit_head_email}</small></div>` : '<span class="text-muted">Not Assigned</span>'}
         </td>
@@ -538,6 +556,8 @@ function loadMoreInstitutions() {
             console.log('DEBUG: API response:', data);
             
             const institutions = data.institutions || [];
+
+            console.log('DEBUG: Institutions:', institutions);
             
             if (institutions.length < limit || data.all_loaded) {
                 allLoaded = true;

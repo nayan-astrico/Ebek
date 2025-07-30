@@ -413,6 +413,7 @@ def create_procedure_assignment_and_test(request):
             created_tests = []  # To store references for created tests
 
             if batch_ids != []:
+                print("Here in first if")
                 for batch_id in batch_ids:
                     # Fetch cohort document
                     cohort_ref = db.collection('Cohort').document(batch_id)
@@ -502,6 +503,7 @@ def create_procedure_assignment_and_test(request):
                             'typeOfTest': 'Classroom',
                         })
             else:
+                print("Here in else")
                 skillathon_id = data.get('skillathon_id')
                 skillathon_ref = db.collection('Skillathon').document(skillathon_id)
                 skillathon_name = skillathon_ref.get().to_dict()["skillathonName"]
@@ -524,7 +526,10 @@ def create_procedure_assignment_and_test(request):
                         procedure_ref = db.collection('ProcedureTable').document(procedure_id)
                         procedure_data = procedure_ref.get().to_dict()
 
+                        print("PROCEDURE DATA", procedure_data)
+
                         if not procedure_data:
+                            print("NO PROCEDURE DATA")
                             continue
                         
                         procedure_assignment_data = {
@@ -573,6 +578,8 @@ def create_procedure_assignment_and_test(request):
                         # Update Test document with all procedure assignments
                         test_ref.update({'procedureAssignments': firestore.ArrayUnion(procedure_assignment_refs)})
                     except Exception as e:
+                        print("ERROR IN ELSE", traceback.format_exc())
+                        print("ERROR IN ELSE", str(e))
                         pass
                 
                     

@@ -83,3 +83,12 @@ class SkillathonEventAdmin(admin.ModelAdmin):
     readonly_fields = ('created_at', 'updated_at')
 
 admin.site.register(SkillathonEvent, SkillathonEventAdmin)
+
+class ExamAssignmentAdmin(admin.ModelAdmin):
+    list_display = ('learner', 'procedure_name', 'exam_assignment_id', 'created_at')
+    search_fields = ('learner', 'procedure_name', 'exam_assignment_id')
+    readonly_fields = ('exam_assignment_id', 'created_at')
+
+admin.site.register(ExamAssignment, ExamAssignmentAdmin)
+
+admin.site.register(SchedularObject)

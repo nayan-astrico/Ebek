@@ -3,10 +3,11 @@ from firebase_admin import auth, firestore
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver, Signal
 from django.conf import settings
-from .models import EbekUser, Institution, Hospital, Learner, Assessor, SkillathonEvent, Group
+from .models import EbekUser, Institution, Hospital, Learner, Assessor, SkillathonEvent, Group, SchedularObject
 from django.contrib.auth.models import User
 from django.contrib.auth import get_user_model
 import traceback
+import json
 # Use the default app initialized in settings.py
 db = firestore.client()
 
@@ -47,7 +48,7 @@ class DisableSignals:
             if key in self.receivers:
                 signal.receivers = self.receivers[key]  # Restore the original receivers
 
-def create_test_and_exam_assignments(learner, skillathon_event):
+def create_test_and_exam_assignments(learner, skillathon_event, test_ref=None, proc_assignment_ref_array=None):
     try:
         """Helper function to create test and exam assignments for a learner with a skillathon event"""
         print("INSIDE CREATE TEST AND EXAM ASSIGNMENTS")
@@ -176,7 +177,8 @@ def on_user_save(sender, instance, created, **kwargs):
     if hasattr(instance, "_raw_password"):
         password = instance._raw_password
     sync_user_to_firestore(instance)
-    sync_user_to_firebase_auth(instance, password=password)
+    if instance.user_role != 'student' or instance.user_role != 'nurse':
+        sync_user_to_firebase_auth(instance, password=password)
 
 @receiver(post_delete, sender=EbekUser)
 def on_user_delete(sender, instance, **kwargs):
@@ -476,7 +478,9 @@ def on_learner_delete(sender, instance, **kwargs):
         
         # Delete from Firestore
         users_ref = db.collection("Users")
+        print(instance.learner_user.email)
         query = users_ref.where("emailID", "==", instance.learner_user.email).limit(1)
+        instance.learner_user.delete()
         docs = query.get()
         if docs:
             docs[0].reference.delete()
@@ -567,66 +571,6 @@ def on_assessor_delete(sender, instance, **kwargs):
         import traceback
         traceback.print_exc()
 
-def batch_sync_users_to_firestore(users):
-    try:
-        batch = db.batch()
-        for user in users:
-            user_data = {
-                "emailID": user.email,
-                "name": user.full_name,
-                "role": user.user_role,
-                "is_active": user.is_active,
-                "date_joined": user.date_joined.isoformat() if user.date_joined else None,
-                "phone_number": user.phone_number,
-                "username": user.email
-            }
-            
-            doc_ref = db.collection("Users").document(str(user.id))
-            batch.set(doc_ref, user_data)
-        batch.commit()
-    
-        for user in users:
-            learner = Learner.objects.get(learner_user=user)
-            print("INSIDE CREATE TEST AND EXAM ASSIGNMENTS")
-            print(learner)
-            print(learner.skillathon_event)
-
-            users_ref = db.collection("Users")
-            query = users_ref.where("emailID", "==", learner.learner_user.email).limit(1)
-            docs = query.get()
-        
-            if docs:
-                # Update the first matching document with all learner data
-                user_data = {
-                    "learner_type": learner.learner_type,
-                    "speciality": learner.speciality,
-                    "state": learner.state,
-                    "district": learner.district,
-                    "date_of_birth": learner.date_of_birth.isoformat() if learner.date_of_birth else None,
-                    "certifications": learner.certifications,
-                    "learner_gender": learner.learner_gender,
-                    "skillathon_event": learner.skillathon_event.name if learner.skillathon_event else None
-                }
-                
-                # Add institution/hospital specific data
-                if learner.learner_type == 'student' and learner.college:
-                    user_data["institution"] = learner.college.name
-                    user_data["course"] = learner.course
-                    user_data["stream"] = learner.stream
-                    user_data["year_of_study"] = learner.year_of_study
-                elif learner.learner_type == 'nurse' and learner.hospital:
-                    user_data["hospital"] = learner.hospital.name
-                    user_data["designation"] = learner.designation
-                    user_data["years_of_experience"] = learner.years_of_experience
-                    user_data["educational_qualification"] = learner.educational_qualification
-                    user_data["educational_institution"] = learner.educational_institution
-                
-            docs[0].reference.update(user_data)
-            create_test_and_exam_assignments(learner, learner.skillathon_event)
-        
-    except Exception as e:
-        print(e)
-        print(traceback.format_exc())
 
 def batch_sync_users_to_firebase_auth(users):
     # Firebase Auth doesn't support true batch operations, but we can optimize
@@ -650,7 +594,7 @@ def batch_sync_users_to_firebase_auth(users):
                 disabled=not user.is_active
             )
 
-def batch_sync_users_to_firestore_with_progress(users, session_key, total_rows):
+def batch_sync_users_to_firestore_with_progress(users, session_key, total_rows, skillathon_name=""):
     """
     Batch sync users to Firestore with real-time progress tracking
     """
@@ -660,7 +604,7 @@ def batch_sync_users_to_firestore_with_progress(users, session_key, total_rows):
         
         # Update progress - Starting Firebase sync
         progress_data = cache.get(f"upload_progress:{session_key}")
-        print(f"[DEBUG] Retrieved progress data from cache: {progress_data}")
+        print(f"[DEBUG] Retrieved initial progress data from cache: {progress_data}")
         
         progress_data.update({
             'status': 'syncing_firebase',
@@ -672,6 +616,7 @@ def batch_sync_users_to_firestore_with_progress(users, session_key, total_rows):
         
         # Step 1: Batch write user documents (30% to 50%)
         print(f"[DEBUG] Starting batch write to Firestore...")
+        learners_ids = []
         batch = db.batch()
         for i, user in enumerate(users):
             user_data = {
@@ -686,6 +631,7 @@ def batch_sync_users_to_firestore_with_progress(users, session_key, total_rows):
             
             doc_ref = db.collection("Users").document(str(user.id))
             batch.set(doc_ref, user_data)
+            learners_ids.append(user.id)
             
             # Update progress every 10 users
             if (i + 1) % 10 == 0:
@@ -695,12 +641,9 @@ def batch_sync_users_to_firestore_with_progress(users, session_key, total_rows):
                     'progress': progress
                 })
                 cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-                print(f"[DEBUG] Updated progress to {progress}% for user {i + 1}")
         
         # Commit the batch
-        print(f"[DEBUG] Committing batch to Firestore...")
         batch.commit()
-        print(f"[DEBUG] Batch commit completed successfully")
         
         # Update progress - Batch commit completed
         progress_data.update({
@@ -708,10 +651,8 @@ def batch_sync_users_to_firestore_with_progress(users, session_key, total_rows):
             'progress': 50
         })
         cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        print(f"[DEBUG] Progress updated to 50% after batch commit")
         
         # Step 2: Update learner data and create assignments (50% to 90%)
-        print(f"[DEBUG] Starting learner data updates...")
         for i, user in enumerate(users):
             try:
                 learner = Learner.objects.get(learner_user=user)
@@ -771,8 +712,8 @@ def batch_sync_users_to_firestore_with_progress(users, session_key, total_rows):
                     cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
                     
                     # Create test and exam assignments
-                    create_test_and_exam_assignments(learner, learner.skillathon_event)
-                    
+                    # create_test_and_exam_assignments(learner, learner.skillathon_event)
+            
             except Learner.DoesNotExist:
                 # User exists but no learner record - this is normal for some users
                 continue
@@ -780,13 +721,20 @@ def batch_sync_users_to_firestore_with_progress(users, session_key, total_rows):
                 print(f"Error processing learner {user.email}: {e}")
                 continue
         
+        if skillathon_name:
+            SchedularObject.objects.create(
+                data=json.dumps({
+                    "learner_ids": learners_ids,
+                    "skillathon_name": skillathon_name
+                })
+            )
+                
         # Update progress - Firebase sync completed
         progress_data.update({
             'message': 'Firebase sync completed successfully!',
             'progress': 90
         })
         cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        print(f"[DEBUG] Firebase sync completed, progress set to 90%")
         
     except Exception as e:
         print(f"Firebase sync error: {e}")
