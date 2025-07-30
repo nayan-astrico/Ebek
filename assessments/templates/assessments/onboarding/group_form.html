@@ -88,7 +88,7 @@
                         <div class="form-group">
                             <div class="custom-control custom-switch">
                                 <input type="checkbox" class="custom-control-input" id="is_active" name="is_active" 
-                                       {% if action == 'Edit' and form.instance.is_active %}checked{% endif %}>
+                                       {% if form.instance.is_active %}checked{% endif %}>
                                 <label class="custom-control-label" for="is_active">Active</label>
                             </div>
                         </div>

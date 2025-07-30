@@ -1925,9 +1925,23 @@ def reconnect_all_signals():
 def learner_list_api(request):
     offset = int(request.GET.get('offset', 0))
     limit = int(request.GET.get('limit', 10))
-
+    search_query = request.GET.get('search', '').strip()
+    
+    print(f"DEBUG: Learner search query received: '{search_query}'")
+    
     # Filtering logic (same as main view)
     learners = Learner.objects.all().order_by('-created_at')
+    
+    # Apply search filter if search query exists
+    if search_query:
+        print(f"DEBUG: Applying learner search filter for: '{search_query}'")
+        learners = learners.filter(
+            Q(learner_user__full_name__icontains=search_query) |
+            Q(learner_user__email__icontains=search_query) |
+            Q(learner_user__phone_number__icontains=search_query) |
+            Q(learner_type__icontains=search_query)
+        )
+    
     selected_institutions = request.GET.getlist('institution')
     selected_hospitals = request.GET.getlist('hospital')
     selected_learner_types = request.GET.getlist('learner_type')
@@ -1939,8 +1953,15 @@ def learner_list_api(request):
     if selected_learner_types:
         learners = learners.filter(learner_type__in=selected_learner_types)
 
+    # Get total count for pagination info
+    total_count = learners.count()
+    print(f"DEBUG: Total learners after filtering: {total_count}")
+    
     # Pagination (offset/limit)
     learners = learners[offset:offset+limit]
+    
+    # Check if all data is loaded
+    all_loaded = (offset + limit) >= total_count
 
     data = []
     for learner in learners:
@@ -1956,7 +1977,15 @@ def learner_list_api(request):
             'edit_url': reverse('learner_edit', args=[learner.pk]),
             'delete_url': reverse('learner_delete', args=[learner.pk]),
         })
-    return JsonResponse({'learners': data})
+    
+    print(f"DEBUG: Returning {len(data)} learners")
+    
+    return JsonResponse({
+        'learners': data,
+        'total_count': total_count,
+        'all_loaded': all_loaded,
+        'search_query': search_query,
+    })
 
 @login_required
 def sync_strength_counts(request):

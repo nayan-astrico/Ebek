@@ -26,7 +26,7 @@
 <div class="search-filter-bar">
     <div class="search-box">
         <i class="fas fa-search"></i>
-        <input type="text" placeholder="Search learners...">
+        <input type="text" placeholder="Search learners..." id="searchInput" oninput="filterLearners(this.value)">
     </div>
     <button class="btn-filter" onclick="toggleFilterPanel()">
         <i class="fas fa-filter"></i>
@@ -126,7 +126,7 @@
         <!-- Filter Actions -->
         <div class="filter-actions">
             <button type="button" class="btn btn-light" onclick="toggleFilterPanel()">Cancel</button>
-            <button type="submit" class="btn btn-primary">Apply filter</button>
+            <button type="button" class="btn btn-primary" onclick="applyFilters()">Apply filter</button>
         </div>
     </form>
     </div>
@@ -2320,6 +2320,57 @@ let offset = 0;
 const limit = 10;
 let loading = false;
 let allLoaded = false;
+let currentSearch = '';
+let currentFilters = {};
+
+// Search functionality
+function filterLearners(searchQuery) {
+    currentSearch = searchQuery;
+    resetLearnerList();
+    applySearch();
+}
+
+// Apply search with reset functionality
+function applySearch() {
+    offset = 0;
+    allLoaded = false;
+    document.getElementById('learnerTableBody').innerHTML = '';
+    document.getElementById('showMoreBtn').style.display = 'inline-flex';
+    loadMoreLearners();
+}
+
+function resetLearnerList() {
+    offset = 0;
+    allLoaded = false;
+    document.getElementById('learnerTableBody').innerHTML = '';
+    document.getElementById('showMoreBtn').style.display = 'inline-flex';
+}
+
+function applyFilters() {
+    currentFilters = {};
+    
+    // Get institution filters
+    const institutionCheckboxes = document.querySelectorAll('input[name="institution"]:checked');
+    if (institutionCheckboxes.length > 0) {
+        currentFilters.institution = Array.from(institutionCheckboxes).map(cb => cb.value);
+    }
+    
+    // Get hospital filters
+    const hospitalCheckboxes = document.querySelectorAll('input[name="hospital"]:checked');
+    if (hospitalCheckboxes.length > 0) {
+        currentFilters.hospital = Array.from(hospitalCheckboxes).map(cb => cb.value);
+    }
+    
+    // Get learner type filters
+    const learnerTypeCheckboxes = document.querySelectorAll('input[name="learner_type"]:checked');
+    if (learnerTypeCheckboxes.length > 0) {
+        currentFilters.learner_type = Array.from(learnerTypeCheckboxes).map(cb => cb.value);
+    }
+    
+    resetLearnerList();
+    loadMoreLearners();
+    toggleFilterPanel();
+}
 
 function renderLearnerRow(learner) {
     console.log(learner)
@@ -2360,11 +2411,30 @@ function loadMoreLearners() {
     if (loading || allLoaded) return;
     loading = true;
     document.getElementById('showMoreBtn').innerText = 'Loading...';
-    fetch(`/onboarding/learners/api/?offset=${offset}&limit=${limit}`)
+    
+    // Build query parameters
+    const params = new URLSearchParams();
+    params.append('offset', offset);
+    params.append('limit', limit);
+    
+    if (currentSearch) {
+        params.append('search', currentSearch);
+    }
+    
+    // Add filters
+    Object.keys(currentFilters).forEach(key => {
+        if (currentFilters[key] && currentFilters[key].length > 0) {
+            currentFilters[key].forEach(value => {
+                params.append(key, value);
+            });
+        }
+    });
+    
+    fetch(`/onboarding/learners/api/?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
             const learners = data.learners;
-            if (learners.length < limit) {
+            if (data.all_loaded) {
                 allLoaded = true;
                 document.getElementById('showMoreBtn').style.display = 'none';
             }
