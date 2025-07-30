@@ -16,8 +16,8 @@ except Exception as e:
     raise
 
 # Get AWS credentials from environment variables
-AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID', 'AKIAQGYBPNQU7R2CPYH6')
-AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', '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')
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
 AWS_REGION = os.getenv('AWS_REGION', 'ap-south-1')
 
 # Initialize SES client
