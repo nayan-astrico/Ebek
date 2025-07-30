@@ -171,7 +171,10 @@
         
                                 <div class="form-group text-right mb-0">
                                     <a href="{% url 'hospital_list' %}" class="btn btn-light">Cancel</a>
-                                    <button type="submit" class="btn btn-primary ml-2">Save</button>
+                                    <button type="submit" class="btn btn-primary ml-2" id="saveButton">
+                                        <span class="loader"></span>
+                                        <span class="btn-text" id="save-button">Save</span>
+                                    </button>
                                 </div>
                         </div>
 

@@ -117,7 +117,6 @@
                             <th>Email</th>
                             <th>Mobile Number</th>
                             <th>Speciality</th>
-                            <th>Location</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
@@ -799,8 +798,7 @@ function renderAssessorRow(assessor) {
         <td><div class="institution"><span>${assessor.full_name}</span></div></td>
         <td>${assessor.email}</td>
         <td>${assessor.phone_number}</td>
-        <td>${assessor.specialization}</td>
-        <td>${assessor.location}</td>
+        <td>${assessor.specialization ? assessor.specialization : '-'}</td>
         <td><span class="badge ${assessor.is_active ? 'active' : 'inactive'}">${assessor.is_active ? 'Active' : 'Inactive'}</span></td>
         <td>
             <div class="actions">
@@ -920,14 +918,41 @@ function applyFiltersAndClose() {
 }
 
 function showSuccess(message) {
-    // You can implement a toast notification here
-    console.log('Success:', message);
+    const notification = $(`
+        <div class="alert alert-success alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-check-circle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    
+    $('body').append(notification);
+    
+    setTimeout(function() {
+        notification.alert('close');
+    }, 5000);
 }
 
 function showError(message) {
-    // You can implement a toast notification here
-    console.error('Error:', message);
+    const notification = $(`
+        <div class="alert alert-danger alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-exclamation-triangle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    
+    $('body').append(notification);
+    
+    setTimeout(function() {
+        notification.alert('close');
+    }, 5000);
 }
+
 
 function submitAssessorForm(event, form) {
     event.preventDefault();
@@ -936,8 +961,10 @@ function submitAssessorForm(event, form) {
     const submitButton = form.querySelector('button[type="submit"]');
     const originalText = submitButton.textContent;
     
-    submitButton.disabled = true;
-    submitButton.textContent = 'Saving...';
+    if (submitButton) {
+        document.getElementById("save-button").innerText = "Loading..."
+        submitButton.classList.add('btn-loading');
+    }
     
     fetch(form.action, {
         method: 'POST',
@@ -949,6 +976,9 @@ function submitAssessorForm(event, form) {
     .then(response => {
         if (response.ok) {
             // Success - close panel and reload list
+            if (submitButton) {
+                submitButton.classList.remove('btn-loading');
+            }
             closeAssessorFormPanel();
             // Reload the assessor list
             resetAssessorList();

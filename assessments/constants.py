@@ -32,3 +32,10 @@ STREAM_CHOICES = [
         ('post_basic_2y', 'Post-basic (2Y)'),
         ('msc', 'MSc (Speciality)')
     ]
+
+TYPE_OF_EVENT = [
+    ('skillathon', 'Skillathon'),
+    ('mock', 'Mock'),
+    ('classroom', 'Classroom'),
+    ('final', 'Final')
+]

@@ -24,7 +24,7 @@ from .onboarding_forms import LearnerForm
 from .models import Learner, Institution, Hospital, SkillathonEvent
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
-from .firebase_sync import sync_user_to_firestore, sync_user_to_firebase_auth, batch_sync_users_to_firestore, batch_sync_users_to_firebase_auth, create_test_and_exam_assignments, DisableSignals, enable_all_signals
+from .firebase_sync import sync_user_to_firestore, sync_user_to_firebase_auth, batch_sync_users_to_firebase_auth, create_test_and_exam_assignments, DisableSignals, enable_all_signals
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import Signal
 from firebase_admin import firestore
@@ -278,6 +278,8 @@ def institution_list(request):
     paginator = Paginator(institutions, 10)
     page = request.GET.get('page')
     institutions = paginator.get_page(page)
+
+    print('DEBUG: Institutions:', institutions)
     
     return render(request, 'assessments/onboarding/institution_list.html', {
         'institutions': institutions,
@@ -507,6 +509,10 @@ def institution_list_api(request):
             'group': institution.group.name if institution.group else None,
             'edit_url': reverse('institution_edit', args=[institution.pk]),
             'delete_url': reverse('institution_delete', args=[institution.pk]),
+            'onboarding_type': institution.onboarding_type,
+            'unit_head': institution.unit_head.full_name if institution.unit_head else None,
+            'unit_head_email': institution.unit_head.email if institution.unit_head else None,
+            'unit_head_phone': institution.unit_head.phone_number if institution.unit_head else None,
         })
     
     print(f"DEBUG: Returning {len(data)} institutions")
@@ -571,7 +577,7 @@ def hospital_list(request):
         'selected_groups': selected_groups,
         'selected_states': selected_states,
         'selected_statuses': selected_statuses,
-        'search_query': search_query,
+        'search_query': search_query
     })
 
 @login_required
@@ -791,6 +797,7 @@ def hospital_list_api(request):
             'group': hospital.group.name if hospital.group else None,
             'unit_head': hospital.unit_head.get_full_name() if hospital.unit_head else None,
             'unit_head_email': hospital.unit_head.email if hospital.unit_head else None,
+             'unit_head_phone': hospital.unit_head.phone_number if hospital.unit_head else None,
             'edit_url': reverse('hospital_edit', args=[hospital.pk]),
             'delete_url': reverse('hospital_delete', args=[hospital.pk]),
         })
@@ -852,6 +859,7 @@ def group_list_api(request):
             'unit_count': group.institution_set.count() if group.type == 'institution' else group.hospital_set.count(),
             'group_head': group.group_head.get_full_name() if group.group_head else 'Not Assigned',
             'group_head_email': group.group_head.email if group.group_head else '-',
+            'group_head_phone': group.group_head.phone_number if group.group_head else '-',
             'is_active': group.is_active,
             'edit_url': reverse('group_edit', args=[group.pk]),
             'delete_url': reverse('group_delete', args=[group.pk]),
@@ -1176,6 +1184,7 @@ def process_bulk_upload_with_progress(file_path, session_key):
         error_rows = []
         User = get_user_model()
         users_to_sync = []
+        skillathon_name = ""
         
         # Disable signals during bulk creation
         print(f"[DEBUG] Starting Django processing loop...")
@@ -1229,6 +1238,7 @@ def process_bulk_upload_with_progress(file_path, session_key):
                                 if form_field == 'skillathon_event' and value:
                                     try:
                                         form_data['skillathon_event'] = SkillathonEvent.objects.get(name=value.strip()).id
+                                        skillathon_name = value.strip()
                                     except SkillathonEvent.DoesNotExist:
                                         form_data['skillathon_event'] = None
                     
@@ -1289,7 +1299,8 @@ def process_bulk_upload_with_progress(file_path, session_key):
                                 user.set_password(default_password)
                                 user.save()
                                 users_to_sync.append(user)
-                            
+                            print("FORMMMMM")
+                            print(form.cleaned_data)
                             learner = form.save(commit=False)
                             learner.learner_user = user
                             learner.save()
@@ -1326,7 +1337,7 @@ def process_bulk_upload_with_progress(file_path, session_key):
         # Batch sync all users to Firebase with progress tracking
         if users_to_sync:
             print(f"[DEBUG] Starting Firebase sync for {len(users_to_sync)} users...")
-            batch_sync_users_to_firestore_with_progress(users_to_sync, session_key, total_rows)
+            batch_sync_users_to_firestore_with_progress(users_to_sync, session_key, total_rows, skillathon_name)
         else:
             print(f"[DEBUG] No users to sync to Firebase")
         

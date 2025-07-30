@@ -93,9 +93,12 @@
                             </div>
                         </div>
 
-                        <div class="form-actions">
-                            <button type="submit" class="btn btn-primary">Save</button>
-                            <button type="button" class="btn btn-light" onclick="closeGroupFormPanel()">Cancel</button>
+                        <div class="form-group text-right mb-0">
+                            <a href="{% url 'group_list' %}" class="btn btn-light">Cancel</a>
+                            <button type="submit" class="btn btn-primary ml-2" id="saveButton">
+                                <span class="loader"></span>
+                                <span class="btn-text" id="save-button">Save</span>
+                            </button>
                         </div>
                     </form>
                     </div>

@@ -1063,7 +1063,7 @@ function loadMoreLearners() {
                 tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:#666;">No learners found</td></tr>`;
                 document.getElementById('showMoreLearnersBtn').style.display = 'none';
             } else if (!allLearnersLoaded) {
-                document.getElementById('showMoreLearnersBtn').style.display = 'block';
+                document.getElementById('showMoreLearnersBtn').style.display = 'inline-flex';
             }
         })
         .finally(() => {

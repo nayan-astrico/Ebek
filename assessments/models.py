@@ -249,7 +249,10 @@ class Assessor(models.Model):
     assessor_user = models.ForeignKey('EbekUser', on_delete=models.SET_NULL, null=True, blank=True)
     assessor_id = models.CharField(max_length=50, unique=True, editable=False)
     def __str__(self):
-        return self.assessor_user.full_name
+        try:
+            return self.assessor_user.full_name
+        except:
+            return "Assessor"
     
     def save(self, *args, **kwargs):
         if not self.assessor_id:
@@ -281,3 +284,26 @@ class SkillathonEvent(models.Model):
     @property
     def assessor_count(self):
         return self.assessor_set.count()
+
+class SchedularObject(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_completed = models.BooleanField(default=False)
+    data = models.TextField(null=True, blank=True)
+    update_data = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return str(self.created_at)
+
+class ExamAssignment(models.Model):
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    procedure_name = models.CharField(default="", max_length=500)
+    exam_assignment_id = models.CharField(default="", max_length=50)
+    created_at = models.DateTimeField(auto_now_add=True)
+    type_of_event = models.CharField(max_length=200, choices=TYPE_OF_EVENT, default='', null=True, blank=True, help_text='type_of_event')
+    skillathon_name = models.CharField(max_length=200, default="", null=True, blank=True, help_text='skillathon_name')
+    
+    def __str__(self):
+        try:    
+            return self.learner.learner_user.full_name + self.procedure_name
+        except:
+            return "Exam Assignment"

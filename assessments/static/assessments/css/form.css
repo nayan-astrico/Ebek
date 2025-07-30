@@ -114,3 +114,35 @@ textarea.form-control {
     color: #E53E3E;
     margin-left: 4px;
 }
+
+/* Loader styles for form submission */
+.loader {
+    display: none;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #ffffff;
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: spin 1s linear infinite;
+    margin-right: 8px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.btn-loading {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.btn-loading .btn-text {
+    display: none;
+}
+
+.btn-loading .loader {
+    display: inline-block;
+}
+

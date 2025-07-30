@@ -590,6 +590,14 @@ document.addEventListener('submit', function(e) {
         const form = e.target;
         const url = form.action;
         const formData = new FormData(form);
+
+        // Get the save button and add loading state
+        const saveButton = form.querySelector('button[type="submit"]');
+        if (saveButton) {
+            document.getElementById("save-button").innerText = "Loading..."
+            saveButton.classList.add('btn-loading');
+        }
+
         fetch(url, {
             method: 'POST',
             body: formData,
@@ -611,6 +619,11 @@ document.addEventListener('submit', function(e) {
             }
         })
         .then(html => {
+            // Remove loading state from button
+            if (saveButton) {
+                saveButton.classList.remove('btn-loading');
+            }
+
             if (html.includes('form-group')) {
                 // Form has errors, re-render it
                 document.getElementById('groupFormContainer').innerHTML = html;

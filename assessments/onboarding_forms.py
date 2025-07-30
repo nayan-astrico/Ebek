@@ -32,6 +32,7 @@ class InstitutionForm(forms.ModelForm):
     unit_head_name = forms.CharField(label='Unit Head Name', max_length=255, required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
     unit_head_email = forms.EmailField(label='Unit Head Email', required=False, widget=forms.EmailInput(attrs={'class': 'form-control'}))
     unit_head_phone = forms.CharField(label='Unit Head Phone', max_length=20, required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
+    
     class Meta:
         model = Institution
         fields = ['name', 'group', 'address', 'state', 'district', 'pin_code', 'onboarding_type']
@@ -44,11 +45,17 @@ class InstitutionForm(forms.ModelForm):
             'pin_code': forms.TextInput(attrs={'class': 'form-control'}),
             'onboarding_type': forms.Select(attrs={'class': 'form-control'}),
         }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Filter group queryset to show only institution type groups
+        self.fields['group'].queryset = Group.objects.filter(type='institution', is_active=True)
 
 class HospitalForm(forms.ModelForm):
     unit_head_name = forms.CharField(label='Unit Head Name', max_length=255, required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
     unit_head_email = forms.EmailField(label='Unit Head Email', required=False, widget=forms.EmailInput(attrs={'class': 'form-control'}))
     unit_head_phone = forms.CharField(label='Unit Head Phone', max_length=20, required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
+    
     class Meta:
         model = Hospital
         fields = ['name', 'group', 'address', 'state', 'district', 'pin_code', 'nurse_strength', 'number_of_beds', 'onboarding_type']
@@ -62,6 +69,11 @@ class HospitalForm(forms.ModelForm):
             'number_of_beds': forms.NumberInput(attrs={'class': 'form-control'}),
             'onboarding_type': forms.Select(attrs={'class': 'form-control'}),
         }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Filter group queryset to show only hospital type groups
+        self.fields['group'].queryset = Group.objects.filter(type='hospital', is_active=True)
 
 class LearnerForm(forms.ModelForm):
     learner_name = forms.CharField(label='Learner Name', max_length=255, required=True, widget=forms.TextInput(attrs={'class': 'form-control'}))

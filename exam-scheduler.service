@@ -1,0 +1,32 @@
+[Unit]
+Description=EBEK Exam Scheduler Service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/Users/nayanjain/Documents/ebek_django_app
+Environment=DJANGO_SETTINGS_MODULE=ebek_django_app.settings
+Environment=PYTHONPATH=/Users/nayanjain/Documents/ebek_django_app
+ExecStart=/usr/bin/python3 manage.py run_exam_scheduler --daemon --interval 30
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=exam-scheduler
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/Users/nayanjain/Documents/ebek_django_app
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target 
