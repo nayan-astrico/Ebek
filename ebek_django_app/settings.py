@@ -196,7 +196,13 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'simple',
         },
-        'file': {
+        'info_file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': 'logs/info.log',
+            'formatter': 'simple',
+        },
+        'error_file': {
             'level': 'ERROR',
             'class': 'logging.FileHandler',
             'filename': 'logs/error.log',
@@ -209,7 +215,7 @@ LOGGING = {
             'level': 'INFO',
         },
         'assessments': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console', 'info_file', 'error_file'],
             'level': 'INFO',
         },
     },

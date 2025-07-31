@@ -18,3 +18,4 @@ venv/
 /firebase_uat_key.json
 /db.sqlite3
 /media/uploaded_excels/*
+logs/*

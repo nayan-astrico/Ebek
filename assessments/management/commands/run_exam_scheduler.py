@@ -101,6 +101,7 @@ class Command(BaseCommand):
             procedure_assignments = test_data.get('procedureAssignments', []) or []
 
             procedure_assignments_data = []
+            procedure_assignment_refs = []  # Add this to track the refs
 
             for proc_assignment_ref in procedure_assignments:
                 proc_assignment = proc_assignment_ref.get()
@@ -109,6 +110,7 @@ class Command(BaseCommand):
                 if procedure_ref:
                     procedure_data = procedure_ref.get().to_dict()
                     procedure_assignments_data.append(procedure_data)
+                    procedure_assignment_refs.append(proc_assignment_ref)  # Store the ref
 
             logger.info(procedure_assignments_data)
             processed_count = 0
@@ -130,7 +132,7 @@ class Command(BaseCommand):
                     )
                     continue
 
-                for procedure in procedure_assignments_data:
+                for i, procedure in enumerate(procedure_assignments_data):
                     # Check if exam assignment already exists
                     if ExamAssignment.objects.filter(
                         learner=learner, 
@@ -151,8 +153,8 @@ class Command(BaseCommand):
                     
                     exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
                     
-                    # Update procedure assignment with new exam assignment reference
-                    proc_assignment_ref.update({
+                    # Update the correct procedure assignment with new exam assignment reference
+                    procedure_assignment_refs[i].update({
                         'examAssignmentArray': firestore.ArrayUnion([exam_assignment_ref])
                     })
                     
