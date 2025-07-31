@@ -413,7 +413,6 @@ def create_procedure_assignment_and_test(request):
             created_tests = []  # To store references for created tests
 
             if batch_ids != []:
-                print("Here in first if")
                 for batch_id in batch_ids:
                     # Fetch cohort document
                     cohort_ref = db.collection('Cohort').document(batch_id)
@@ -503,7 +502,7 @@ def create_procedure_assignment_and_test(request):
                             'typeOfTest': 'Classroom',
                         })
             else:
-                print("Here in else")
+                logger.info("Here in else")
                 skillathon_id = data.get('skillathon_id')
                 skillathon_ref = db.collection('Skillathon').document(skillathon_id)
                 skillathon_name = skillathon_ref.get().to_dict()["skillathonName"]
@@ -515,7 +514,7 @@ def create_procedure_assignment_and_test(request):
                         'status': 'Not Completed',
                         'skillathon': skillathon_name,
                     }
-                print(test_data)
+                logger.info(test_data)
                 
                 test_ref = db.collection('Test').add(test_data)[1]
                 created_tests.append(test_ref.id)
@@ -526,10 +525,10 @@ def create_procedure_assignment_and_test(request):
                         procedure_ref = db.collection('ProcedureTable').document(procedure_id)
                         procedure_data = procedure_ref.get().to_dict()
 
-                        print("PROCEDURE DATA", procedure_data)
+                        logger.info("PROCEDURE DATA", procedure_data)
 
                         if not procedure_data:
-                            print("NO PROCEDURE DATA")
+                            logger.info("NO PROCEDURE DATA")
                             continue
                         
                         procedure_assignment_data = {
@@ -550,36 +549,36 @@ def create_procedure_assignment_and_test(request):
                         users = db.collection('Users').where("role", "in", ["student", "nurse"]).where("skillathon_event", "==", skillathon_name)
 
                         exam_assignment_refs = []
-                        for user_snapshot in users.stream():
-                            exam_meta_data = procedure_data.get('examMetaData', {})
-                            notes = procedure_data.get('notes', '')
-                            procedure_name = procedure_data.get('procedureName', '')
+                        # for user_snapshot in users.stream():
+                        #     exam_meta_data = procedure_data.get('examMetaData', {})
+                        #     notes = procedure_data.get('notes', '')
+                        #     procedure_name = procedure_data.get('procedureName', '')
 
-                            exam_assignment_data = {
-                                'user': user_snapshot.reference,  # Use the document reference instead of snapshot
-                                'examMetaData': exam_meta_data,
-                                'status': 'Pending',
-                                'notes': notes,
-                                'procedure_name': procedure_name,
-                            }
+                        #     exam_assignment_data = {
+                        #         'user': user_snapshot.reference,  # Use the document reference instead of snapshot
+                        #         'examMetaData': exam_meta_data,
+                        #         'status': 'Pending',
+                        #         'notes': notes,
+                        #         'procedure_name': procedure_name,
+                        #     }
 
-                            try:
-                                user_data = user_snapshot.to_dict()
-                                exam_assignment_data['institute'] = user_data.get('institution', '')
-                            except (AttributeError, TypeError) as e:
-                                print(f"Failed to get institution for user {user_snapshot.id}: {str(e)}")
+                        #     try:
+                        #         user_data = user_snapshot.to_dict()
+                        #         exam_assignment_data['institute'] = user_data.get('institution', '')
+                        #     except (AttributeError, TypeError) as e:
+                        #         print(f"Failed to get institution for user {user_snapshot.id}: {str(e)}")
                             
-                            exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
-                            exam_assignment_refs.append(exam_assignment_ref)
+                        #     exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
+                        #     exam_assignment_refs.append(exam_assignment_ref)
 
-                        # Update ProcedureAssignment with exam assignments
-                        procedure_assignment_ref.update({'examAssignmentArray': firestore.ArrayUnion(exam_assignment_refs)})
+                        # # Update ProcedureAssignment with exam assignments
+                        # procedure_assignment_ref.update({'examAssignmentArray': firestore.ArrayUnion(exam_assignment_refs)})
 
                         # Update Test document with all procedure assignments
                         test_ref.update({'procedureAssignments': firestore.ArrayUnion(procedure_assignment_refs)})
                     except Exception as e:
-                        print("ERROR IN ELSE", traceback.format_exc())
-                        print("ERROR IN ELSE", str(e))
+                        logger.error("ERROR IN ELSE", traceback.format_exc())
+                        logger.error("ERROR IN ELSE", str(e))
                         pass
                 
                     
@@ -587,9 +586,9 @@ def create_procedure_assignment_and_test(request):
             return JsonResponse({'success': True, 'created_tests': created_tests})
 
         except Exception as e:
-            print(str(e))
-            print(traceback.format_exc())
-            print("HEEEREEEEEE")
+            logger.error(str(e))
+            logger.error(traceback.format_exc())
+            logger.error("HEEEREEEEEE")
             return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method.'}, status=405)

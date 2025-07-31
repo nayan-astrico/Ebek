@@ -246,7 +246,7 @@ def institution_list(request):
     institutions = Institution.objects.all().order_by('-created_at')
     
     # Get all unique groups for the filter dropdown
-    all_groups = Group.objects.filter(is_active=True).values('id', 'name')
+    all_groups = Group.objects.filter(is_active=True, type="institution").values('id', 'name')
     
     # Get all unique states for the filter dropdown
     all_states = Institution.objects.values_list('state', flat=True).distinct().exclude(state__isnull=True).exclude(state='')
@@ -537,7 +537,7 @@ def hospital_list(request):
     hospitals = Hospital.objects.all().order_by('-created_at')
     
     # Get all unique groups for the filter dropdown
-    all_groups = Group.objects.filter(is_active=True).values('id', 'name')
+    all_groups = Group.objects.filter(is_active=True, type="hospital").values('id', 'name')
     
     # Get all unique states for the filter dropdown
     all_states = Hospital.objects.values_list('state', flat=True).distinct().exclude(state__isnull=True).exclude(state='')
@@ -857,7 +857,7 @@ def group_list_api(request):
             'name': group.name,
             'type': group.get_type_display(),
             'unit_count': group.institution_set.count() if group.type == 'institution' else group.hospital_set.count(),
-            'group_head': group.group_head.get_full_name() if group.group_head else 'Not Assigned',
+            'group_head': group.group_head.get_full_name() if group.group_head else '-',
             'group_head_email': group.group_head.email if group.group_head else '-',
             'group_head_phone': group.group_head.phone_number if group.group_head else '-',
             'is_active': group.is_active,

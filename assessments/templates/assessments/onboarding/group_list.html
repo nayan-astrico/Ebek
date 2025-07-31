@@ -250,7 +250,7 @@ function renderGroupRow(group) {
         <td>${group.type}</td>
         <td>${group.unit_count}</td>
         <td>
-            ${group.group_head ? `<div class="unit-head"><span>${group.group_head}</span><small>${group.group_head_email}</small></div>` : '<span class="text-muted">Not Assigned</span>'}
+            ${group.group_head ? `<div class="unit-head"><span>${group.group_head}</span></div>` : '<span class="text-muted">-</span>'}
         </td>
         <td>${group.group_head_email || '-'}</td>
         <td>

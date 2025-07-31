@@ -8,6 +8,10 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from assessments.models import ExamAssignment, SchedularObject, Learner
 from firebase_admin import firestore
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class Command(BaseCommand):
     help = 'Runs the exam scheduler every 30 seconds with proper locking'
@@ -92,7 +96,6 @@ class Command(BaseCommand):
             if not test_ref:
                 self.stdout.write(self.style.ERROR('NO TEST FOUND'))
                 return
-                
             test_doc = test_ref[0]
             test_data = test_doc.to_dict()
             procedure_assignments = test_data.get('procedureAssignments', []) or []
@@ -107,6 +110,7 @@ class Command(BaseCommand):
                     procedure_data = procedure_ref.get().to_dict()
                     procedure_assignments_data.append(procedure_data)
 
+            logger.info(procedure_assignments_data)
             processed_count = 0
             for learner_id in learner_ids:
                 # Directly get learner by ID from Firebase
