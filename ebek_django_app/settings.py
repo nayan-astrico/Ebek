@@ -28,7 +28,8 @@ else:
     DEBUG = False
 
 if DEBUG == True:
-    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_uat_key.json")
+    # FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_uat_key.json")
+    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
 else:
     FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
 
@@ -177,4 +178,39 @@ CACHES = {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'unique-snowflake',
     }
+}
+
+# Basic Logging Configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {
+            'format': '[{asctime}] {levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+        'file': {
+            'level': 'ERROR',
+            'class': 'logging.FileHandler',
+            'filename': 'logs/error.log',
+            'formatter': 'simple',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+        'assessments': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+        },
+    },
 }

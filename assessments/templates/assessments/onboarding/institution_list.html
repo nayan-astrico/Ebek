@@ -510,7 +510,7 @@ function renderInstitutionRow(inst) {
         <td>${inst.state ? inst.state : '-'}</td>
         <td>${inst.total_strength ? inst.total_strength : '-'}</td>
         <td>
-            ${inst.unit_head ? `<div class="unit-head"><span>${inst.unit_head}</span><small>${inst.unit_head_email}</small></div>` : '<span class="text-muted">Not Assigned</span>'}
+            ${inst.unit_head ? `<div class="unit-head"><span>${inst.unit_head}</span></div>` : '<span class="text-muted">-</span>'}
         </td>
         <td>
             <span class="badge ${inst.is_active ? 'active' : 'inactive'}">
