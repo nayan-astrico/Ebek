@@ -2,20 +2,12 @@ import boto3
 import logging
 import os
 from botocore.exceptions import ClientError
-from dotenv import load_dotenv
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Load environment variables with error handling
-try:
-    load_dotenv()
-    logger.info("Successfully loaded environment variables from .env file")
-except Exception as e:
-    logger.error(f"Failed to load environment variables: {e}")
-    raise
-
 # Get AWS credentials from environment variables
+# No need to call load_dotenv() again since it's already loaded in settings.py
 AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
 AWS_REGION = os.getenv('AWS_REGION', 'ap-south-1')
