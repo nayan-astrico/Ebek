@@ -283,7 +283,7 @@
         <!-- Progress Section -->
         <div class="upload-section" id="progressSection" style="display: none;">
             <div class="section-header">
-                <i class="fas fa-spinner fa-spin"></i>
+                <!-- <i class="fas fa-spinner fa-spin"></i> -->
                 <h4>Upload Progress</h4>
             </div>
             <div class="progress-container">
@@ -2054,17 +2054,17 @@ function startProgressTracking(sessionKey) {
                 showUploadResult(data);
                 eventSource.close();
                 // Hide progress section after completion
-                setTimeout(() => {
-                    document.getElementById('progressSection').style.display = 'none';
-                }, 3000); // Hide after 3 seconds to show completion message
+                // setTimeout(() => {
+                //     document.getElementById('progressSection').style.display = 'none';
+                // }, 3000); // Hide after 3 seconds to show completion message
             } else if (data.status === 'error') {
                 console.log('[DEBUG] Upload error:', data.message);
                 showUploadError(data.message);
                 eventSource.close();
                 // Hide progress section after error
-                setTimeout(() => {
-                    document.getElementById('progressSection').style.display = 'none';
-                }, 3000); // Hide after 3 seconds to show error message
+                // setTimeout(() => {
+                //     document.getElementById('progressSection').style.display = 'none';
+                // }, 3000); // Hide after 3 seconds to show error message
             }
             
         } catch (error) {
@@ -2219,25 +2219,22 @@ function showUploadResult(data) {
     document.getElementById('doneButton').style.display = 'inline-flex';
     
     // Show completion message
-    setTimeout(() => {
-        const message = errorCount > 0 
-            ? `Upload completed with ${errorCount} errors. Check the details below.`
-            : 'Upload completed successfully! All learners have been processed.';
-        alert(message);
-    }, 500);
+    // setTimeout(() => {
+    //     const message = errorCount > 0 
+    //         ? `Upload completed with ${errorCount} errors. Check the details below.`
+    //         : 'Upload completed successfully! All learners have been processed.';
+    //     alert(message);
+    // }, 500);
     
     // Add completion notice
-    html += `
-        <div class="progress-detail-item success" style="background: #f0fff4; border-left: 4px solid #48bb78;">
-            <div class="progress-detail-icon success">
-                <i class="fas fa-info-circle"></i>
-            </div>
-            <div class="progress-detail-content">
-                <div class="progress-detail-title">Upload Complete</div>
-                <div class="progress-detail-message">This progress panel will automatically close in a few seconds.</div>
-            </div>
-        </div>
-    `;
+    // html += `
+    //     <div class="progress-detail-item success" style="background: #f0fff4; border-left: 4px solid #48bb78;">
+    //         <div class="progress-detail-icon success">
+    //             <i class="fas fa-info-circle"></i>
+    //         </div>
+            
+    //     </div>
+    // `;
     progressDetails.innerHTML = html;
 }
 
@@ -2251,15 +2248,6 @@ function showUploadError(error) {
             <div class="progress-detail-content">
                 <div class="progress-detail-title">Upload Failed</div>
                 <div class="progress-detail-message">${error}</div>
-            </div>
-        </div>
-        <div class="progress-detail-item error" style="background: #fff5f5; border-left: 4px solid #f56565;">
-            <div class="progress-detail-icon error">
-                <i class="fas fa-info-circle"></i>
-            </div>
-            <div class="progress-detail-content">
-                <div class="progress-detail-title">Upload Failed</div>
-                <div class="progress-detail-message">This progress panel will automatically close in a few seconds.</div>
             </div>
         </div>
     `;

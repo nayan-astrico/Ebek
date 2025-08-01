@@ -44,8 +44,9 @@ from .firebase_sync import (
 )
 import threading
 from django.db.models import Q
+import logging
 
-
+logger = logging.getLogger(__name__)
 db = firestore.client()
 
 @login_required
@@ -246,7 +247,7 @@ def institution_list(request):
     institutions = Institution.objects.all().order_by('-created_at')
     
     # Get all unique groups for the filter dropdown
-    all_groups = Group.objects.filter(is_active=True, type="institution").values('id', 'name')
+    all_groups = Group.objects.filter(is_active=True, type="institution")
     
     # Get all unique states for the filter dropdown
     all_states = Institution.objects.values_list('state', flat=True).distinct().exclude(state__isnull=True).exclude(state='')
@@ -254,6 +255,8 @@ def institution_list(request):
     # Filtering
     search_query = request.GET.get('query', '').strip()
     selected_groups = request.GET.getlist('group')
+    print("DEBUG: Selected groups:", selected_groups)
+    print(selected_groups)
     selected_states = request.GET.getlist('state')
     selected_statuses = request.GET.getlist('status')
     
@@ -283,7 +286,7 @@ def institution_list(request):
     
     return render(request, 'assessments/onboarding/institution_list.html', {
         'institutions': institutions,
-        'groups': all_groups,
+        'all_groups': all_groups,
         'all_states': all_states,
         'selected_groups': selected_groups,
         'selected_states': selected_states,
@@ -465,9 +468,11 @@ def institution_list_api(request):
             Q(district__icontains=search_query) |
             Q(state__icontains=search_query)
         )
+    print(request.GET)
     
     # Apply other filters
     selected_groups = request.GET.getlist('group')
+    print(selected_groups)
     selected_states = request.GET.getlist('state')
     selected_statuses = request.GET.getlist('status')
 
@@ -1211,6 +1216,7 @@ def process_bulk_upload_with_progress(file_path, session_key):
                     form_data = {}
                     for excel_col, form_field in header_map.items():
                         value = row_data.get(excel_col)
+                        print(f"[DEBUG] Value: {row_data}")
                         
                         if value is not None:
                             value = str(value).strip()
@@ -1313,6 +1319,9 @@ def process_bulk_upload_with_progress(file_path, session_key):
                         })
                         
                 except Exception as e:
+                    print("ERRROORRR")
+                    print(traceback.format_exc())
+                    print(f"[DEBUG] Processing error: {str(e)}")
                     error_rows.append({
                         'row': row_idx,
                         'errors': {'__all__': [f'Processing error: {str(e)}']}
@@ -1381,7 +1390,6 @@ def upload_progress_stream(request, session_key):
         while True:
             # Get progress from cache
             progress_data = cache.get(f"upload_progress:{session_key}")
-            print(f"[DEBUG] Retrieved progress data: {progress_data}")
             
             if not progress_data:
                 # No progress data found
@@ -1391,7 +1399,6 @@ def upload_progress_stream(request, session_key):
             
             # Send progress data
             yield f"data: {json.dumps(progress_data)}\n\n"
-            print(f"[DEBUG] Sent progress data: {progress_data.get('progress', 'N/A')}%")
             
             # If completed or error, stop streaming
             if progress_data.get('status') in ['completed', 'error']:

@@ -72,12 +72,12 @@
                         <div class="selection-count">0 Group selected</div>
                     </div>
                     <div class="options-list" id="group-options">
-                        {% for group in groups %}
+                        {% for items in all_groups %}
                         <label class="option-item">
-                            <input type="checkbox" name="group" value="{{ group.id }}"
-                                   {% if group.id in selected_groups %}checked{% endif %}
+                            <input type="checkbox" name="group" value="{{ items.id }}"
+                                   {% if items.id|stringformat:"s" in selected_groups %}checked{% endif %}
                                    onchange="updateSelectionCount('group')">
-                            <span>{{ group.name }}</span>
+                            <span>{{ items.name }}</span>
                         </label>
                         {% endfor %}
                     </div>
@@ -187,9 +187,7 @@
         <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreInstitutions()">
             Show More
         </button>
-        <div id="institutionLoadingSpinner" class="spinner-border text-primary" role="status" style="display: none;">
-            <span class="sr-only">Loading...</span>
-        </div>
+        
     </div>
 </div>
 
@@ -303,6 +301,7 @@ function updateSelectionCount(category) {
     const count = checkboxes.length;
     const label = category.charAt(0).toUpperCase() + category.slice(1);
     countElement.textContent = `${count} ${label} selected`;
+    console.log(countElement.textContent)
 }
 
 function openInstitutionFormPanel(url, title) {
@@ -491,6 +490,11 @@ function buildInstitutionQueryParams() {
     const selectedGroups = Array.from(document.querySelectorAll('input[name="group"]:checked')).map(cb => cb.value);
     const selectedStates = Array.from(document.querySelectorAll('input[name="state"]:checked')).map(cb => cb.value);
     const selectedStatuses = Array.from(document.querySelectorAll('input[name="status"]:checked')).map(cb => cb.value);
+
+    console.log('DEBUG: Selected groups:', selectedGroups);
+    console.log(Array.from(document.querySelectorAll('input[name="group"]:checked')))
+    console.log('DEBUG: Selected states:', selectedStates);
+    console.log('DEBUG: Selected statuses:', selectedStatuses);
     
     selectedGroups.forEach(group => params.append('group', group));
     selectedStates.forEach(state => params.append('state', state));
@@ -545,8 +549,6 @@ function loadMoreInstitutions() {
     loading = true;
     setElementText('showMoreBtn', 'Loading...');
     setElementStyle('showMoreBtn', 'disabled', 'true');
-    setElementStyle('institutionLoadingSpinner', 'display', 'inline-block');
-    
     const apiUrl = `/onboarding/institutions/api/?${buildInstitutionQueryParams()}`;
     console.log('DEBUG: Making API call to:', apiUrl);
     

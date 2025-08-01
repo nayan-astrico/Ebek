@@ -125,9 +125,7 @@
                         <!-- Assessor rows will be loaded here by JS -->
                     </tbody>
                 </table>
-    <div id="assessorLoadingSpinner" class="spinner-border text-primary" role="status" style="display: none; text-align: center; margin: 20px 0;">
-        <span class="sr-only">Loading...</span>
-    </div>
+    
     <div style="text-align: center; margin: 20px 0;">
                 <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreAssessors()">Show More</button>
             </div>
@@ -826,7 +824,6 @@ function loadMoreAssessors() {
     loading = true;
     setElementText('showMoreBtn', 'Loading...');
     setElementStyle('showMoreBtn', 'disabled', 'true');
-    setElementStyle('assessorLoadingSpinner', 'display', 'inline-block');
     
     const queryParams = buildAssessorQueryParams();
     return fetch(`/onboarding/assessors/api/?${queryParams}`)
@@ -857,7 +854,6 @@ function loadMoreAssessors() {
         })
         .finally(() => {
             loading = false;
-            setElementStyle('assessorLoadingSpinner', 'display', 'none');
             if (!allLoaded) {
                 setElementStyle('showMoreBtn', 'display', 'inline-block');
                 setElementText('showMoreBtn', 'Show More');
