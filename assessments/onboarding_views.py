@@ -577,7 +577,7 @@ def hospital_list(request):
     
     return render(request, 'assessments/onboarding/hospital_list.html', {
         'hospitals': hospitals,
-        'groups': all_groups,
+        'all_groups': all_groups,
         'all_states': all_states,
         'selected_groups': selected_groups,
         'selected_states': selected_states,
