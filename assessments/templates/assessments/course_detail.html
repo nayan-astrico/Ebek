@@ -1,59 +1,59 @@
 {% extends 'assessments/base.html' %}
 
 {% block content %}
-<!-- Back Button -->
-<div class="back-button-container">
-    <a href="{% url 'course_management' %}" class="back-button">
-        <i class="fas fa-arrow-left"></i>
-        Back to Courses
-    </a>
-</div>
-
-<!-- Course Header -->
-<div class="course-header">
-    <div class="course-header-left">
-        <h3>{{ course.name }}</h3>
-        <p class="course-description">{{ course.description }}</p>
+<!-- Merged Course Information Box -->
+<div class="merged-course-info">
+    <div class="back-button-container">
+        <a href="{% url 'course_management' %}" class="back-button">
+            <i class="fas fa-arrow-left"></i>
+            Back to Courses
+        </a>
     </div>
-    <div class="course-header-right">
-        <button class="btn btn-light" onclick="openEditCoursePanel()">
-            <i class="fas fa-edit"></i>
-            Edit Course
-        </button>
-        <button class="btn btn-primary" style="background: #F16564; color: white; border-color: #F16564;" onclick="deleteCourse()">
-            <i class="fas fa-trash"></i>
-            Delete Course
-        </button>
+
+    <div class="course-header">
+        <div class="course-header-left">
+            <h4><b>{{ course.name }}</b></h4>
+            <p class="course-description">{{ course.description }}</p>
+        </div>
+        <div class="course-header-right">
+            <button class="btn btn-light" onclick="openEditCoursePanel()">
+                <i class="fas fa-edit"></i>
+                Edit Course
+            </button>
+            <button class="btn btn-primary" style="background: #F16564; color: white; border-color: #F16564;" onclick="deleteCourse()">
+                <i class="fas fa-trash"></i>
+                Delete Course
+            </button>
+        </div>
     </div>
-</div>
 
-<!-- Course Overview -->
-<div class="course-overview">
-    <div class="overview-card">
-        <h3>Course Information</h3>
-        <div class="info-grid">
-            <div class="info-item">
-                <label>Total Procedures</label>
-                <span class="info-value">{{ course.total_procedures }}</span>
-            </div>
-
-            <div class="info-item">
-                <label>OSCE Types</label>
-                <div class="osce-types-display">
-                    {% for osce_type in course.osce_types %}
-                        <span class="osce-badge">{{ osce_type }}</span>
-                    {% endfor %}
+    <div class="course-overview">
+        <div class="overview-card">
+            <h3>Course Information</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <label>Total Procedures</label>
+                    <span class="info-value">{{ course.total_procedures }}</span>
                 </div>
-            </div>
-            <div class="info-item">
-                <label>Verification Required</label>
-                <span class="verification-status">
-                    {% if course.verification_required %}
-                        <i class="fas fa-check-circle text-success"></i> Yes
-                    {% else %}
-                        <i class="fas fa-times-circle text-muted"></i> No
-                    {% endif %}
-                </span>
+
+                <div class="info-item">
+                    <label>OSCE Types</label>
+                    <div class="osce-types-display">
+                        {% for osce_type in course.osce_types %}
+                            <span class="osce-badge">{{ osce_type }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="info-item">
+                    <label>Verification Required</label>
+                    <span class="verification-status">
+                        {% if course.verification_required %}
+                            <i class="fas fa-check-circle text-success"></i> Yes
+                        {% else %}
+                            <i class="fas fa-times-circle text-muted"></i> No
+                        {% endif %}
+                    </span>
+                </div>
             </div>
         </div>
     </div>
@@ -329,6 +329,39 @@
 </div>
 
 <style>
+.merged-course-info {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 24px;
+    margin-bottom: 24px;
+}
+
+.merged-course-info .back-button-container {
+    margin-bottom: 20px;
+}
+
+.merged-course-info .course-header {
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+.merged-course-info .course-overview {
+    margin-bottom: 0;
+}
+
+.merged-course-info .overview-card {
+    background: none;
+    border: none;
+    padding: 0;
+    box-shadow: none;
+}
+
 .back-button-container {
     margin-bottom: 24px;
 }
@@ -1991,6 +2024,8 @@ const courseData = {
     procedures: {{ course.procedures|safe }}
 };
 
+let procedures_populated = false
+
 function switchTab(tabName) {
     // Remove active class from all tabs and panels
     document.querySelectorAll('.tab-item').forEach(tab => {
@@ -2011,6 +2046,7 @@ function openAddProcedurePanel() {
     
     // Load available procedures
     loadAvailableProcedures();
+    
     
     // Add overlay
     if (!document.querySelector('.panel-overlay')) {
@@ -2325,31 +2361,27 @@ function populateEditForm() {
     }
     
     // Populate selected procedures
-    const selectedProcedures = [
-        {id: 1, name: 'CPR Training'},
-        {id: 2, name: 'Airway Management'},
-        {id: 3, name: 'Defibrillation'}
-    ]; // Mock data for now
+    const selectedProcedures = []; // Mock data for now
     const editSelectedTags = document.getElementById('editSelectedTags');
     const editPlaceholder = document.querySelector('#editProceduresInput .placeholder');
     
     editSelectedTags.innerHTML = '';
     selectedProcedures.forEach(procedure => {
-        // Check the corresponding checkbox
-        const checkbox = document.getElementById('editProc' + procedure.id);
-        if (checkbox) {
-            checkbox.checked = true;
-        }
-        
-        // Add tag to display
-        const tag = document.createElement('span');
-        tag.className = 'selected-tag';
-        tag.innerHTML = `
-            ${procedure.name}
-            <span class="remove" onclick="removeEditProcedureTag(${procedure.id}, this)">&times;</span>
-        `;
-        editSelectedTags.appendChild(tag);
-    });
+            const checkbox = document.getElementById('editProc' + procedure.id);
+            if (checkbox) {
+                checkbox.checked = true;
+            }
+            
+            // Add tag to display
+            const tag = document.createElement('span');
+            tag.className = 'selected-tag';
+            tag.innerHTML = `
+                ${procedure.name}
+                <span class="remove" onclick="removeEditProcedureTag(${procedure.id}, this)">&times;</span>
+            `;
+            editSelectedTags.appendChild(tag);
+        });
+    
     
     // Hide placeholder if procedures are selected
     if (selectedProcedures.length > 0) {
@@ -2644,8 +2676,9 @@ function populateEditForm() {
 }
 
 function populateEditProcedures() {
+    if(procedures_populated == false) {
     const procedureIds = courseData.procedures.map(p => p.id);
-    
+    console.log(procedureIds);
     // Check the corresponding checkboxes
     procedureIds.forEach(id => {
         const checkbox = document.getElementById(`editProc${id}`);
@@ -2654,6 +2687,8 @@ function populateEditProcedures() {
             handleEditProcedureSelection(checkbox);
         }
     });
+    procedures_populated = true;
+    }
 }
 
 function handleEditProcedureSelection(checkbox) {

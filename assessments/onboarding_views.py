@@ -114,6 +114,7 @@ def group_create(request):
                     }
                 )
                 if created:
+                    logger.info(f"Creating user {head_email}")
                     user.full_name = head_name
                     user.phone_number = head_phone
                     default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
