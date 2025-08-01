@@ -92,27 +92,33 @@ class Command(BaseCommand):
             
             self.stdout.write(f'Processing {len(learner_ids)} learners for skillathon: {skillathon_name}')
             
-            test_ref = db.collection('Test').where('skillathon', '==', skillathon_name).limit(1).get()
-            if not test_ref:
+            test_refs = db.collection('Test').where('skillathon', '==', skillathon_name).get()
+            if not test_refs:
                 self.stdout.write(self.style.ERROR('NO TEST FOUND'))
                 return
-            test_doc = test_ref[0]
-            test_data = test_doc.to_dict()
-            procedure_assignments = test_data.get('procedureAssignments', []) or []
+                
+            self.stdout.write(f'Found {len(test_refs)} tests for skillathon: {skillathon_name}')
+            
+            # Process all tests with the same skillathon name
+            all_procedure_assignments_data = []
+            all_procedure_assignment_refs = []
+            
+            for test_doc in test_refs:
+                test_data = test_doc.to_dict()
+                procedure_assignments = test_data.get('procedureAssignments', []) or []
+                
+                self.stdout.write(f'Processing test {test_doc.id} with {len(procedure_assignments)} procedure assignments')
 
-            procedure_assignments_data = []
-            procedure_assignment_refs = []  # Add this to track the refs
+                for proc_assignment_ref in procedure_assignments:
+                    proc_assignment = proc_assignment_ref.get()
+                    proc_data = proc_assignment.to_dict()
+                    procedure_ref = proc_data.get('procedure')
+                    if procedure_ref:
+                        procedure_data = procedure_ref.get().to_dict()
+                        all_procedure_assignments_data.append(procedure_data)
+                        all_procedure_assignment_refs.append(proc_assignment_ref)  # Store the ref
 
-            for proc_assignment_ref in procedure_assignments:
-                proc_assignment = proc_assignment_ref.get()
-                proc_data = proc_assignment.to_dict()
-                procedure_ref = proc_data.get('procedure')
-                if procedure_ref:
-                    procedure_data = procedure_ref.get().to_dict()
-                    procedure_assignments_data.append(procedure_data)
-                    procedure_assignment_refs.append(proc_assignment_ref)  # Store the ref
-
-            logger.info(procedure_assignments_data)
+            logger.info(f'Total procedure assignments to process: {len(all_procedure_assignments_data)}')
             processed_count = 0
             for learner_id in learner_ids:
                 # Directly get learner by ID from Firebase
@@ -132,7 +138,7 @@ class Command(BaseCommand):
                     )
                     continue
 
-                for i, procedure in enumerate(procedure_assignments_data):
+                for i, procedure in enumerate(all_procedure_assignments_data):
                     # Check if exam assignment already exists
                     if ExamAssignment.objects.filter(
                         learner=learner, 
@@ -154,7 +160,7 @@ class Command(BaseCommand):
                     exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
                     
                     # Update the correct procedure assignment with new exam assignment reference
-                    procedure_assignment_refs[i].update({
+                    all_procedure_assignment_refs[i].update({
                         'examAssignmentArray': firestore.ArrayUnion([exam_assignment_ref])
                     })
                     
