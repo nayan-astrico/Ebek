@@ -139,9 +139,7 @@
     <!-- Skillathon rows will be loaded here by JS -->
         </tbody>
     </table>
-<div id="skillathonLoadingSpinner" class="spinner-border text-primary" role="status" style="display: none; text-align: center; margin: 20px 0;">
-    <span class="sr-only">Loading...</span>
-</div>
+
 <div style="text-align: center; margin: 20px 0;">
     <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreSkillathons()">Show More</button>
 </div>
@@ -917,7 +915,6 @@ function loadMoreSkillathons() {
     loading = true;
     setElementText('showMoreBtn', 'Loading...');
     setElementStyle('showMoreBtn', 'disabled', 'true');
-    setElementStyle('skillathonLoadingSpinner', 'display', 'inline-block');
     
     const queryParams = buildSkillathonQueryParams();
     fetch(`/onboarding/skillathons/api/?${queryParams}`)
@@ -956,7 +953,6 @@ function loadMoreSkillathons() {
         })
         .finally(() => {
             loading = false;
-            setElementStyle('skillathonLoadingSpinner', 'display', 'none');
             if (!allLoaded) {
                 setElementStyle('showMoreBtn', 'display', 'inline-block');
                 setElementText('showMoreBtn', 'Show More');

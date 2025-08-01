@@ -147,9 +147,6 @@
         <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreGroups()">
             Show More
         </button>
-        <div id="groupLoadingSpinner" class="spinner-border text-primary" role="status" style="display: none;">
-            <span class="sr-only">Loading...</span>
-        </div>
     </div>
 </div>
 
@@ -286,7 +283,6 @@ function loadMoreGroups() {
     loading = true;
     setElementText('showMoreBtn', 'Loading...');
     setElementStyle('showMoreBtn', 'disabled', 'true');
-    setElementStyle('groupLoadingSpinner', 'display', 'inline-block');
     
     const apiUrl = `/onboarding/groups/api/?${buildGroupQueryParams()}`;
     console.log('DEBUG: Making group API call to:', apiUrl);
@@ -342,7 +338,6 @@ function loadMoreGroups() {
         })
         .finally(() => {
             loading = false;
-            setElementStyle('groupLoadingSpinner', 'display', 'none');
         });
 }
 
