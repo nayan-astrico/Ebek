@@ -30,6 +30,9 @@ def send_email(subject, body, to_addresses):
         return None
         
     try:
+        logger.info(f"Sending email to {to_addresses}")
+        logger.info(f"Subject: {subject}")
+        logger.info(f"Body: {body}")
         response = ses.send_email(
             Source="nayan@astrico.ai",
             Destination={"ToAddresses": to_addresses},
