@@ -77,7 +77,11 @@ class Command(BaseCommand):
     def run_once(self):
         """Run the scheduler once"""
         from django.conf import settings
-        firebase_database = settings.firebase_database
+        import os
+        from dotenv import load_dotenv
+
+        load_dotenv()
+        firebase_database = os.getenv('FIREBASE_DATABASE')
 
         db = firestore.client(database_id=firebase_database)
         
