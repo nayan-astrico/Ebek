@@ -76,7 +76,10 @@ class Command(BaseCommand):
 
     def run_once(self):
         """Run the scheduler once"""
-        db = firestore.client()
+        from django.conf import settings
+        firebase_database = settings.firebase_database
+
+        db = firestore.client(database=firebase_database)
         
         schedular_object = SchedularObject.objects.filter(is_completed=False).first()
         

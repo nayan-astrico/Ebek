@@ -47,7 +47,11 @@ from django.db.models import Q
 import logging
 
 logger = logging.getLogger(__name__)
-db = firestore.client()
+
+from django.conf import settings
+firebase_database = settings.firebase_database
+
+db = firestore.client(database=firebase_database)
 
 @login_required
 def group_list(request):

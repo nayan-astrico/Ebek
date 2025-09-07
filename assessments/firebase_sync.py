@@ -8,8 +8,11 @@ from django.contrib.auth.models import User
 from django.contrib.auth import get_user_model
 import traceback
 import json
-# Use the default app initialized in settings.py
-db = firestore.client()
+
+from django.conf import settings
+firebase_database = settings.firebase_database
+
+db = firestore.client(database=firebase_database)
 
 def enable_all_signals():
     """
