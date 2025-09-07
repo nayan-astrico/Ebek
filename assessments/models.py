@@ -125,6 +125,7 @@ class Institution(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     institute_id = models.CharField(max_length=50, unique=True, editable=False)
     onboarding_type = models.CharField(max_length=3, choices=ONBOARDING_TYPES)
+    skillathon = models.ForeignKey('SkillathonEvent', on_delete=models.SET_NULL, null=True, blank=True)
 
     def save(self, *args, **kwargs):
         if not self.institute_id:
@@ -153,6 +154,7 @@ class Hospital(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     onboarding_type = models.CharField(max_length=3, choices=ONBOARDING_TYPES)
+    skillathon = models.ForeignKey('SkillathonEvent', on_delete=models.SET_NULL, null=True, blank=True)
 
     def save(self, *args, **kwargs):
         if not self.hospital_id:
@@ -181,7 +183,7 @@ class Learner(models.Model):
     designation = models.CharField(max_length=100, null=True, blank=True)
     years_of_experience = models.IntegerField(null=True, blank=True)
     educational_qualification = models.CharField(max_length=20, choices=STREAM_CHOICES, null=True, blank=True)
-    educational_institution = models.CharField(max_length=255, null=True, blank=True)
+    # educational_institution = models.CharField(max_length=255, null=True, blank=True)
     
     # Common fields
     speciality = models.CharField(max_length=100, null=True, blank=True)

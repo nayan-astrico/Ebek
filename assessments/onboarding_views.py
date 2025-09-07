@@ -1132,7 +1132,6 @@ def process_bulk_upload_with_progress(file_path, session_key):
             'Designation': 'designation',
             'Years of Experience': 'years_of_experience',
             'Educational Qualification': 'educational_qualification',
-            'Educational Institution': 'educational_institution',
             'Speciality': 'speciality',
             'State': 'state',
             'District': 'district',
@@ -1306,8 +1305,6 @@ def process_bulk_upload_with_progress(file_path, session_key):
                                 user.set_password(default_password)
                                 user.save()
                                 users_to_sync.append(user)
-                            print("FORMMMMM")
-                            print(form.cleaned_data)
                             learner = form.save(commit=False)
                             learner.learner_user = user
                             learner.save()
@@ -1320,9 +1317,8 @@ def process_bulk_upload_with_progress(file_path, session_key):
                         })
                         
                 except Exception as e:
-                    print("ERRROORRR")
-                    print(traceback.format_exc())
-                    print(f"[DEBUG] Processing error: {str(e)}")
+                    logger.error(f"Processing error: {str(e)}")
+                    logger.error(traceback.format_exc())
                     error_rows.append({
                         'row': row_idx,
                         'errors': {'__all__': [f'Processing error: {str(e)}']}
@@ -1330,7 +1326,7 @@ def process_bulk_upload_with_progress(file_path, session_key):
         
         # Reconnect signals
         reconnect_all_signals()
-        print(f"[DEBUG] Django processing completed. Success: {success_count}, Updates: {update_count}, Errors: {len(error_rows)}")
+        logger.info(f"[DEBUG] Django processing completed. Success: {success_count}, Updates: {update_count}, Errors: {len(error_rows)}")
         
         # Update progress for Firebase sync (30% to 90%)
         progress_data.update({
@@ -1342,14 +1338,14 @@ def process_bulk_upload_with_progress(file_path, session_key):
             'error_count': len(error_rows)
         })
         cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        print(f"[DEBUG] Progress updated to 30% for Firebase sync: {progress_data}")
+        logger.info(f"[DEBUG] Progress updated to 30% for Firebase sync: {progress_data}")
         
         # Batch sync all users to Firebase with progress tracking
         if users_to_sync:
-            print(f"[DEBUG] Starting Firebase sync for {len(users_to_sync)} users...")
+            logger.info(f"[DEBUG] Starting Firebase sync for {len(users_to_sync)} users...")
             batch_sync_users_to_firestore_with_progress(users_to_sync, session_key, total_rows, skillathon_name)
         else:
-            print(f"[DEBUG] No users to sync to Firebase")
+            logger.info(f"[DEBUG] No users to sync to Firebase")
         
         # Final progress update
         progress_data.update({
@@ -1362,8 +1358,8 @@ def process_bulk_upload_with_progress(file_path, session_key):
             'errors': error_rows if error_rows else None
         })
         cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        print(f"[DEBUG] Final progress set to 100%: {progress_data}")
-        print(f"[DEBUG] Bulk upload process completed for session: {session_key}")
+        logger.info(f"[DEBUG] Final progress set to 100%: {progress_data}")
+        logger.info(f"[DEBUG] Bulk upload process completed for session: {session_key}")
         
     except Exception as e:
         # Handle any unexpected errors
@@ -1373,9 +1369,9 @@ def process_bulk_upload_with_progress(file_path, session_key):
             'progress': 100
         })
         cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        print(f"Bulk upload error: {e}")
-        print(traceback.format_exc())
-        print(f"[DEBUG] Bulk upload process failed for session: {session_key}")
+        logger.error(f"Bulk upload error: {e}")
+        logger.error(traceback.format_exc())
+        logger.error(f"[DEBUG] Bulk upload process failed for session: {session_key}")
 
 @login_required
 def upload_progress_stream(request, session_key):

@@ -49,6 +49,18 @@
                             {% endif %}
                         </div>
 
+                        <div class="form-group" id="skillathon-fields" style="display: none;">
+                            <label for="{{ form.skillathon.id_for_label }}">Skillathon Event</label>
+                            {{ form.skillathon }}
+                            {% if form.skillathon.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.skillathon.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
                         <div class="form-group">
                             <label for="{{ form.group.id_for_label }}">Group</label>
                             {{ form.group }}
@@ -185,4 +197,6 @@
         </div>
     </div>
 </div>
+
+
 {% endblock %} 

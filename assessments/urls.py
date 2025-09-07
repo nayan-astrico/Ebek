@@ -90,6 +90,9 @@ urlpatterns = [
     path('api/batches/<str:batch_id>/available-learners/', views.fetch_available_learners_for_batch, name='fetch_available_learners_for_batch'),
     path('api/fetch-hospitals/', views.fetch_hospitals, name='fetch_hospitals'),
     path('api/fetch-learners/<str:unit_type>/<str:unit_id>/', views.fetch_learners, name='fetch_learners'),
+    path('api/institute-based-skillathon/', views.institute_based_skillathon, name='institute_based_skillathon'),
+    path('api/download-student-report/', views.download_student_report, name='download_student_report'),
+
 
     # Batch Course API endpoints
     path('api/batches/<str:batch_id>/courses/', views.fetch_batch_courses, name='fetch_batch_courses'),
@@ -104,5 +107,5 @@ urlpatterns = [
     path('onboarding/assessors/api/', views.assessor_list_api, name='assessor_list_api'),
     path('onboarding/assessors/get-institutions-hospitals/', views.get_institutions_hospitals, name='get_institutions_hospitals'),
     path('onboarding/skillathons/api/', views.skillathon_list_api, name='skillathon_list_api'),
-    path('onboarding/sync-strength-counts/', views.sync_strength_counts, name='sync_strength_counts'),
+    path('onboarding/sync-strength-counts/', views.sync_strength_counts, name='sync_strength_counts')
 ]

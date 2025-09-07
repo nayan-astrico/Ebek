@@ -256,11 +256,11 @@
                             </div>
 
                             <div class="form-group">
-                                <label for="{{ form.educational_institution.id_for_label }}">Educational Institution</label>
-                                {{ form.educational_institution }}
-                                {% if form.educational_institution.errors %}
+                                <label for="{{ form.college.id_for_label }}">College</label>
+                                {{ form.college }}
+                                {% if form.college.errors %}
                                 <div class="invalid-feedback d-block">
-                                    {% for error in form.educational_institution.errors %}
+                                    {% for error in form.college.errors %}
                                     {{ error }}
                                     {% endfor %}
                                 </div>
@@ -373,42 +373,4 @@
         </div>
     </div>
 </div>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const learnerTypeSelect = document.getElementById('{{ form.learner_type.id_for_label }}');
-    const studentFields = document.getElementById('student-fields');
-    const nurseFields = document.getElementById('nurse-fields');
-
-    function toggleFields() {
-        if (learnerTypeSelect.value === 'student') {
-            studentFields.style.display = 'block';
-            nurseFields.style.display = 'none';
-        } else if (learnerTypeSelect.value === 'nurse') {
-            studentFields.style.display = 'none';
-            nurseFields.style.display = 'block';
-        } else {
-            studentFields.style.display = 'none';
-            nurseFields.style.display = 'none';
-        }
-    }
-
-    function toggleSkillathonEvent() {
-        if (onboardingTypeSelect.value === 'b2c') {
-            skillathonEventSelect.style.display = 'block';
-        } else {
-            skillathonEventSelect.style.display = 'none';
-        }
-    }
-
-    const onboardingTypeSelect = document.getElementById('{{ form.onboarding_type.id_for_label }}');
-    const skillathonEventSelect = document.getElementById('skillathon-event-fields');
-
-    onboardingTypeSelect.addEventListener('change', toggleSkillathonEvent);
-    toggleSkillathonEvent(); // Initial state
-
-    learnerTypeSelect.addEventListener('change', toggleFields);
-    toggleFields(); // Initial state
-});
-</script>
 {% endblock %} 

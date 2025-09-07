@@ -2456,5 +2456,34 @@ function loadMoreLearners() {
 document.addEventListener('DOMContentLoaded', function() {
     loadMoreLearners();
 });
+
+// Function that was referenced in the form but missing from template
+function toggleLearnerFields(learnerType) {
+    console.log(learnerType)
+    const studentFields = document.getElementById('student-fields');
+    const nurseFields = document.getElementById('nurse-fields');
+    
+    if (learnerType === 'student') {
+        studentFields.style.display = 'block';
+        nurseFields.style.display = 'none';
+    } else if (learnerType === 'nurse') {
+        studentFields.style.display = 'none';
+        nurseFields.style.display = 'block';
+    } else {
+        studentFields.style.display = 'none';
+        nurseFields.style.display = 'none';
+    }
+}
+
+// Function to toggle fields based on onboarding type (b2b/b2c)
+function toggleOnboardingFields(onboardingType) {
+    const skillathonEventFields = document.getElementById('skillathon-event-fields');
+    
+    if (onboardingType === 'b2c') {
+        skillathonEventFields.style.display = 'block';
+    } else {
+        skillathonEventFields.style.display = 'none';
+    }
+}
 </script>
 {% endblock %} 

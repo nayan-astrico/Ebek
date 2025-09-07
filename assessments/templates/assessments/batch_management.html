@@ -1060,7 +1060,7 @@ function displayBatches(batches) {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${batch.batchName}</td>
-            <td>${batch.unitType}</td>
+            <td>${batch.unitType.charAt(0).toUpperCase() + batch.unitType.slice(1)}</td>
             <td>${batch.unitName}</td>
             <td>${batch.learnerCount}</td>
             <td>

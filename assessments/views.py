@@ -25,6 +25,13 @@ from .utils_ses import *
 from django.urls import reverse
 from assessments.onboarding_views import *
 from collections import defaultdict
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.lib.units import inch
+import xlsxwriter
+from io import BytesIO
 
 logger = logging.getLogger(__name__)
 
@@ -970,6 +977,59 @@ def fetch_skillathons(request):
     except Exception as e:
         print(f"Error in fetch_skillathons: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+def institute_based_skillathon(request):
+    """API endpoint to handle skillathon selection and return related institutions."""
+    if request.method == 'POST':
+        try:
+            import json
+            data = json.loads(request.body)
+            skillathon_name = data.get('skillathon_name')
+            
+            print(f"Institute-based skillathon API called with: {skillathon_name}")
+            
+            if not skillathon_name:
+                return JsonResponse({'error': 'Skillathon name is required'}, status=400)
+            
+            # Query Firestore for institutes with this skillathon
+            institutes = []
+            
+            # Query InstituteNames collection for institutes with matching skillathon_event
+            institutes_ref = db.collection('InstituteNames')
+            query = institutes_ref.where('skillathon_event', '==', skillathon_name)
+            docs = query.get()
+            
+            print(f"Found {len(docs)} institutes for skillathon: {skillathon_name}")
+            
+            for doc in docs:
+                institute_data = doc.to_dict()
+                institutes.append({
+                    'id': doc.id,
+                    'name': institute_data.get('instituteName', 'Unknown Institute')
+                })
+            
+            print(f"Processed {len(institutes)} institutes")
+                
+            # Response structure
+            response_data = {
+                'skillathon_name': skillathon_name,
+                'institutes': institutes,
+                'count': len(institutes),
+                'message': f'Found {len(institutes)} institutes for skillathon: {skillathon_name}',
+                'status': 'success'
+            }
+            
+            print(f"Institute-based skillathon API response: {response_data}")
+            return JsonResponse(response_data, status=200)
+            
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+        except Exception as e:
+            print(f"Error in institute_based_skillathon: {str(e)}")
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
 
 def exam_to_score_info(exam_doc):
     exam_data = exam_doc.to_dict()
@@ -3610,7 +3670,7 @@ def fetch_batch_learners(request, batch_id):
             learner_doc = learner_ref.get()
             if learner_doc.exists:
                 learner_data = learner_doc.to_dict()
-                learner_name = learner_data.get('username', '').lower()
+                learner_name = learner_data.get('name', '')
                 learner_email = learner_data.get('emailID', '').lower()
                 
                 # Apply search filter
@@ -3619,8 +3679,8 @@ def fetch_batch_learners(request, batch_id):
                 
                 learners.append({
                     'id': learner_doc.id,
-                    'name': learner_data.get('username', 'N/A'),
-                    'email': learner_data.get('emailID', 'N/A')
+                    'name': learner_name,
+                    'email':learner_email
                 })
         
         # Apply pagination
@@ -3703,3 +3763,291 @@ def fetch_batch_courses_paginated(request, batch_id):
         
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+def fetch_student_report_data(skillathon_name, institute_name=None):
+    """Helper function to fetch student report data from Firestore"""
+    students = {}
+    all_procedures = set()
+    
+    # Query Firestore for exam assignments
+    exam_assignments_ref = db.collection('ExamAssignment')
+    
+    # Apply filters
+    if skillathon_name:
+        exam_assignments_ref = exam_assignments_ref.where('skillathon', '==', skillathon_name)
+    if institute_name:
+        exam_assignments_ref = exam_assignments_ref.where('institution', '==', institute_name)
+    
+    exam_assignments = exam_assignments_ref.stream()
+    
+    for exam in exam_assignments:
+        exam_doc = exam.to_dict()
+        email = exam_doc.get('emailID')
+        if not email:
+            continue
+            
+        if email not in students:
+            students[email] = {
+                'name': '',
+                'institute': '',
+                'grades': {},
+                'missed_critical_steps': {},
+                'exam_data': {}
+            }
+        
+        procedure_name = exam_doc.get('procedureName', 'Unknown')
+        if procedure_name == "Unknown":
+            procedure_name = exam_doc.get('procedure_name', 'Unknown')
+        all_procedures.add(procedure_name)
+        
+        # Student info
+        students[email]['name'] = exam_doc.get('name') or exam_doc.get('username') or email
+        students[email]['institute'] = exam_doc.get('institution', 'Unknown')
+        
+        # Grade calculation
+        total_score = exam_doc.get("marks", 0)
+        max_marks = sum(
+            question.get('right_marks_for_question', 0)
+            for section in exam_doc.get('examMetaData', [])
+            for question in section.get("section_questions", [])
+        )
+        percentage = round((total_score / max_marks) * 100, 2) if max_marks else 0
+        grade = get_grade_letter(percentage)
+        
+        # Missed critical steps
+        missed_critical = []
+        for section in exam_doc.get("examMetaData", []):
+            for question in section.get("section_questions", []):
+                if question.get("critical") and question.get("answer_scored", 0) == 0:
+                    missed_critical.append(question.get('question'))
+        
+        # Store per procedure
+        students[email]['grades'][procedure_name] = {
+            'grade': grade,
+            'percentage': percentage
+        }
+        students[email]['missed_critical_steps'][procedure_name] = missed_critical
+    
+    return students, all_procedures
+
+
+def generate_pdf_report(students, all_procedures, skillathon_name, institute_name=None):
+    """Generate PDF report from student data"""
+    # Create PDF with landscape orientation for better table display
+    from reportlab.lib.pagesizes import landscape, A4
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=36, leftMargin=36, topMargin=72, bottomMargin=18)
+    
+    # Get styles
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        spaceAfter=30,
+        alignment=0  # Left alignment
+    )
+    
+    # Build content
+    story = []
+    
+    # Title
+    title = Paragraph(f"Candidate Performance Report - {skillathon_name}", title_style)
+    story.append(title)
+    
+    # Report info
+    report_info = f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    if institute_name:
+        report_info += f"<br/>Institute: {institute_name}"
+    story.append(Paragraph(report_info, styles['Normal']))
+    story.append(Spacer(1, 20))
+    
+    # Create table data
+    table_data = [['Candidate Name', 'Institute'] + list(all_procedures)]
+    
+    for email, student in students.items():
+        row = [student['name'], student['institute']]
+        for procedure in all_procedures:
+            if procedure in student['grades']:
+                grade_info = student['grades'][procedure]
+                missed_steps = student['missed_critical_steps'].get(procedure, [])
+                cell_text = f"{grade_info['grade']} ({grade_info['percentage']}%)"
+                if missed_steps:
+                    cell_text += f" ⚠"
+                row.append(cell_text)
+            else:
+                row.append('-')
+        table_data.append(row)
+    
+    # Create table with better column sizing
+    table = Table(table_data, repeatRows=1)
+    
+    # Calculate column widths dynamically
+    num_cols = len(table_data[0]) if table_data else 0
+    available_width = landscape(A4)[0] - 72  # Total width minus margins
+    
+    if num_cols > 2:
+        student_width = available_width * 0.20
+        institute_width = available_width * 0.25
+        procedure_width = (available_width * 0.55) / (num_cols - 2)
+        col_widths = [student_width, institute_width] + [procedure_width] * (num_cols - 2)
+    else:
+        col_widths = [available_width * 0.5, available_width * 0.5]
+    
+    table = Table(table_data, colWidths=col_widths, repeatRows=1)
+    
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.beige, colors.white]),
+        ('LEFTPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    
+    story.append(table)
+    
+    # Build PDF
+    doc.build(story)
+    buffer.seek(0)
+    
+    return buffer
+
+
+def generate_excel_report(students, all_procedures, skillathon_name, institute_name=None):
+    """Generate Excel report from student data"""
+    # Create Excel file
+    buffer = BytesIO()
+    workbook = xlsxwriter.Workbook(buffer)
+    worksheet = workbook.add_worksheet('Candidate Performance Report')
+    
+    # Define formats
+    header_format = workbook.add_format({
+        'bold': True,
+        'bg_color': '#4472C4',
+        'font_color': 'white',
+        'border': 1,
+        'align': 'center',
+        'valign': 'vcenter'
+    })
+    
+    cell_format = workbook.add_format({
+        'border': 1,
+        'align': 'center',
+        'valign': 'vcenter'
+    })
+    
+    warning_format = workbook.add_format({
+        'border': 1,
+        'align': 'center',
+        'valign': 'vcenter',
+        'bg_color': '#FFE6E6'
+    })
+    
+    # Write title
+    title_format = workbook.add_format({
+        'bold': True,
+        'font_size': 16,
+        'align': 'center'
+    })
+    worksheet.merge_range('A1:D1', f'Candidate Performance Report - {skillathon_name}', title_format)
+    
+    # Write report info
+    info_row = 2
+    worksheet.write(info_row, 0, f'Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
+    if institute_name:
+        worksheet.write(info_row + 1, 0, f'Institute: {institute_name}')
+        info_row += 1
+    
+    # Write headers
+    header_row = info_row + 2
+    headers = ['Candidate Name', 'Institute'] + list(all_procedures)
+    for col, header in enumerate(headers):
+        worksheet.write(header_row, col, header, header_format)
+    
+    # Write data
+    data_row = header_row + 1
+    for email, student in students.items():
+        worksheet.write(data_row, 0, student['name'], cell_format)
+        worksheet.write(data_row, 1, student['institute'], cell_format)
+        
+        for col, procedure in enumerate(all_procedures, 2):
+            if procedure in student['grades']:
+                grade_info = student['grades'][procedure]
+                missed_steps = student['missed_critical_steps'].get(procedure, [])
+                cell_text = f"{grade_info['grade']} ({grade_info['percentage']}%)"
+                if missed_steps:
+                    cell_text += f" ⚠"
+                    worksheet.write(data_row, col, cell_text, warning_format)
+                else:
+                    worksheet.write(data_row, col, cell_text, cell_format)
+            else:
+                worksheet.write(data_row, col, '-', cell_format)
+        data_row += 1
+    
+    # Auto-adjust column widths
+    worksheet.set_column('A:A', 20)  # Student Name
+    worksheet.set_column('B:B', 25)  # Institute
+    for col in range(2, len(headers)):
+        worksheet.set_column(col, col, 50)  # Procedure columns
+    
+    workbook.close()
+    buffer.seek(0)
+    
+    return buffer
+
+
+@login_required
+@csrf_exempt
+def download_student_report(request):
+    """Download student performance report as PDF or Excel based on format parameter"""
+    try:
+        # Get parameters from request
+        skillathon_name = request.GET.get('skillathon_name', '')
+        institute_name = request.GET.get('institute_name', '')
+        format_type = request.GET.get('format', 'pdf').lower()
+        
+        if not skillathon_name:
+            return JsonResponse({'error': 'Skillathon name is required'}, status=400)
+        
+        if format_type not in ['pdf', 'excel']:
+            return JsonResponse({'error': 'Format must be either pdf or excel'}, status=400)
+        
+        # Fetch student data
+        students, all_procedures = fetch_student_report_data(skillathon_name, institute_name)
+        
+        # Generate file based on format
+        if format_type == 'pdf':
+            buffer = generate_pdf_report(students, all_procedures, skillathon_name, institute_name)
+            content_type = 'application/pdf'
+            file_extension = 'pdf'
+        else:  # excel
+            buffer = generate_excel_report(students, all_procedures, skillathon_name, institute_name)
+            content_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            file_extension = 'xlsx'
+        
+        # Create filename
+        filename = f"candidate_report_{skillathon_name}.{file_extension}"
+        if institute_name:
+            filename = f"candidate_report_{skillathon_name}_{institute_name}.{file_extension}"
+        
+        # Create response
+        response = HttpResponse(buffer.getvalue(), content_type=content_type)
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        return response
+        
+    except Exception as e:
+        print(f"Report generation error: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({'error': str(e)}, status=500)

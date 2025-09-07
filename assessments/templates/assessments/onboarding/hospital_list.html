@@ -581,7 +581,46 @@ function openHospitalFormPanel(url, title) {
         .then(html => {
             console.log(html);
             document.getElementById('hospitalFormContainer').innerHTML = html;
+            
+            // Initialize the form after it's loaded
+            initializeHospitalForm();
         });
+}
+
+// Function to initialize the hospital form after it's loaded dynamically
+function initializeHospitalForm() {
+    // Function to toggle skillathon field based on onboarding type
+    function toggleSkillathonField(onboardingType) {
+        const skillathonFields = document.getElementById('skillathon-fields');
+        console.log('Toggling skillathon field for onboarding type:', onboardingType);
+        console.log('Skillathon fields element:', skillathonFields);
+        
+        if (onboardingType === 'b2c') {
+            skillathonFields.style.display = 'block';
+            console.log('Showing skillathon fields');
+        } else {
+            skillathonFields.style.display = 'none';
+            console.log('Hiding skillathon fields');
+        }
+    }
+    
+    // Find the onboarding type select element
+    const onboardingTypeSelect = document.querySelector('select[name="onboarding_type"]');
+    console.log('Onboarding type select element:', onboardingTypeSelect);
+    
+    // Add event listener
+    if (onboardingTypeSelect) {
+        onboardingTypeSelect.addEventListener('change', function() {
+            console.log('Onboarding type changed to:', this.value);
+            toggleSkillathonField(this.value);
+        });
+        
+        // Set initial state
+        console.log('Setting initial state for onboarding type:', onboardingTypeSelect.value);
+        toggleSkillathonField(onboardingTypeSelect.value);
+    } else {
+        console.error('Onboarding type select element not found');
+    }
 }
 
 function closeHospitalFormPanel() {
