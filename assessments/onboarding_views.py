@@ -33,7 +33,7 @@ import json
 import os
 import uuid
 from django.core.cache import cache
-from .firebase_sync import (
+from .firebase_sync import 
     on_user_save, on_user_delete,
     on_institute_save, on_institution_delete,
     on_hospital_save, on_hospital_delete,
@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 from django.conf import settings
 firebase_database = settings.firebase_database
 
-db = firestore.client(database=firebase_database)
+db = firestore.client(database_id=firebase_database)
 
 @login_required
 def group_list(request):

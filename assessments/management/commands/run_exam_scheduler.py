@@ -79,7 +79,7 @@ class Command(BaseCommand):
         from django.conf import settings
         firebase_database = settings.firebase_database
 
-        db = firestore.client(database=firebase_database)
+        db = firestore.client(database_id=firebase_database)
         
         schedular_object = SchedularObject.objects.filter(is_completed=False).first()
         

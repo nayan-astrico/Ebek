@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 from django.conf import settings
 firebase_database = settings.firebase_database
 
-db = firestore.client(database=firebase_database)
+db = firestore.client(database_id=firebase_database)
 
 def parse_excel_to_json(dataframe, procedure_name):
     """Parse the uploaded Excel file to JSON."""

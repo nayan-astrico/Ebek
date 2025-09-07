@@ -10,9 +10,13 @@ import traceback
 import json
 
 from django.conf import settings
-firebase_database = settings.firebase_database
+import os
+from dotenv import load_dotenv
 
-db = firestore.client(database=firebase_database)
+load_dotenv()
+firebase_database = os.getenv('FIREBASE_DATABASE')
+
+db = firestore.client(database_id=firebase_database)
 
 def enable_all_signals():
     """
