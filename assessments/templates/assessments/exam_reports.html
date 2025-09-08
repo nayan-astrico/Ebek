@@ -2874,7 +2874,7 @@
             // Reset institute filter for student report
             const studentInstituteFilter = document.getElementById('studentInstituteFilter');
             if (studentInstituteFilter) {
-                studentInstituteFilter.innerHTML = '<option value="">Select Institute</option>';
+                studentInstituteFilter.innerHTML = '<option value="">All Institutes</option>';
                 studentInstituteFilter.disabled = true;
             }
             
@@ -3316,7 +3316,7 @@
             console.error('Error calling skillathon API:', error);
             
             // Reset institute dropdown on error
-            instituteFilter.innerHTML = '<option value="">Select Institute</option>';
+            instituteFilter.innerHTML = '<option value="">All Institutes</option>';
             instituteFilter.disabled = false;
             
             // Show error message
@@ -3328,7 +3328,7 @@
         const instituteFilter = document.getElementById('instituteFilter');
         
         // Clear existing options
-        instituteFilter.innerHTML = '<option value="">Select Institute</option>';
+        instituteFilter.innerHTML = '<option value="">All Institutes</option>';
         
         // Add institutes from API response
         if (data.institutes && Array.isArray(data.institutes)) {
@@ -3450,7 +3450,7 @@
         } else {
             // Reset institute filter
             if (studentInstituteFilter) {
-                studentInstituteFilter.innerHTML = '<option value="">Select Institute</option>';
+                studentInstituteFilter.innerHTML = '<option value="">All Institutes</option>';
                 studentInstituteFilter.disabled = true;
             }
             goBtn.disabled = true;
@@ -3498,7 +3498,7 @@
             console.error('Error calling student skillathon API:', error);
             
             // Reset institute dropdown on error
-            studentInstituteFilter.innerHTML = '<option value="">Select Institute</option>';
+            studentInstituteFilter.innerHTML = '<option value="">All Institutes</option>';
             studentInstituteFilter.disabled = false;
             
             // Show error message
