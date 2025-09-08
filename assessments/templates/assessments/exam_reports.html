@@ -222,7 +222,7 @@
                             <div class="search-container">
                                 <input type="text" 
                                        id="studentSearchInput" 
-                                       placeholder="Search students by name..." 
+                                       placeholder="Search candidates by name..." 
                                        class="search-input"
                                        oninput="searchStudents(this.value)">
                                 <i class="fas fa-search search-icon"></i>
@@ -2882,7 +2882,7 @@
             const searchInput = document.getElementById('studentSearchInput');
             if (searchInput) {
                 searchInput.disabled = false;
-                searchInput.placeholder = 'Search students by name...';
+                searchInput.placeholder = 'Search candidates by name...';
                 searchInput.value = savedSearchValue; // Restore saved search value
                 
                 // Apply the search if there was a saved value
