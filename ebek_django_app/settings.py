@@ -45,7 +45,7 @@ SECRET_KEY = 'django-insecure-%6jn6tro)!iq-a%n!#nhxhl$11*%3mnr3jk0-ez!!n!y#c8bs^
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
-ALLOWED_HOSTS = ["ebek.astrico.ai", "www.ebek.astrico.ai", "localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["ebek.astrico.ai", "www.ebek.astrico.ai", "localhost", "127.0.0.1", "ebek-uat.astrico.ai", "www.ebek-uat.astrico.ai"]
 
 # Application definition
 
