@@ -3334,7 +3334,7 @@
         if (data.institutes && Array.isArray(data.institutes)) {
             data.institutes.forEach(institute => {
                 const option = document.createElement('option');
-                option.value = institute.id || institute.name;
+                option.value = institute.name;
                 option.textContent = institute.name;
                 instituteFilter.appendChild(option);
             });
