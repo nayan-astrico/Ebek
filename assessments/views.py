@@ -986,6 +986,7 @@ def fetch_skillathons(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
+@csrf_exempt
 def institute_based_skillathon(request):
     """API endpoint to handle skillathon selection and return related institutions."""
     if request.method == 'POST':
