@@ -913,16 +913,9 @@ function validateCurrentStep() {
     // Step 3: access types are optional now (no validation)
     
     if (currentStep === 3) {
-        const userType = document.querySelector('input[name="user_type"]:checked');
-        if (userType && userType.value === 'regular_user') {
-            const institutionId = document.getElementById('institutionSelect').value;
-            const hospitalId = document.getElementById('hospitalSelect').value;
-            
-            // Both institution and hospital are optional now
-            
-            // Skillathon selection is optional - no validation required
-            // Users can select skillathon access without choosing a specific skillathon
-        }
+        // Step 3 uses chip-based selectors; all fields are optional.
+        // Do not reference legacy selects; allow proceeding without checks.
+        return true;
     }
     
     if (currentStep === 4) {
@@ -1313,7 +1306,7 @@ function filterUsers(searchText) {
         filteredUsers = [...allUsers];
     } else {
         filteredUsers = allUsers.filter(user => 
-            user.name.toLowerCase().includes(searchTerm) ||
+            user.full_name.toLowerCase().includes(searchTerm) ||
             user.email.toLowerCase().includes(searchTerm)
         );
     }
@@ -1338,6 +1331,11 @@ async function openEditUser(userId){
         window.__editingUserId = userId;
         toggleCreateUserPanel();
         document.getElementById('createUserTitle').textContent = 'Edit User';
+        
+        // Reset form and set current step to 1 first
+        currentStep = 1;
+        showStep(1);
+        
         const u = data.user;
         document.getElementById('userName').value = u.name || '';
         document.getElementById('userEmail').value = u.email || '';
@@ -1367,7 +1365,9 @@ async function openEditUser(userId){
         // Remember role to preselect during loadRoles
         prefillRoleId = (u.custom_roles||[]).length ? u.custom_roles[0].id : null;
         await loadRoles();
-        // Keep step flow intact but ensure selections are visible
+        
+        // Ensure we stay on step 1 after all data is loaded
+        currentStep = 1;
         showStep(1);
     }catch(e){
         console.error(e); showError('Error opening user');
