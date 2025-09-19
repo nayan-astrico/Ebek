@@ -49,7 +49,19 @@
                             {% endif %}
                         </div>
 
-                        <div class="form-group">
+                        <div class="form-group" id="skillathon-fields" style="display: none;">
+                            <label for="{{ form.skillathon.id_for_label }}">Skillathon Event</label>
+                            {{ form.skillathon }}
+                            {% if form.skillathon.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.skillathon.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- <div class="form-group">
                             <label for="{{ form.group.id_for_label }}">Group</label>
                             {{ form.group }}
                             {% if form.group.errors %}
@@ -59,7 +71,7 @@
                                 {% endfor %}
                             </div>
                             {% endif %}
-                        </div>
+                        </div> -->
 
                         <div class="form-group">
                             <label for="{{ form.address.id_for_label }}">Address</label>
@@ -115,40 +127,6 @@
                             </div>
                         </div>
 
-                        <div class="form-group">
-                            <label for="{{ form.unit_head_name.id_for_label }}">Unit Head Name</label>
-                            {{ form.unit_head_name }}
-                            {% if form.unit_head_name.errors %}
-                            <div class="invalid-feedback d-block">
-                                {% for error in form.unit_head_name.errors %}
-                                {{ error }}
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </div>
-                        <div class="form-group">
-                            <label for="{{ form.unit_head_email.id_for_label }}">Unit Head Email</label>
-                            {{ form.unit_head_email }}
-                            {% if form.unit_head_email.errors %}
-                            <div class="invalid-feedback d-block">
-                                {% for error in form.unit_head_email.errors %}
-                                {{ error }}
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </div>
-                        <div class="form-group">
-                            <label for="{{ form.unit_head_phone.id_for_label }}">Unit Head Phone</label>
-                            {{ form.unit_head_phone }}
-                            {% if form.unit_head_phone.errors %}
-                            <div class="invalid-feedback d-block">
-                                {% for error in form.unit_head_phone.errors %}
-                                {{ error }}
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </div>
-
                         
                                 <div class="form-group">
                                     <label for="{{ form.number_of_beds.id_for_label }}">Number of Beds</label>
@@ -185,4 +163,6 @@
         </div>
     </div>
 </div>
+
+
 {% endblock %} 

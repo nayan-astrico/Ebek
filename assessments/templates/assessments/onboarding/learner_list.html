@@ -11,14 +11,18 @@
         <p class="text-muted">Manage your learners</p>
     </div>
     <div class="header-right">
+        {% if "bulk_upload_learners" in request.user.get_all_permissions or request.user.has_all_permissions %}
         <button class="btn btn-outline-upload" onclick="toggleUploadPanel()">
             <i class="fas fa-upload"></i>
             Bulk Upload
         </button>
+        {% endif %}
+        {% if "add_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
         <a href="javascript:void(0);" class="btn btn-primary"
            onclick="openLearnerFormPanel('{% url 'learner_create' %}', 'Add Learner')">
             <i class="fas fa-plus"></i> Add Learner
         </a>
+        {% endif %}
         </div>
     </div>
 
@@ -2377,10 +2381,13 @@ function renderLearnerRow(learner) {
         </td>
         <td>
             <div class="actions">
+                {% if "edit_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <a href="javascript:void(0);" class="btn-icon"
                    onclick="openLearnerFormPanel('${learner.edit_url}', 'Edit Learner')">
                     <i class="fas fa-edit"></i>
                 </a>
+                {% endif %}
+                {% if "delete_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <button type="button" 
                         class="btn-icon btn-danger" 
                         data-name="${learner.full_name}"
@@ -2389,6 +2396,7 @@ function renderLearnerRow(learner) {
                         title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
+                {% endif %}
             </div>
         </td>
     </tr>
@@ -2456,5 +2464,34 @@ function loadMoreLearners() {
 document.addEventListener('DOMContentLoaded', function() {
     loadMoreLearners();
 });
+
+// Function that was referenced in the form but missing from template
+function toggleLearnerFields(learnerType) {
+    console.log(learnerType)
+    const studentFields = document.getElementById('student-fields');
+    const nurseFields = document.getElementById('nurse-fields');
+    
+    if (learnerType === 'student') {
+        studentFields.style.display = 'block';
+        nurseFields.style.display = 'none';
+    } else if (learnerType === 'nurse') {
+        studentFields.style.display = 'none';
+        nurseFields.style.display = 'block';
+    } else {
+        studentFields.style.display = 'none';
+        nurseFields.style.display = 'none';
+    }
+}
+
+// Function to toggle fields based on onboarding type (b2b/b2c)
+function toggleOnboardingFields(onboardingType) {
+    const skillathonEventFields = document.getElementById('skillathon-event-fields');
+    
+    if (onboardingType === 'b2c') {
+        skillathonEventFields.style.display = 'block';
+    } else {
+        skillathonEventFields.style.display = 'none';
+    }
+}
 </script>
 {% endblock %} 

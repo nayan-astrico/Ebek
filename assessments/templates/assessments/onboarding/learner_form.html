@@ -58,7 +58,20 @@
                             </div>
                         </div>
 
-                            <div class="form-group" id="skillathon-event-fields" style="display: none;">
+                        
+
+                            <!-- <div class="form-group" id="skillathon-event-fields" style="display: none;">
+                                <label for="{{ form.skillathon_event.id_for_label }}">Skillathon Event</label>
+                                {{ form.skillathon_event }}
+                                {% if form.skillathon_event.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.skillathon_event.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div> -->
+                            <div class="form-group" id="skillathon-event-fields" style="display: {% if form.instance.onboarding_type == 'b2c' %}block{% else %}none{% endif %};">
                                 <label for="{{ form.skillathon_event.id_for_label }}">Skillathon Event</label>
                                 {{ form.skillathon_event }}
                                 {% if form.skillathon_event.errors %}
@@ -134,8 +147,10 @@
                             </div>
                         </div>
 
+                        
+
                         <!-- Student-specific fields -->
-                        <div id="student-fields" style="display: none;">
+                        <div id="student-fields" style="display: {% if form.instance.learner_type == 'student' %}block{% else %}none{% endif %};">
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="form-group">
@@ -196,7 +211,7 @@
                         </div>
 
                         <!-- Nurse-specific fields -->
-                        <div id="nurse-fields" style="display: none;">
+                        <div id="nurse-fields" style="display: {% if form.instance.learner_type == 'nurse' %}block{% else %}none{% endif %};">
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="form-group">
@@ -373,42 +388,100 @@
         </div>
     </div>
 </div>
-
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const learnerTypeSelect = document.getElementById('{{ form.learner_type.id_for_label }}');
-    const studentFields = document.getElementById('student-fields');
-    const nurseFields = document.getElementById('nurse-fields');
-
-    function toggleFields() {
-        if (learnerTypeSelect.value === 'student') {
-            studentFields.style.display = 'block';
-            nurseFields.style.display = 'none';
-        } else if (learnerTypeSelect.value === 'nurse') {
-            studentFields.style.display = 'none';
-            nurseFields.style.display = 'block';
-        } else {
-            studentFields.style.display = 'none';
-            nurseFields.style.display = 'none';
+    document.addEventListener('DOMContentLoaded', function(){
+        const form = document.querySelector('form');
+        const onboardingSelect = document.getElementById('{{ form.onboarding_type.id_for_label }}');
+        const learnerTypeSelect = document.getElementById('{{ form.learner_type.id_for_label }}');
+        const skillathonSelect = document.getElementById('{{ form.skillathon_event.id_for_label }}');
+        const collegeSelect = document.getElementById('{{ form.college.id_for_label }}');
+        const educationalInstitutionInput = document.getElementById('{{ form.educational_institution.id_for_label }}');
+    
+        const skillathonEventFields = document.getElementById('skillathon-event-fields');
+        const studentFields = document.getElementById('student-fields');
+        const nurseFields = document.getElementById('nurse-fields');
+    
+        function show(el){ if(el) el.style.display = 'block'; }
+        function hide(el){ if(el) el.style.display = 'none'; }
+    
+        function toggleOnboardingFields(val){
+            const typeVal = (val || '').toLowerCase();
+            if (typeVal === 'b2c') {
+                show(skillathonEventFields);
+                if (skillathonSelect) skillathonSelect.required = true;
+                if (collegeSelect) collegeSelect.required = true;
+            } else {
+                hide(skillathonEventFields);
+                if (skillathonSelect) skillathonSelect.required = false;
+                if (collegeSelect) collegeSelect.required = false;
+            }
         }
-    }
-
-    function toggleSkillathonEvent() {
-        if (onboardingTypeSelect.value === 'b2c') {
-            skillathonEventSelect.style.display = 'block';
-        } else {
-            skillathonEventSelect.style.display = 'none';
+    
+        function toggleLearnerFields(val){
+            const lt = (val || '').toLowerCase();
+            if (lt === 'student') {
+                show(studentFields);
+                hide(nurseFields);
+                if (collegeSelect) collegeSelect.required = (onboardingSelect && onboardingSelect.value.toLowerCase() === 'b2c');
+                if (educationalInstitutionInput) educationalInstitutionInput.required = false;
+            } else if (lt === 'nurse') {
+                hide(studentFields);
+                show(nurseFields);
+                if (educationalInstitutionInput) educationalInstitutionInput.required = (onboardingSelect && onboardingSelect.value.toLowerCase() === 'b2c');
+                if (collegeSelect) collegeSelect.required = false;
+            } else {
+                hide(studentFields);
+                hide(nurseFields);
+                if (collegeSelect) collegeSelect.required = false;
+                if (educationalInstitutionInput) educationalInstitutionInput.required = false;
+            }
         }
-    }
-
-    const onboardingTypeSelect = document.getElementById('{{ form.onboarding_type.id_for_label }}');
-    const skillathonEventSelect = document.getElementById('skillathon-event-fields');
-
-    onboardingTypeSelect.addEventListener('change', toggleSkillathonEvent);
-    toggleSkillathonEvent(); // Initial state
-
-    learnerTypeSelect.addEventListener('change', toggleFields);
-    toggleFields(); // Initial state
-});
-</script>
+    
+        // Initialize visibility on load with existing values (important for Edit)
+        if (onboardingSelect) toggleOnboardingFields(onboardingSelect.value);
+        if (learnerTypeSelect) toggleLearnerFields(learnerTypeSelect.value);
+    
+        // Also wire up change listeners (form widgets already have onchange attrs, but make it robust)
+        if (onboardingSelect) onboardingSelect.addEventListener('change', function(e){
+            toggleOnboardingFields(e.target.value);
+            // Re-evaluate learner field requirements on onboarding change
+            if (learnerTypeSelect) toggleLearnerFields(learnerTypeSelect.value);
+        });
+        if (learnerTypeSelect) learnerTypeSelect.addEventListener('change', function(e){
+            toggleLearnerFields(e.target.value);
+        });
+    
+        function showError(el){
+            if(!el) return;
+            el.classList.add('is-invalid');
+            if(el.closest('.form-group')) el.closest('.form-group').classList.add('has-error');
+        }
+        function clearError(el){
+            if(!el) return;
+            el.classList.remove('is-invalid');
+            if(el.closest('.form-group')) el.closest('.form-group').classList.remove('has-error');
+        }
+    
+        if(form){
+            form.addEventListener('submit', function(e){
+                clearError(skillathonSelect); clearError(collegeSelect); clearError(educationalInstitutionInput);
+                const typeVal = (onboardingSelect && onboardingSelect.value || '').toLowerCase();
+                if(typeVal === 'b2c'){
+                    const skillathonOk = !!(skillathonSelect && skillathonSelect.value);
+                    const lt = (learnerTypeSelect && learnerTypeSelect.value || '').toLowerCase();
+                    const collegeOk = lt === 'student' ? !!(collegeSelect && collegeSelect.value) : true;
+                    const eduInstOk = lt === 'nurse' ? !!(educationalInstitutionInput && educationalInstitutionInput.value && educationalInstitutionInput.value.trim()) : true;
+                    if(!skillathonOk || !collegeOk || !eduInstOk){
+                        e.preventDefault();
+                        if(!skillathonOk) showError(skillathonSelect);
+                        if(!collegeOk) showError(collegeSelect);
+                        if(!eduInstOk) showError(educationalInstitutionInput);
+                        alert('For B2C onboarding, please select Skillathon Event and provide the required institution field.');
+                        return false;
+                    }
+                }
+            });
+        }
+    });
+    </script>
 {% endblock %} 

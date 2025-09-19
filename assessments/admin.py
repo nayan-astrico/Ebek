@@ -13,27 +13,8 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import EbekUser
 from .forms import EbekUserCreationForm, EbekUserChangeForm
 
-class EbekUserAdmin(BaseUserAdmin):
-    form = EbekUserChangeForm
-    add_form = EbekUserCreationForm
 
-    list_display = ('email', 'is_staff', 'is_active', 'user_role')
-    list_filter = ('is_staff', 'is_active', 'user_role')
-    fieldsets = (
-        (None, {'fields': ('email', 'password', 'full_name', 'phone_number')}),
-        ('Permissions', {'fields': ('is_staff', 'is_active', 'is_superuser', 'groups', 'user_permissions')}),
-        ('Personal info', {'fields': ('user_role', 'last_login')}),
-    )
-    add_fieldsets = (
-        (None, {
-            'classes': ('wide',),
-            'fields': ('email', 'user_role', 'password1', 'password2', 'is_staff', 'is_active')}
-        ),
-    )
-    search_fields = ('email',)
-    ordering = ('email',)
-
-admin.site.register(EbekUser, EbekUserAdmin)
+admin.site.register(EbekUser)
 
 admin.site.register(PasswordResetToken)
 
@@ -92,3 +73,24 @@ class ExamAssignmentAdmin(admin.ModelAdmin):
 admin.site.register(ExamAssignment, ExamAssignmentAdmin)
 
 admin.site.register(SchedularObject)
+
+class PermissionAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'category', 'is_active', 'created_at')
+    list_filter = ('category', 'is_active')
+    search_fields = ('code', 'name', 'description')
+    readonly_fields = ('created_at', 'updated_at')
+    ordering = ('category', 'name')
+
+admin.site.register(Permission, PermissionAdmin)
+
+class CustomRoleAdmin(admin.ModelAdmin):
+    list_display = ('name', 'description', 'permissions_count', 'created_at')
+    search_fields = ('name', 'description')
+    readonly_fields = ('created_at', 'updated_at')
+    filter_horizontal = ('permissions',)
+    
+    def permissions_count(self, obj):
+        return obj.permissions.count()
+    permissions_count.short_description = 'Permissions Count'
+
+admin.site.register(CustomRole, CustomRoleAdmin)

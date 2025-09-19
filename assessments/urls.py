@@ -7,10 +7,14 @@ from .onboarding_views import learner_list, learner_list_api
 
 urlpatterns = [
     path('', views.login_page, name='login_page'),
+    path('base/', views.base, name='base'),
     path('create_assessment/', views.create_assessment, name='create_assessment'),
     path('upload_excel/', views.upload_excel_view, name='upload_excel'),
     path('procedures/<str:procedure_id>/<str:action>/', views.ProcedureAPIView.as_view(), name='procedure_api'),
     path('assign_assessment/', views.assign_assessment, name='assign_assessment'),
+    path('api/tests/<str:test_id>/delete/', views.delete_test, name='delete_test'),
+    path('api/tests/<str:test_id>/update/', views.update_test, name='update_test'),
+    path('api/tests/<str:test_id>/', views.get_test, name='get_test'),
     path('course-management/', views.course_management, name='course_management'),
     path('course-management/<str:course_id>/', views.course_detail, name='course_detail'),
     path('batch-management/', views.batch_management, name='batch_management'),
@@ -27,16 +31,16 @@ urlpatterns = [
     path('fetch-particular-student/', views.fetch_particular_student, name='fetch_particular_student'),
     path('institutes/', views.institute_list, name='institute_list'),
     path('institutes/create/', views.create_institute, name='create_institute'),
-    path('users/upload-excel/', views.upload_users_excel_view, name='upload_users_excel'),
-    path('users/create/', views.create_user, name='create_user'),
-    path('users/', views.users_management, name='users_management'),
-    path('users/edit/', views.edit_user, name='edit_user'),
-    path('cohorts/', views.cohort_list, name='cohort_list'),
-    path('cohorts/create/', views.create_cohort, name='create_cohort'),
-    path('cohorts/fetch-institute-students/', views.fetch_institute_students, name='fetch_institute_students'),
-    path('cohorts/<str:cohort_id>/add-student/', views.add_student_to_cohort, name='add_student_to_cohort'),
-    path('cohorts/<str:cohort_id>/view-students/', views.view_cohort_students, name='view_cohort_students'),
-    path('cohorts/<str:cohort_id>/get-students/', views.get_cohort_students, name='get_cohort_students'),
+    # path('users/upload-excel/', views.upload_users_excel_view, name='upload_users_excel'),
+    # path('users/create/', views.create_user, name='create_user'),
+    # path('users/', views.users_management, name='users_management'),
+    # path('users/edit/', views.edit_user, name='edit_user'),
+    # path('cohorts/', views.cohort_list, name='cohort_list'),
+    # path('cohorts/create/', views.create_cohort, name='create_cohort'),
+    # path('cohorts/fetch-institute-students/', views.fetch_institute_students, name='fetch_institute_students'),
+    # path('cohorts/<str:cohort_id>/add-student/', views.add_student_to_cohort, name='add_student_to_cohort'),
+    # path('cohorts/<str:cohort_id>/view-students/', views.view_cohort_students, name='view_cohort_students'),
+    # path('cohorts/<str:cohort_id>/get-students/', views.get_cohort_students, name='get_cohort_students'),
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('forgot-password/', views.forgot_password, name='forgot_password'),
@@ -78,6 +82,8 @@ urlpatterns = [
     path('courses/<str:course_id>/update/', views.update_course, name='update_course'),
     path('courses/<str:course_id>/add-procedures/', views.add_procedures_to_course, name='add_procedures_to_course'),
     path('courses/<str:course_id>/remove-procedure/', views.remove_procedure_from_course, name='remove_procedure_from_course'),
+    path('create-roles/', views.create_roles, name='create_roles'),
+    path('assign-roles/', views.assign_roles, name='assign_roles'),
     
     # Batch API endpoints
     path('api/batches/', views.fetch_batches, name='fetch_batches'),
@@ -90,6 +96,9 @@ urlpatterns = [
     path('api/batches/<str:batch_id>/available-learners/', views.fetch_available_learners_for_batch, name='fetch_available_learners_for_batch'),
     path('api/fetch-hospitals/', views.fetch_hospitals, name='fetch_hospitals'),
     path('api/fetch-learners/<str:unit_type>/<str:unit_id>/', views.fetch_learners, name='fetch_learners'),
+    path('api/institute-based-skillathon/', views.institute_based_skillathon, name='institute_based_skillathon'),
+    path('api/download-student-report/', views.download_student_report, name='download_student_report'),
+
 
     # Batch Course API endpoints
     path('api/batches/<str:batch_id>/courses/', views.fetch_batch_courses, name='fetch_batch_courses'),
@@ -105,4 +114,11 @@ urlpatterns = [
     path('onboarding/assessors/get-institutions-hospitals/', views.get_institutions_hospitals, name='get_institutions_hospitals'),
     path('onboarding/skillathons/api/', views.skillathon_list_api, name='skillathon_list_api'),
     path('onboarding/sync-strength-counts/', views.sync_strength_counts, name='sync_strength_counts'),
+    path('api/roles/', views.get_roles, name='get_roles'),
+    path('api/roles/<int:role_id>/edit/', views.edit_role, name='edit_role'),
+    path('api/roles/<int:role_id>/delete/', views.delete_role, name='delete_role'),
+    path('api/users/create/', views.create_user, name='create_user'),
+    path('api/users/<int:user_id>/update/', views.update_user, name='update_user')
+    ,path('api/users/<int:user_id>/', views.get_user, name='get_user')
+    ,path('api/users/<int:user_id>/delete/', views.delete_user, name='delete_user')
 ]

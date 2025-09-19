@@ -40,23 +40,49 @@ class EbekUser(AbstractBaseUser, PermissionsMixin):
     )
     date_joined = models.DateTimeField(auto_now_add=True, help_text='When the user account was created.')
     last_login = models.DateTimeField(null=True, blank=True, help_text='Last login timestamp.')
-    groups = models.ManyToManyField(
-        'auth.Group',
-        verbose_name='groups',
+    
+    # Add custom roles relationship
+    custom_roles = models.ForeignKey(
+        'CustomRole',
+        verbose_name='custom roles',
         blank=True,
-        help_text='The groups this user belongs to.',
-        related_name='ebek_user_set',
-        related_query_name='ebek_user'
+        null=True,
+        on_delete=models.SET_NULL,
+        help_text='Custom roles assigned to this user.',
+        related_name='users'
     )
-    user_permissions = models.ManyToManyField(
-        'auth.Permission',
-        verbose_name='user permissions',
+    
+    # App-based permissions
+    allowed_to_take_osce = models.BooleanField(default=False, help_text='User can take OSCE exams')
+    allowed_to_take_skillathon = models.BooleanField(default=False, help_text='User can take skillathon events')
+    
+    # Institution/Hospital/Skillathon mappings (Many-to-Many)
+    assigned_institutions = models.ManyToManyField(
+        'Institution', 
         blank=True,
-        help_text='Specific permissions for this user.',
-        related_name='ebek_user_set',
-        related_query_name='ebek_user'
+        help_text='Institutions assigned to this user',
+        related_name='assigned_users'
     )
-    mobile_number = models.CharField(max_length=20, blank=True, null=True)
+    assigned_hospitals = models.ManyToManyField(
+        'Hospital', 
+        blank=True,
+        help_text='Hospitals assigned to this user',
+        related_name='assigned_users'
+    )
+    assigned_skillathons = models.ManyToManyField(
+        'SkillathonEvent', 
+        blank=True,
+        help_text='Skillathon events assigned to this user',
+        related_name='assigned_users'
+    )
+    
+    # Permissions many-to-many relationship
+    user_permissions_custom = models.ManyToManyField(
+        'Permission',
+        blank=True,
+        help_text='Custom permissions assigned to this user',
+        related_name='users'
+    )
 
     objects = EbekUserManager()
 
@@ -80,6 +106,78 @@ class EbekUser(AbstractBaseUser, PermissionsMixin):
     class Meta:
         verbose_name = 'User'
         verbose_name_plural = 'Users'
+
+    def has_custom_permission(self, permission_code):
+        """Check if user has a specific permission through their custom roles"""
+        return self.custom_roles.filter(
+            permissions__code=permission_code
+        ).exists()
+
+    def get_all_permissions_from_roles(self):
+        """Get all permissions from user's custom roles"""
+        permissions = set()
+        for role in self.get_all_roles():
+            permissions.update(role.get_permission_codes())
+        return list(permissions)
+    
+    def get_all_roles(self):
+        """Get all roles from user's custom roles"""
+        if self.custom_roles:
+            return [self.custom_roles]
+        else:
+            return []
+    
+    def get_all_permissions(self):
+        """Get all permissions from user's custom roles"""
+        permissions = set()
+        for permission in self.user_permissions_custom.all():
+            permissions.add(permission.code)
+        return list(permissions)
+    
+    def has_all_permissions(self):
+        if self.user_role == 'ebek_admin' or self.user_role == 'super_admin' or self.is_superuser == True:
+            return True
+        return False
+    
+    def check_icon_navigation_permissions(self, tab_name):
+        if tab_name == 'reports':
+            if "view_overall_report" in self.get_all_permissions() \
+                or 'view_candidate_report' in self.get_all_permissions() \
+                or self.has_all_permissions():
+                return True
+        if tab_name == 'courses':
+            if "view_courses" in self.get_all_permissions() \
+                or self.has_all_permissions():
+                return True
+        if tab_name == 'batches':
+            if "view_batches" in self.get_all_permissions() \
+                or self.has_all_permissions():
+                return True
+        if tab_name == 'institutions':
+            if "view_institutes" in self.get_all_permissions() \
+                or self.has_all_permissions():
+                return True
+        if tab_name == 'hospitals':
+            if "view_hospitals" in self.get_all_permissions() \
+                or self.has_all_permissions():
+                return True
+        if tab_name == 'learners':
+            if "view_learners" in self.get_all_permissions() \
+                or self.has_all_permissions():
+                return True
+        if tab_name == 'assessors':
+            if "view_assessors" in self.get_all_permissions() \
+                or self.has_all_permissions():
+                return True
+        if tab_name == 'skillathons':
+            if "view_skillathons" in self.get_all_permissions() \
+                or self.has_all_permissions():
+                return True
+        if tab_name == 'assignments':
+            if "view_assignment" in self.get_all_permissions() \
+                or self.has_all_permissions():
+                return True
+        return False
 
 class PasswordResetToken(models.Model):
     user = models.ForeignKey('EbekUser', on_delete=models.CASCADE)
@@ -125,6 +223,7 @@ class Institution(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     institute_id = models.CharField(max_length=50, unique=True, editable=False)
     onboarding_type = models.CharField(max_length=3, choices=ONBOARDING_TYPES)
+    skillathon = models.ForeignKey('SkillathonEvent', on_delete=models.SET_NULL, null=True, blank=True)
 
     def save(self, *args, **kwargs):
         if not self.institute_id:
@@ -153,6 +252,7 @@ class Hospital(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     onboarding_type = models.CharField(max_length=3, choices=ONBOARDING_TYPES)
+    skillathon = models.ForeignKey('SkillathonEvent', on_delete=models.SET_NULL, null=True, blank=True)
 
     def save(self, *args, **kwargs):
         if not self.hospital_id:
@@ -168,7 +268,7 @@ class Hospital(models.Model):
 class Learner(models.Model):
     
     onboarding_type = models.CharField(max_length=3, choices=ONBOARDING_TYPES)
-    learner_type = models.CharField(max_length=10, choices=LEARNER_TYPES)
+    learner_type = models.CharField(max_length=50, choices=LEARNER_TYPES)
     
     # Student specific fields
     college = models.ForeignKey(Institution, on_delete=models.SET_NULL, null=True, blank=True)
@@ -307,3 +407,47 @@ class ExamAssignment(models.Model):
             return self.learner.learner_user.full_name + self.procedure_name
         except:
             return "Exam Assignment"
+
+class Permission(models.Model):
+    code = models.CharField(max_length=100, unique=True, help_text="Permission code (e.g., 'view_overall_report')")
+    name = models.CharField(max_length=255, help_text="Human-readable permission name")
+    description = models.TextField(blank=True, null=True, help_text="Optional description of what this permission allows")
+    category = models.CharField(max_length=50, blank=True, null=True, help_text="Permission category for grouping")
+    is_active = models.BooleanField(default=True, help_text="Whether this permission is active")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+    class Meta:
+        verbose_name = 'Permission'
+        verbose_name_plural = 'Permissions'
+        ordering = ['category', 'name']
+
+class CustomRole(models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    description = models.TextField(blank=True, null=True)
+    permissions = models.ManyToManyField(
+        'Permission',
+        blank=True,
+        help_text="Permissions assigned to this role"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey('EbekUser', on_delete=models.SET_NULL, null=True, blank=True)
+
+    def __str__(self):
+        return self.name
+
+    def get_permission_codes(self):
+        """Get list of permission codes for this role"""
+        return list(self.permissions.values_list('code', flat=True))
+
+    def has_permission(self, permission_code):
+        """Check if this role has a specific permission"""
+        return self.permissions.filter(code=permission_code).exists()
+
+    class Meta:
+        verbose_name = 'Custom Role'
+        verbose_name_plural = 'Custom Roles'

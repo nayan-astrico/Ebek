@@ -28,7 +28,7 @@ else:
     DEBUG = False
 
 if DEBUG == True:
-    # FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_uat_key.json")
+    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_uat_key.json")
     FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
 else:
     FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
@@ -45,7 +45,7 @@ SECRET_KEY = 'django-insecure-%6jn6tro)!iq-a%n!#nhxhl$11*%3mnr3jk0-ez!!n!y#c8bs^
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
-ALLOWED_HOSTS = ["ebek.astrico.ai", "www.ebek.astrico.ai", "localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["ebek.astrico.ai", "www.ebek.astrico.ai", "localhost", "127.0.0.1", "ebek-uat.astrico.ai", "www.ebek-uat.astrico.ai"]
 
 # Application definition
 
@@ -68,7 +68,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'assessments.middleware.LoginRequiredMiddleware',
 ]
 
 ROOT_URLCONF = 'ebek_django_app.urls'
@@ -114,6 +113,7 @@ else:
         }
     }
 
+firebase_database = os.getenv('FIREBASE_DATABASE')
 
 # Password validation
 # https://docs.djangoproject.com/en/3.2/ref/settings/#auth-password-validators

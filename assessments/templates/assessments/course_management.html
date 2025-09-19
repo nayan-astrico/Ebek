@@ -2,6 +2,10 @@
 
 {% block content %}
 <!-- Header -->
+{% load custom_filters %}
+
+{% if request.user|check_icon_navigation_permissions:'courses' %}
+
 <div class="header">
     <div class="header-left">
         <h1>Courses</h1>
@@ -16,6 +20,7 @@
 </div>
 
 <!-- Add Course Side Panel -->
+ {% if "create_course" in request.user.get_all_permissions or request.user.has_all_permissions %}
 <div class="side-panel" id="addCoursePanel">
     <div class="side-panel-header">
         <h3>Add New Course</h3>
@@ -94,6 +99,7 @@
         </div>
     </form>
 </div>
+{% endif %}
 
 <!-- Search and Filter Bar -->
 <div class="search-filter-bar">
@@ -204,13 +210,15 @@
         </div>
         <h3>No courses found</h3>
         <p>Get started by creating your first course</p>
+        {% if "create_course" in request.user.get_all_permissions or request.user.has_all_permissions %}
         <button class="btn btn-primary" onclick="toggleAddCoursePanel()">
             <i class="fas fa-plus"></i>
             Create Course
         </button>
+        {% endif %}
     </div>
 </div>
-
+{% endif %}
 
 
 <style>
@@ -971,20 +979,24 @@ function renderCourseRow(course) {
     row.innerHTML = `
         <td>${course.name}</td>
         <td>${course.procedure_count}</td>
+        {% if "update_course_status" in request.user.get_all_permissions or request.user.has_all_permissions %}
         <td>
             <label class="switch">
                 <input type="checkbox" ${course.status === 'active' ? 'checked' : ''} onchange="toggleCourseStatus('${course.id}', this.checked ? 'active' : 'inactive')">
                 <span class="slider round"></span>
             </label>
         </td>
+        {% endif %}
         <td>
             <div class="actions">
                 <button class="btn-icon" onclick="event.stopPropagation(); editCourse('${course.id}')" title="Edit Course">
                     <i class="fas fa-edit"></i>
                 </button>
+                {% if "delete_course" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <button class="btn-icon btn-danger" onclick="event.stopPropagation(); deleteCourse('${course.id}')">
                     <i class="fas fa-trash"></i>
                 </button>
+                {% endif %}
             </div>
         </td>
     `;

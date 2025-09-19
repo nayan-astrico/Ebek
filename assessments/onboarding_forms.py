@@ -29,51 +29,47 @@ class GroupForm(forms.ModelForm):
         return name
 
 class InstitutionForm(forms.ModelForm):
-    unit_head_name = forms.CharField(label='Unit Head Name', max_length=255, required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
-    unit_head_email = forms.EmailField(label='Unit Head Email', required=False, widget=forms.EmailInput(attrs={'class': 'form-control'}))
-    unit_head_phone = forms.CharField(label='Unit Head Phone', max_length=20, required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
     
     class Meta:
         model = Institution
-        fields = ['name', 'group', 'address', 'state', 'district', 'pin_code', 'onboarding_type']
+        fields = ['name', 'address', 'state', 'district', 'pin_code', 'onboarding_type', 'skillathon']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
-            'group': forms.Select(attrs={'class': 'form-control'}),
             'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'state': forms.TextInput(attrs={'class': 'form-control'}),
             'district': forms.TextInput(attrs={'class': 'form-control'}),
             'pin_code': forms.TextInput(attrs={'class': 'form-control'}),
             'onboarding_type': forms.Select(attrs={'class': 'form-control'}),
+            'skillathon': forms.Select(attrs={'class': 'form-control'}),
         }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Filter group queryset to show only institution type groups
-        self.fields['group'].queryset = Group.objects.filter(type='institution', is_active=True)
+        # Set skillathon queryset to show all available skillathons
+        self.fields['skillathon'].queryset = SkillathonEvent.objects.all()
 
 class HospitalForm(forms.ModelForm):
-    unit_head_name = forms.CharField(label='Unit Head Name', max_length=255, required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
-    unit_head_email = forms.EmailField(label='Unit Head Email', required=False, widget=forms.EmailInput(attrs={'class': 'form-control'}))
-    unit_head_phone = forms.CharField(label='Unit Head Phone', max_length=20, required=False, widget=forms.TextInput(attrs={'class': 'form-control'}))
     
     class Meta:
         model = Hospital
-        fields = ['name', 'group', 'address', 'state', 'district', 'pin_code', 'nurse_strength', 'number_of_beds', 'onboarding_type']
+        fields = ['name', 'address', 'state', 'district', 'pin_code', 'nurse_strength', 'number_of_beds', 'onboarding_type', 'skillathon']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
-            'group': forms.Select(attrs={'class': 'form-control'}),
             'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'state': forms.TextInput(attrs={'class': 'form-control'}),
             'district': forms.TextInput(attrs={'class': 'form-control'}),
             'pin_code': forms.TextInput(attrs={'class': 'form-control'}),
             'number_of_beds': forms.NumberInput(attrs={'class': 'form-control'}),
             'onboarding_type': forms.Select(attrs={'class': 'form-control'}),
+            'skillathon': forms.Select(attrs={'class': 'form-control'}),
         }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Filter group queryset to show only hospital type groups
-        self.fields['group'].queryset = Group.objects.filter(type='hospital', is_active=True)
+        # Set skillathon queryset to show all available skillathons
+        self.fields['skillathon'].queryset = SkillathonEvent.objects.all()
 
 class LearnerForm(forms.ModelForm):
     learner_name = forms.CharField(label='Learner Name', max_length=255, required=True, widget=forms.TextInput(attrs={'class': 'form-control'}))
@@ -83,8 +79,8 @@ class LearnerForm(forms.ModelForm):
         model = Learner
         fields = ['onboarding_type', 'learner_type',
                  'college', 'course', 'stream', 'year_of_study', 'hospital', 'designation',
-                 'years_of_experience', 'educational_qualification', 'educational_institution',
-                 'speciality', 'state', 'district', 'pincode', 'address', 'date_of_birth',
+                 'years_of_experience', 'educational_qualification',
+                 'educational_institution', 'speciality', 'state', 'district', 'pincode', 'address', 'date_of_birth',
                  'certifications', 'learner_gender', 'skillathon_event']
         widgets = {
             'onboarding_type': forms.Select(attrs={'class': 'form-control'}),
@@ -111,9 +107,14 @@ class LearnerForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Set skillathon queryset to show all available skillathons
+        self.fields['skillathon_event'].queryset = SkillathonEvent.objects.all()
         # Add JavaScript to show/hide fields based on learner_type
         self.fields['learner_type'].widget.attrs.update({
             'onchange': 'toggleLearnerFields(this.value)'
+        })
+        self.fields['onboarding_type'].widget.attrs.update({
+            'onchange': 'toggleOnboardingFields(this.value)'
         })
 
 class AssessorForm(forms.ModelForm):

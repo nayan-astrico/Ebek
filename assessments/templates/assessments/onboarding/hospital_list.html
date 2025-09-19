@@ -10,12 +10,14 @@
         <h1>Hospitals</h1>
         <p class="text-muted">Manage your hospitals</p>
     </div>
+    {% if "create_hospital" in request.user.get_all_permissions or request.user.has_all_permissions %}
     <div class="header-right">
         <a href="javascript:void(0);" class="btn btn-primary"
            onclick="openHospitalFormPanel('{% url 'hospital_create' %}', 'Add Hospital')">
             <i class="fas fa-plus"></i> Add Hospital
         </a>
     </div>
+    {% endif %}
 </div>
 
 <!-- Search and Filter Bar -->
@@ -140,7 +142,7 @@
                     <thead>
                         <tr>
                 <th>Hospital</th>
-                            <th>Group</th>
+                            <!-- <th>Group</th> -->
                 <th>State</th>
                 <th>Nurses</th>
                             <th>Unit Head</th>
@@ -158,10 +160,12 @@
         <div class="empty-state-content">
             <i class="fas fa-hospital"></i>
             <p>No hospitals found</p>
+            {% if "create_hospital" in request.user.get_all_permissions or request.user.has_all_permissions %}
             <a href="javascript:void(0);" class="btn btn-primary"
                onclick="openHospitalFormPanel('{% url 'hospital_create' %}', 'Add Hospital')">
                 Add New Hospital
             </a>
+            {% endif %}
         </div>
     </div>
     
@@ -170,7 +174,6 @@
         <button id="showMoreBtn" class="btn btn-primary" onclick="loadMoreHospitals()">
             Show More
         </button>
-        
             </div>
 </div>
 
@@ -270,7 +273,7 @@ function renderHospitalRow(hospital) {
     row.setAttribute('data-hospital-id', hospital.id);
     row.innerHTML = `
         <td><div class="institution"><span>${hospital.name}</span></div></td>
-        <td>${hospital.group ? hospital.group : '-'}</td>
+        <!-- <td>${hospital.group ? hospital.group : '-'}</td> -->
         <td>${hospital.state ? hospital.state : '-'}</td>
         <td>${hospital.nurse_strength ? hospital.nurse_strength : '0'}</td>
         <td>
@@ -283,11 +286,14 @@ function renderHospitalRow(hospital) {
         </td>
         <td>
             <div class="actions">
+                {% if "edit_hospital" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <a href="javascript:void(0);" class="btn-icon"
                    onclick="openHospitalFormPanel('${hospital.edit_url}', 'Edit Hospital')"
                    title="Edit">
                     <i class="fas fa-edit"></i>
                 </a>
+                {% endif %}
+                {% if "delete_hospital" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <button type="button" 
                         class="btn-icon btn-danger" 
                         data-name="${hospital.name}"
@@ -296,6 +302,7 @@ function renderHospitalRow(hospital) {
                         title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
+                {% endif %}
             </div>
         </td>
     `;
@@ -581,7 +588,46 @@ function openHospitalFormPanel(url, title) {
         .then(html => {
             console.log(html);
             document.getElementById('hospitalFormContainer').innerHTML = html;
+            
+            // Initialize the form after it's loaded
+            initializeHospitalForm();
         });
+}
+
+// Function to initialize the hospital form after it's loaded dynamically
+function initializeHospitalForm() {
+    // Function to toggle skillathon field based on onboarding type
+    function toggleSkillathonField(onboardingType) {
+        const skillathonFields = document.getElementById('skillathon-fields');
+        console.log('Toggling skillathon field for onboarding type:', onboardingType);
+        console.log('Skillathon fields element:', skillathonFields);
+        
+        if (onboardingType === 'b2c') {
+            skillathonFields.style.display = 'block';
+            console.log('Showing skillathon fields');
+        } else {
+            skillathonFields.style.display = 'none';
+            console.log('Hiding skillathon fields');
+        }
+    }
+    
+    // Find the onboarding type select element
+    const onboardingTypeSelect = document.querySelector('select[name="onboarding_type"]');
+    console.log('Onboarding type select element:', onboardingTypeSelect);
+    
+    // Add event listener
+    if (onboardingTypeSelect) {
+        onboardingTypeSelect.addEventListener('change', function() {
+            console.log('Onboarding type changed to:', this.value);
+            toggleSkillathonField(this.value);
+        });
+        
+        // Set initial state
+        console.log('Setting initial state for onboarding type:', onboardingTypeSelect.value);
+        toggleSkillathonField(onboardingTypeSelect.value);
+    } else {
+        console.error('Onboarding type select element not found');
+    }
 }
 
 function closeHospitalFormPanel() {

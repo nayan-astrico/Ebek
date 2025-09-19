@@ -11,10 +11,12 @@
         <p class="text-muted">Manage your educational institutions</p>
     </div>
     <div class="header-right">
+        {% if "create_institute" in request.user.get_all_permissions or request.user.has_all_permissions %}
         <a href="javascript:void(0);" class="btn btn-primary"
            onclick="openInstitutionFormPanel('{% url 'institution_create' %}', 'Add Institution')">
             <i class="fas fa-plus"></i> Add Institution
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -157,7 +159,7 @@
         <thead>
             <tr>
                 <th>Institution</th>
-                <th>Group</th>
+                <!-- <th>Group</th> -->
                 <th>State</th>
                 <th>Learners</th>
                 <th>Unit Head</th>
@@ -175,10 +177,12 @@
         <div class="empty-state-content">
             <i class="fas fa-school"></i>
             <p>No institutions found</p>
+            {% if "create_institute" in request.user.get_all_permissions or request.user.has_all_permissions %}
             <a href="javascript:void(0);" class="btn btn-primary"
                onclick="openInstitutionFormPanel('{% url 'institution_create' %}', 'Add Institution')">
                 Add New Institution
             </a>
+            {% endif %}
         </div>
     </div>
     
@@ -313,7 +317,46 @@ function openInstitutionFormPanel(url, title) {
         .then(html => {
             console.log(html);
             document.getElementById('institutionFormContainer').innerHTML = html;
+            
+            // Initialize the form after it's loaded
+            initializeInstitutionForm();
         });
+}
+
+// Function to initialize the institution form after it's loaded dynamically
+function initializeInstitutionForm() {
+    // Function to toggle skillathon field based on onboarding type
+    function toggleSkillathonField(onboardingType) {
+        const skillathonFields = document.getElementById('skillathon-fields');
+        console.log('Toggling skillathon field for onboarding type:', onboardingType);
+        console.log('Skillathon fields element:', skillathonFields);
+        
+        if (onboardingType === 'b2c') {
+            skillathonFields.style.display = 'block';
+            console.log('Showing skillathon fields');
+        } else {
+            skillathonFields.style.display = 'none';
+            console.log('Hiding skillathon fields');
+        }
+    }
+    
+    // Find the onboarding type select element
+    const onboardingTypeSelect = document.querySelector('select[name="onboarding_type"]');
+    console.log('Onboarding type select element:', onboardingTypeSelect);
+    
+    // Add event listener
+    if (onboardingTypeSelect) {
+        onboardingTypeSelect.addEventListener('change', function() {
+            console.log('Onboarding type changed to:', this.value);
+            toggleSkillathonField(this.value);
+        });
+        
+        // Set initial state
+        console.log('Setting initial state for onboarding type:', onboardingTypeSelect.value);
+        toggleSkillathonField(onboardingTypeSelect.value);
+    } else {
+        console.error('Onboarding type select element not found');
+    }
 }
 
 function closeInstitutionFormPanel() {
@@ -510,7 +553,7 @@ function renderInstitutionRow(inst) {
     row.setAttribute('data-institution-id', inst.id);
     row.innerHTML = `
         <td><div class="institution"><span>${inst.name}</span></div></td>
-        <td>${inst.group ? inst.group : '-'}</td>
+        <!-- <td>${inst.group ? inst.group : '-'}</td> -->
         <td>${inst.state ? inst.state : '-'}</td>
         <td>${inst.total_strength ? inst.total_strength : '-'}</td>
         <td>
@@ -523,11 +566,14 @@ function renderInstitutionRow(inst) {
         </td>
         <td>
             <div class="actions">
+                {% if "edit_institute" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <a href="javascript:void(0);" class="btn-icon"
                    onclick="openInstitutionFormPanel('${inst.edit_url}', 'Edit Institution')"
                    title="Edit">
                     <i class="fas fa-edit"></i>
                 </a>
+                {% endif %}
+                {% if "delete_institute" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <button type="button" 
                         class="btn-icon btn-danger" 
                         data-name="${inst.name}"
@@ -536,6 +582,7 @@ function renderInstitutionRow(inst) {
                         title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
+                {% endif %}
             </div>
         </td>
     `;

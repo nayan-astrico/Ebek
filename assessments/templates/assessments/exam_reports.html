@@ -10,16 +10,21 @@
     <!-- Header Section -->
     <div class="reports-header">
         <h1>Exam Reports</h1>
-        <p class="subtitle">View and analyze student performance across different skillathons</p>
+        <p class="subtitle">View and analyze candidate performance across different skillathons</p>
 </div>
 
     <!-- Navigation Tabs -->
     <div class="reports-tabs">
+        {% if "view_overall_report" in request.user.get_all_permissions  or request.user.has_all_permissions %}
         <button class="tab-button active" onclick="switchTab('overall')">Overall Report</button>
-        <button class="tab-button" onclick="switchTab('student')">Student Report</button>
+        {% endif %}
+        {% if "view_candidate_report" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        <button class="tab-button" onclick="switchTab('student')">Candidate Report</button>
+        {% endif %}
     </div>
 
     <!-- Overall Report Tab -->
+    {% if "view_overall_report" in request.user.get_all_permissions or request.user.has_all_permissions %}
     <div id="overall-tab" class="tab-content active">
         <!-- Filters Section -->
         <div class="filters-section">
@@ -43,7 +48,7 @@
                             <i class="fas fa-users"></i>
                         </div>
                         <div class="metric-content">
-                            <h3>Total Students Participated</h3>
+                            <h3>Total Candidates Participated</h3>
                             <div class="metric-value" id="totalStudents">0</div>
                         </div>
                     </div>
@@ -53,7 +58,7 @@
                             <i class="fas fa-check-circle"></i>
                         </div>
                         <div class="metric-content">
-                            <h3>Students Completed All Procedures</h3>
+                            <h3>Candidates Completed All Procedures</h3>
                             <div class="metric-value" id="completedAllProcedures">0</div>
                         </div>
                     </div>
@@ -134,19 +139,19 @@
                     </div>
                 </div>
                 <div class="gender-chart-card">
-                    <h3>Male Students Performance</h3>
+                    <h3>Male Candidates Performance</h3>
                     <div class="chart-wrapper">
                         <canvas id="maleGradeChart"></canvas>
                     </div>
                 </div>
                 <div class="gender-chart-card">
-                    <h3>Female Students Performance</h3>
+                    <h3>Female Candidates Performance</h3>
                     <div class="chart-wrapper">
                         <canvas id="femaleGradeChart"></canvas>
                     </div>
                 </div>
                 <div class="gender-chart-card">
-                    <h3>Other Students Performance</h3>
+                    <h3>Other Candidates Performance</h3>
                     <div class="chart-wrapper">
                         <canvas id="othersGradeChart"></canvas>
                     </div>
@@ -161,8 +166,10 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
     <!-- Student Report Tab -->
+    {% if "view_candidate_report" in request.user.get_all_permissions or request.user.has_all_permissions %}
     <div id="student-tab" class="tab-content">
             <!-- Filters Section -->
             <div class="filters-section">
@@ -217,13 +224,35 @@
                 <!-- Performance Table -->
                 <div class="performance-table-container">
                     <div class="table-header">
-                        <h3>Student Performance</h3>
+                        <h3>Candidate Performance</h3>
+                        <div class="header-actions">
+                            <div class="search-container">
+                                <input type="text" 
+                                       id="studentSearchInput" 
+                                       placeholder="Search candidates by name..." 
+                                       class="search-input"
+                                       oninput="searchStudents(this.value)">
+                                <i class="fas fa-search search-icon"></i>
+                            </div>
+                            <div class="download-buttons">
+                                {% if "download_candidate_report" in request.user.get_all_permissions or request.user.has_all_permissions %}
+                                <button class="download-btn pdf-btn" onclick="downloadStudentReport('pdf')" title="Download as PDF">
+                                    <i class="fas fa-file-pdf"></i>
+                                    PDF
+                                </button>
+                                <button class="download-btn excel-btn" onclick="downloadStudentReport('excel')" title="Download as Excel">
+                                    <i class="fas fa-file-excel"></i>
+                                    Excel
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
                     </div>
                     <div class="table-wrapper">
                         <table class="performance-table">
                             <thead id="performanceTableHead">
                                 <tr>
-                                    <th class="student-col sticky-col">Student Name</th>
+                                    <th class="student-col sticky-col">Candidate Name</th>
                                     <th class="institute-col sticky-col">Institute</th>
                                     <!-- Procedure columns will be added dynamically -->
                                 </tr>
@@ -243,7 +272,9 @@
                 <p>Please select a Skillathon to view metrics</p>
             </div>
     </div>
+    {% endif %}
 </div>
+
 
 <div id="procedurePanel" class="procedure-panel">
     <div class="panel-overlay"></div>
@@ -259,7 +290,7 @@
             <div class="student-info" style="margin-bottom: 32px;">
                 <div class="info-group">
                     <div class="info-item">
-                        <label>Student Name</label>
+                        <label>Candidate Name</label>
                         <div id="panelStudentName" class="info-value">-</div>
                     </div>
                     <div class="info-item">
@@ -1203,6 +1234,121 @@
         margin: 0 0 20px;
     }
 
+    .table-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .search-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .search-input {
+        padding: 8px 12px 8px 40px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        width: 300px;
+        background: #f8fafc;
+        transition: all 0.2s ease;
+    }
+
+    .search-input:focus {
+        outline: none;
+        border-color: #3b82f6;
+        background: white;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .search-input:disabled {
+        background: #f1f5f9;
+        color: #94a3b8;
+        cursor: not-allowed;
+        border-color: #e2e8f0;
+    }
+
+    .search-input:disabled::placeholder {
+        color: #94a3b8;
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 12px;
+        color: #64748b;
+        font-size: 14px;
+        pointer-events: none;
+    }
+
+    .search-container:has(.search-input:disabled) .search-icon {
+        color: #94a3b8;
+    }
+
+    .no-search-results-message {
+        background: white;
+        border-radius: 12px;
+        margin: 20px 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+
+    .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .download-buttons {
+        display: flex;
+        gap: 8px;
+    }
+
+    .download-btn {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        border: none;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+    }
+
+    .pdf-btn {
+        background: #dc3545;
+        color: white;
+    }
+
+    .pdf-btn:hover {
+        background: #c82333;
+        transform: translateY(-1px);
+    }
+
+    .excel-btn {
+        background: #28a745;
+        color: white;
+    }
+
+    .excel-btn:hover {
+        background: #218838;
+        transform: translateY(-1px);
+    }
+
+    .download-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    .download-btn i {
+        font-size: 14px;
+    }
+
     .table-wrapper {
         width: 100%;
         overflow: visible; /* Change from auto/scroll to visible */
@@ -1964,6 +2110,9 @@
     let selectedSkillathon = '';
     let selectedStudentSkillathon = '';
     let selectedStudentInstitute = '';
+    let allStudentData = []; // Store all student data for searching
+    let isSearchActive = false; // Track if search is currently active
+    let savedSearchValue = ''; // Store search value when switching tabs
     let gradeChart = null;
     let genderTotalChart = null;
     let maleGradeChart = null;
@@ -2042,13 +2191,13 @@
             row.innerHTML = `
                 <td>${inst.institute}</td>
                 <td>
-                    <div>Students: ${inst.overall.students}</div>
+                    <div>Candidates: ${inst.overall.students}</div>
                     <div>Avg: ${inst.overall.avg_score}%</div>
                 </td>
                 ${stationList.map(station => 
                     inst.stations[station] 
                         ? `<td>
-                            <div>Students: ${inst.stations[station].students}</div>
+                            <div>Candidates: ${inst.stations[station].students}</div>
                             <div>Avg: ${inst.stations[station].avg_score}%</div>
                           </td>`
                         : `<td>-</td>`
@@ -2272,7 +2421,7 @@
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                return `Students: ${context.raw}`;
+                                return `Candidates: ${context.raw}`;
                             }
                         }
                     }
@@ -2708,6 +2857,15 @@
             clearFetchStudentMetricsInterval();
             clearFetchMetricsInterval();
             // Only start fetchMetrics if Go was pressed
+            
+            // Save current search value and disable search input for overall tab
+            const searchInput = document.getElementById('studentSearchInput');
+            if (searchInput) {
+                savedSearchValue = searchInput.value; // Save current search value
+                searchInput.disabled = true;
+                searchInput.placeholder = 'Search only available in Student Report';
+            }
+            isSearchActive = false;
         } else if (tabName === 'student') {
             clearFetchMetricsInterval();
             clearFetchStudentMetricsInterval();
@@ -2724,25 +2882,26 @@
             if (studentDetails) studentDetails.style.display = 'none';
             if (noDataFound) noDataFound.style.display = 'block';
             
-            // Populate institute filter for student report
-            fetch('/fetch-institutes/')
-            .then(response => response.json())
-            .then(data => {
-                    const studentInstituteFilter = document.getElementById('studentInstituteFilter');
-                    if (studentInstituteFilter) {
-                        studentInstituteFilter.innerHTML = '<option value="">All Institutes</option>';
-                        data.institutes.forEach(institute => {
-                            const option = document.createElement('option');
-                            option.value = institute.instituteName;
-                            option.textContent = institute.instituteName;
-                            studentInstituteFilter.appendChild(option);
-                        });
-                        // Fetch metrics immediately after loading institutes
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching institutes:', error);
-                });
+            // Reset institute filter for student report
+            const studentInstituteFilter = document.getElementById('studentInstituteFilter');
+            if (studentInstituteFilter) {
+                studentInstituteFilter.innerHTML = '<option value="">All Institutes</option>';
+                studentInstituteFilter.disabled = true;
+            }
+            
+            // Restore search input and apply saved search value
+            const searchInput = document.getElementById('studentSearchInput');
+            if (searchInput) {
+                searchInput.disabled = false;
+                searchInput.placeholder = 'Search candidates by name...';
+                searchInput.value = savedSearchValue; // Restore saved search value
+                
+                // Apply the search if there was a saved value
+                if (savedSearchValue) {
+                    searchStudents(savedSearchValue);
+                }
+            }
+            isSearchActive = savedSearchValue !== '';
         }
     }
 
@@ -2900,6 +3059,14 @@
         const headerRow = document.getElementById('performanceTableHead');
         const tableBody = document.getElementById('performanceTableBody');
 
+        // Clear search input and reset search state
+        const searchInput = document.getElementById('studentSearchInput');
+        if (searchInput) {
+            searchInput.value = '';
+        }
+        isSearchActive = false;
+        savedSearchValue = ''; // Clear saved search value
+
         // Safely toggle display of main sections
         if (studentMetrics) studentMetrics.style.display = 'none';
         if (noDataFound) noDataFound.style.display = 'block';
@@ -2940,8 +3107,14 @@
 
         if (!headerRow || !tableBody) {
             console.error('Table elements not found');
-                    return;
-                }
+            return;
+        }
+        
+        // Check if search is active - if so, don't update the table
+        if (isSearchActive) {
+            console.log('Search is active, skipping table update to preserve search results');
+            return;
+        }
                 
         // Clear existing content
         while (headerRow.children.length > 2) {
@@ -3089,6 +3262,9 @@
         if (selectedSkillathon) {
             instituteFilter.disabled = false;
             goButton.disabled = false;
+            
+            // Call API with skillathon name
+            callSkillathonAPI(selectedSkillathon);
         } else {
             instituteFilter.disabled = true;
             goButton.disabled = true;
@@ -3097,6 +3273,83 @@
         }
         clearMetricsDisplay();
         clearFetchMetricsInterval();
+    }
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    function callSkillathonAPI(skillathonName) {
+        console.log('Calling skillathon API with:', skillathonName);
+        
+        // Show loading state
+        const instituteFilter = document.getElementById('instituteFilter');
+        instituteFilter.disabled = true;
+        instituteFilter.innerHTML = '<option value="">Loading...</option>';
+        
+        fetch('/api/institute-based-skillathon/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({
+                skillathon_name: skillathonName
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Skillathon API response:', data);
+            
+            // Populate institute dropdown with response data
+            populateInstituteDropdown(data);
+            
+            // Re-enable institute dropdown
+            instituteFilter.disabled = false;
+        })
+        .catch(error => {
+            console.error('Error calling skillathon API:', error);
+            
+            // Reset institute dropdown on error
+            instituteFilter.innerHTML = '<option value="">All Institutes</option>';
+            instituteFilter.disabled = false;
+            
+            // Show error message
+            showError('Failed to load institutes for selected skillathon');
+        });
+    }
+
+    function populateInstituteDropdown(data) {
+        const instituteFilter = document.getElementById('instituteFilter');
+        
+        // Clear existing options
+        instituteFilter.innerHTML = '<option value="">All Institutes</option>';
+        
+        // Add institutes from API response
+        if (data.institutes && Array.isArray(data.institutes)) {
+            data.institutes.forEach(institute => {
+                const option = document.createElement('option');
+                option.value = institute.name;
+                option.textContent = institute.name;
+                instituteFilter.appendChild(option);
+            });
+        }
     }
 
     function onInstituteChange() {
@@ -3196,10 +3449,228 @@
     // Student Report Go button logic
     function onStudentSkillathonChange() {
         selectedStudentSkillathon = document.getElementById('studentSkillathonFilter').value;
+        
+        // Enable/disable institute filter and call API
+        const studentInstituteFilter = document.getElementById('studentInstituteFilter');
+        const goBtn = document.getElementById('studentGoButton');
+        
+        if (selectedStudentSkillathon) {
+            // Call API to get institutes for this skillathon
+            callStudentSkillathonAPI(selectedStudentSkillathon);
+            goBtn.disabled = false;
+        } else {
+            // Reset institute filter
+            if (studentInstituteFilter) {
+                studentInstituteFilter.innerHTML = '<option value="">All Institutes</option>';
+                studentInstituteFilter.disabled = true;
+            }
+            goBtn.disabled = true;
+        }
+        
         updateStudentGoButtonState();
         clearStudentMetrics();
         clearFetchStudentMetricsInterval();
     }
+
+    function callStudentSkillathonAPI(skillathonName) {
+        console.log('Calling student skillathon API with:', skillathonName);
+        
+        // Show loading state
+        const studentInstituteFilter = document.getElementById('studentInstituteFilter');
+        studentInstituteFilter.disabled = true;
+        studentInstituteFilter.innerHTML = '<option value="">Loading...</option>';
+        
+        fetch('/api/institute-based-skillathon/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({
+                skillathon_name: skillathonName
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Student skillathon API response:', data);
+            
+            // Populate institute dropdown with response data
+            populateStudentInstituteDropdown(data);
+            
+            // Re-enable institute dropdown
+            studentInstituteFilter.disabled = false;
+        })
+        .catch(error => {
+            console.error('Error calling student skillathon API:', error);
+            
+            // Reset institute dropdown on error
+            studentInstituteFilter.innerHTML = '<option value="">All Institutes</option>';
+            studentInstituteFilter.disabled = false;
+            
+            // Show error message
+            showError('Failed to load institutes for selected skillathon');
+        });
+    }
+
+    function populateStudentInstituteDropdown(data) {
+        const studentInstituteFilter = document.getElementById('studentInstituteFilter');
+        
+        // Clear existing options
+        studentInstituteFilter.innerHTML = '<option value="">All Institutes</option>';
+        
+        // Add institutes from API response
+        if (data.institutes && Array.isArray(data.institutes)) {
+            data.institutes.forEach(institute => {
+                const option = document.createElement('option');
+                option.value = institute.name;
+                option.textContent = institute.name;
+                studentInstituteFilter.appendChild(option);
+            });
+        }
+    }
+
+    function searchStudents(searchTerm) {
+        console.log('Searching students with term:', searchTerm);
+        
+        const tbody = document.getElementById('performanceTableBody');
+        if (!tbody) return;
+        
+        const rows = tbody.querySelectorAll('tr');
+        const searchLower = searchTerm.toLowerCase().trim();
+        
+        // Update search active flag
+        const wasSearchActive = isSearchActive;
+        isSearchActive = searchLower !== '';
+        console.log('Search active:', isSearchActive);
+        
+        // If search was active and now cleared, refresh the table data
+        if (wasSearchActive && !isSearchActive) {
+            console.log('Search cleared, refreshing table data');
+            // Trigger a fresh fetch of student metrics to update the table
+            fetchStudentMetrics();
+        }
+        
+        let visibleCount = 0;
+        
+        rows.forEach(row => {
+            const studentNameCell = row.querySelector('.student-col');
+            if (studentNameCell) {
+                const studentName = studentNameCell.textContent.toLowerCase();
+                
+                if (searchLower === '' || studentName.includes(searchLower)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            }
+        });
+        
+        console.log(`Search completed. ${visibleCount} students visible out of ${rows.length} total.`);
+        
+        // Show/hide no results message if needed
+        if (searchLower === '') {
+            // If search is cleared, hide search results message and show general no data if needed
+            showNoSearchResults(false);
+            const noDataFound = document.getElementById('noDataFound');
+            const tbody = document.getElementById('performanceTableBody');
+            const allRows = tbody.querySelectorAll('tr');
+            if (allRows.length === 0 && noDataFound) {
+                noDataFound.style.display = 'block';
+            }
+        } else {
+            // Show search results message if no results found
+            showNoSearchResults(visibleCount === 0);
+        }
+    }
+
+    function showNoSearchResults(show) {
+        let noResultsMsg = document.getElementById('noSearchResults');
+        const noDataFound = document.getElementById('noDataFound');
+        const tableWrapper = document.querySelector('.table-wrapper');
+        
+        if (show && !noResultsMsg) {
+            // Hide the general no data message
+            if (noDataFound) {
+                noDataFound.style.display = 'none';
+            }
+            
+            // Hide the table
+            if (tableWrapper) {
+                tableWrapper.style.display = 'none';
+            }
+            
+            // Create no results message
+            noResultsMsg = document.createElement('div');
+            noResultsMsg.id = 'noSearchResults';
+            noResultsMsg.className = 'no-search-results-message';
+            noResultsMsg.innerHTML = `
+                <div style="text-align: center; padding: 60px 20px; color: #64748b;">
+                    <i class="fas fa-search" style="font-size: 48px; margin-bottom: 16px; display: block; color: #cbd5e1;"></i>
+                    <h3 style="margin: 0 0 8px; color: #64748b; font-size: 18px;">No candidates found</h3>
+                    <p style="margin: 0; font-style: italic; color: #94a3b8;">Try adjusting your search terms</p>
+                </div>
+            `;
+            
+            // Insert the message after the table header
+            const tableHeader = document.querySelector('.table-header');
+            if (tableHeader) {
+                tableHeader.parentNode.insertBefore(noResultsMsg, tableHeader.nextSibling);
+            }
+        } else if (!show && noResultsMsg) {
+            // Remove no results message
+            noResultsMsg.remove();
+            
+            // Show the table again
+            if (tableWrapper) {
+                tableWrapper.style.display = 'block';
+            }
+            
+            // Show the general no data message if there are no visible rows
+            const tbody = document.getElementById('performanceTableBody');
+            const visibleRows = tbody.querySelectorAll('tr:not([style*="display: none"])');
+            if (visibleRows.length === 0 && noDataFound) {
+                noDataFound.style.display = 'block';
+            }
+        }
+    }
+
+    function downloadStudentReport(format) {
+        const skillathonName = document.getElementById('studentSkillathonFilter').value;
+        const instituteName = document.getElementById('studentInstituteFilter').value;
+        
+        if (!skillathonName) {
+            alert('Please select a skillathon first');
+            return;
+        }
+        
+        // Build URL with parameters
+        const url = '/api/download-student-report/';
+        
+        // Add parameters
+        const params = new URLSearchParams();
+        params.append('skillathon_name', skillathonName);
+        params.append('format', format);
+        if (instituteName && instituteName !== 'all') {
+            params.append('institute_name', instituteName);
+        }
+        
+        const fullUrl = url + '?' + params.toString();
+        
+        // Create a temporary link and trigger download
+        const link = document.createElement('a');
+        link.href = fullUrl;
+        link.download = '';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
     function onStudentInstituteChange() {
         selectedStudentInstitute = document.getElementById('studentInstituteFilter').value;
         updateStudentGoButtonState();

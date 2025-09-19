@@ -1,6 +1,6 @@
 from firebase_admin import firestore
 
-# Firebase is already initialized in settings.py, so we just need to get the client
+
 db = firestore.client()
 
 def update_procedure_completed_counts():

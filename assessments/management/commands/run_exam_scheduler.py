@@ -76,7 +76,14 @@ class Command(BaseCommand):
 
     def run_once(self):
         """Run the scheduler once"""
-        db = firestore.client()
+        from django.conf import settings
+        import os
+        from dotenv import load_dotenv
+
+        load_dotenv()
+        firebase_database = os.getenv('FIREBASE_DATABASE')
+
+        db = firestore.client(database_id=firebase_database)
         
         schedular_object = SchedularObject.objects.filter(is_completed=False).first()
         
@@ -154,7 +161,8 @@ class Command(BaseCommand):
                         'status': 'Pending',
                         'notes': procedure.get('notes', ''),
                         'procedure_name': procedure.get('procedureName', ''),
-                        'institute': learner_user_doc.get("institution") or learner_user_doc.get("hospital"),
+                        'institute': learner_user_doc.get("institution") if learner_user_doc.get("institution") else None,
+                        'hospital': learner_user_doc.get("hospital") if learner_user_doc.get("hospital") else None,
                     }
                     
                     exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]

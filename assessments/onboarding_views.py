@@ -47,7 +47,15 @@ from django.db.models import Q
 import logging
 
 logger = logging.getLogger(__name__)
-db = firestore.client()
+
+from django.conf import settings
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+firebase_database = os.getenv('FIREBASE_DATABASE')
+
+db = firestore.client(database_id=firebase_database)
 
 @login_required
 def group_list(request):
@@ -238,20 +246,22 @@ def group_delete(request, pk):
 # Institution Views
 @login_required
 def institution_list(request):
-    # Sync strength counts from Firebase before loading the list
+    if not (request.user.has_all_permissions() or 'view_institutes' in request.user.get_all_permissions()):
+        return redirect('base')
     try:
         print("DEBUG: Syncing strength counts before loading institution list")
         sync_strength_counts(request)
     except Exception as e:
         print(f"DEBUG: Error syncing strength counts: {str(e)}")
     
-    institutions = Institution.objects.all().order_by('-created_at')
-    
+    institutions = Institution.objects.all().order_by('-created_at') if request.user.has_all_permissions() else request.user.assigned_institutions.all().order_by('-created_at')
+    print("HEREEEE")
+    print(institutions)
     # Get all unique groups for the filter dropdown
     all_groups = Group.objects.filter(is_active=True, type="institution")
     
     # Get all unique states for the filter dropdown
-    all_states = Institution.objects.values_list('state', flat=True).distinct().exclude(state__isnull=True).exclude(state='')
+    all_states = Institution.objects.values_list('state', flat=True).distinct().exclude(state__isnull=True).exclude(state='') if request.user.has_all_permissions() else request.user.assigned_institutions.values_list('state', flat=True).distinct().exclude(state__isnull=True).exclude(state='')
     
     # Filtering
     search_query = request.GET.get('query', '').strip()
@@ -297,13 +307,13 @@ def institution_list(request):
 
 @login_required
 def institution_create(request):
+    if not (request.user.has_all_permissions() or 'create_institute' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     User = get_user_model()
     if request.method == 'POST':
         form = InstitutionForm(request.POST)
         if form.is_valid():
-            head_name = form.cleaned_data['unit_head_name'].strip()
-            head_email = form.cleaned_data['unit_head_email'].strip()
-            head_phone = form.cleaned_data['unit_head_phone'].strip()
+            
             institution_name = form.cleaned_data['name'].strip()
             user = None
 
@@ -311,42 +321,8 @@ def institution_create(request):
             
             if list(existing_institute):
                 return JsonResponse({'error': 'An institution with this name already exists'}, status=400)
-
-            if head_name == '' or head_email == '' or head_phone == '':
-                pass
-            else:
-                user, created = User.objects.get_or_create(
-                    email=head_email,
-                    defaults={
-                        'is_active': True,
-                    }
-                )
-                if created:
-                    user.full_name = head_name
-                    user.phone_number = head_phone
-                    default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-                    user.set_password(default_password)
-                    user.save()
-                    reset_link = request.build_absolute_uri(reverse('login'))
-                    subject = 'Your Unit Head Account Created'
-                    body = f"""Dear {head_name},\n\nYour unit head account has been created for the institution {institution_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                    send_email_thread = threading.Thread(target=send_email, args=(subject, body, [head_email]))
-                    send_email_thread.start()
-                else:
-                    # Update name/phone if changed
-                    updated = False
-                    if user.full_name != head_name:
-                        user.full_name = head_name
-                        updated = True
-                    if user.phone_number != head_phone:
-                        user.phone_number = head_phone
-                        updated = True
-                    if updated:
-                        user.save()
             
             institution = form.save(commit=False)
-            if user is not None:
-                institution.unit_head = user
             if request.POST.get('is_active') == 'on':
                 institution.is_active = True
             else:
@@ -360,17 +336,15 @@ def institution_create(request):
 
 @login_required
 def institution_edit(request, pk):
+    if not (request.user.has_all_permissions() or 'edit_institute' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     User = get_user_model()
     institution = get_object_or_404(Institution, pk=pk)
     institution_old_name = institution.name
     if request.method == 'POST':
         form = InstitutionForm(request.POST, instance=institution)
         if form.is_valid():
-            head_name = form.cleaned_data['unit_head_name']
-            head_email = form.cleaned_data['unit_head_email']
-            head_phone = form.cleaned_data['unit_head_phone']
             institution_name = form.cleaned_data['name']
-            current_head = institution.unit_head
             
             # Check if institution name is being changed and if it already exists in Firebase
             if institution_old_name != institution_name:
@@ -378,46 +352,6 @@ def institution_edit(request, pk):
                 if list(existing_institute):
                     return JsonResponse({'error': 'An institution with this name already exists'}, status=400)
             
-            if head_name != "" and head_email != "" and head_phone != "":
-                if not current_head or current_head.email != head_email:
-                    user, created = User.objects.get_or_create(
-                        email=head_email,
-                        defaults={
-                            'is_active': True,
-                        }
-                    )
-                    if created:
-                        user.full_name = head_name
-                        user.phone_number = head_phone
-                        default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-                        user.set_password(default_password)
-                        user.save()
-                        reset_link = request.build_absolute_uri(reverse('login'))
-                        subject = 'Your Unit Head Account Created'
-                        body = f"""Dear {head_name},\n\nYour unit head account has been created for the institution {institution_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                        send_email_thread = threading.Thread(target=send_email, args=(subject, body, [head_email]))
-                        send_email_thread.start()
-                    else:
-                        updated = False
-                        if user.full_name != head_name:
-                            user.full_name = head_name
-                            updated = True
-                        if user.phone_number != head_phone:
-                            user.phone_number = head_phone
-                            updated = True
-                        if updated:
-                            user.save()
-                    institution.unit_head = user
-                else:
-                    updated = False
-                    if current_head.full_name != head_name:
-                        current_head.full_name = head_name
-                        updated = True
-                    if current_head.phone_number != head_phone:
-                        current_head.phone_number = head_phone
-                        updated = True
-                    if updated:
-                        current_head.save()
             if request.POST.get('is_active') == 'on':
                 institution.is_active = True
             else:
@@ -427,15 +361,13 @@ def institution_edit(request, pk):
             messages.success(request, 'Institution updated successfully.')
             return HttpResponse('OK')
     else:
-        form = InstitutionForm(instance=institution, initial={
-            'unit_head_name': institution.unit_head.full_name if institution.unit_head else '',
-            'unit_head_email': institution.unit_head.email if institution.unit_head else '',
-            'unit_head_phone': institution.unit_head.phone_number if institution.unit_head else '',
-        })
+        form = InstitutionForm(instance=institution)
     return render(request, 'assessments/onboarding/institution_form.html', {'form': form, 'action': 'Edit'})
 
 @login_required
 def institution_delete(request, pk):
+    if not (request.user.has_all_permissions() or 'delete_institute' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     institution = get_object_or_404(Institution, pk=pk)
     if request.method == 'POST':
         institution.delete()
@@ -446,6 +378,8 @@ def institution_delete(request, pk):
 @login_required
 def institution_list_api(request):
     # Sync strength counts from Firebase before loading the data
+    if not (request.user.has_all_permissions() or 'view_institutes' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     try:
         print("DEBUG: Syncing strength counts before loading institution API data")
         sync_strength_counts(request)
@@ -458,7 +392,7 @@ def institution_list_api(request):
     
     print(f"DEBUG: Institution search query received: '{search_query}'")
     
-    institutions = Institution.objects.all().order_by('-created_at')
+    institutions = Institution.objects.all().order_by('-created_at') if request.user.has_all_permissions() else request.user.assigned_institutions.all().order_by('-created_at')
     
     # Apply search filter if search query exists
     if search_query:
@@ -516,9 +450,6 @@ def institution_list_api(request):
             'edit_url': reverse('institution_edit', args=[institution.pk]),
             'delete_url': reverse('institution_delete', args=[institution.pk]),
             'onboarding_type': institution.onboarding_type,
-            'unit_head': institution.unit_head.full_name if institution.unit_head else None,
-            'unit_head_email': institution.unit_head.email if institution.unit_head else None,
-            'unit_head_phone': institution.unit_head.phone_number if institution.unit_head else None,
         })
     
     print(f"DEBUG: Returning {len(data)} institutions")
@@ -534,19 +465,21 @@ def institution_list_api(request):
 @login_required
 def hospital_list(request):
     # Sync strength counts from Firebase before loading the list
+    if not (request.user.has_all_permissions() or 'view_hospitals' in request.user.get_all_permissions()):
+        return redirect('base')
     try:
         print("DEBUG: Syncing strength counts before loading hospital list")
         sync_strength_counts(request)
     except Exception as e:
         print(f"DEBUG: Error syncing strength counts: {str(e)}")
     
-    hospitals = Hospital.objects.all().order_by('-created_at')
-    
+    hospitals = Hospital.objects.all().order_by('-created_at') if request.user.has_all_permissions() else request.user.assigned_hospitals.all().order_by('-created_at')
+
     # Get all unique groups for the filter dropdown
     all_groups = Group.objects.filter(is_active=True, type="hospital").values('id', 'name')
     
     # Get all unique states for the filter dropdown
-    all_states = Hospital.objects.values_list('state', flat=True).distinct().exclude(state__isnull=True).exclude(state='')
+    all_states = Hospital.objects.values_list('state', flat=True).distinct().exclude(state__isnull=True).exclude(state='') if request.user.has_all_permissions() else request.user.assigned_hospitals.values_list('state', flat=True).distinct().exclude(state__isnull=True).exclude(state='')
     
     # Filtering
     search_query = request.GET.get('query', '').strip()
@@ -588,13 +521,12 @@ def hospital_list(request):
 
 @login_required
 def hospital_create(request):
+    if not (request.user.has_all_permissions() or 'create_hospital' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     User = get_user_model()
     if request.method == 'POST':
         form = HospitalForm(request.POST)
         if form.is_valid():
-            head_name = form.cleaned_data['unit_head_name']
-            head_email = form.cleaned_data['unit_head_email']
-            head_phone = form.cleaned_data['unit_head_phone']
             hospital_name = form.cleaned_data['name'].strip()
             user = None
             
@@ -604,39 +536,7 @@ def hospital_create(request):
             if list(existing_hospital):
                 return JsonResponse({'error': 'A hospital with this name already exists'}, status=400)
 
-            if head_name == '' or head_email == '' or head_phone == '':
-                pass
-            else:
-                user, created = User.objects.get_or_create(
-                    email=head_email,
-                    defaults={
-                        'is_active': True,
-                    }
-                )
-                if created:
-                    user.full_name = head_name
-                    user.phone_number = head_phone
-                    default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-                    user.set_password(default_password)
-                    user.save()
-                    reset_link = request.build_absolute_uri(reverse('login'))
-                    subject = 'Your Unit Head Account Created'
-                    body = f"""Dear {head_name},\n\nYour unit head account has been created for the hospital {hospital_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                    send_email(subject, body, [head_email])
-                else:
-                    # Update name/phone if changed
-                    updated = False
-                    if user.full_name != head_name:
-                        user.full_name = head_name
-                        updated = True
-                    if user.phone_number != head_phone:
-                        user.phone_number = head_phone
-                        updated = True
-                    if updated:
-                        user.save()
             hospital = form.save(commit=False)
-            if user is not None:
-                hospital.unit_head = user
             if request.POST.get('is_active') == 'on':
                 hospital.is_active = True
             else:
@@ -650,17 +550,16 @@ def hospital_create(request):
 
 @login_required
 def hospital_edit(request, pk):
+    if not (request.user.has_all_permissions() or 'edit_hospital' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     User = get_user_model()
     hospital = get_object_or_404(Hospital, pk=pk)
     hospital_old_name = hospital.name
     if request.method == 'POST':
         form = HospitalForm(request.POST, instance=hospital)
         if form.is_valid():
-            head_name = form.cleaned_data['unit_head_name']
-            head_email = form.cleaned_data['unit_head_email']
-            head_phone = form.cleaned_data['unit_head_phone']
+            
             hospital_name = form.cleaned_data['name']
-            current_head = hospital.unit_head
             
             # Check if hospital name is being changed and if it already exists in Firebase
             if hospital_old_name != hospital_name:
@@ -668,46 +567,7 @@ def hospital_edit(request, pk):
                 if list(existing_hospital):
                     return JsonResponse({'error': 'A hospital with this name already exists'}, status=400)
             
-            if head_name != "" and head_email != "" and head_phone != "":
-                if not current_head or current_head.email != head_email:
-                    user, created = User.objects.get_or_create(
-                        email=head_email,
-                        defaults={
-                            'is_active': True,
-                        }
-                    )
-                    if created:
-                        user.full_name = head_name
-                        user.phone_number = head_phone
-                        default_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-                        user.set_password(default_password)
-                        user.save()
-                        reset_link = request.build_absolute_uri(reverse('login'))
-                        subject = 'Your Unit Head Account Created'
-                        body = f"""Dear {head_name},\n\nYour unit head account has been created for the hospital {hospital_name}.\n\nUsername: {head_email}\nPassword: {default_password}\n\nPlease log in to the platform using the link below and change your password after first login. Click the link to login: {reset_link}\n\nRegards,\nTeam"""
-                        send_email_thread = threading.Thread(target=send_email, args=(subject, body, [head_email]))
-                        send_email_thread.start()
-                    else:
-                        updated = False
-                        if user.full_name != head_name:
-                            user.full_name = head_name
-                            updated = True
-                        if user.phone_number != head_phone:
-                            user.phone_number = head_phone
-                            updated = True
-                        if updated:
-                            user.save()
-                    hospital.unit_head = user
-                else:
-                    updated = False
-                    if current_head.full_name != head_name:
-                        current_head.full_name = head_name
-                        updated = True
-                    if current_head.phone_number != head_phone:
-                        current_head.phone_number = head_phone
-                        updated = True
-                    if updated:
-                        current_head.save()
+            
             if request.POST.get('is_active') == 'on':
                 hospital.is_active = True
             else:
@@ -717,15 +577,13 @@ def hospital_edit(request, pk):
             messages.success(request, 'Hospital updated successfully.')
             return HttpResponse('OK')
     else:
-        form = HospitalForm(instance=hospital, initial={
-            'unit_head_name': hospital.unit_head.full_name if hospital.unit_head else '',
-            'unit_head_email': hospital.unit_head.email if hospital.unit_head else '',
-            'unit_head_phone': hospital.unit_head.phone_number if hospital.unit_head else '',
-        })
+        form = HospitalForm(instance=hospital)
     return render(request, 'assessments/onboarding/hospital_form.html', {'form': form, 'action': 'Edit'})
 
 @login_required
 def hospital_delete(request, pk):
+    if not (request.user.has_all_permissions() or 'delete_hospital' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     hospital = get_object_or_404(Hospital, pk=pk)
     if request.method == 'POST':
         hospital.delete()
@@ -736,6 +594,8 @@ def hospital_delete(request, pk):
 @login_required
 def hospital_list_api(request):
     # Sync strength counts from Firebase before loading the data
+    if not (request.user.has_all_permissions() or 'view_hospitals' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     try:
         print("DEBUG: Syncing strength counts before loading hospital API data")
         sync_strength_counts(request)
@@ -748,7 +608,7 @@ def hospital_list_api(request):
     
     print(f"DEBUG: Hospital search query received: '{search_query}'")
     
-    hospitals = Hospital.objects.all().order_by('-created_at')
+    hospitals = Hospital.objects.all().order_by('-created_at') if request.user.has_all_permissions() else request.user.assigned_hospitals.all().order_by('-created_at')
     
     # Apply search filter if search query exists
     if search_query:
@@ -801,9 +661,6 @@ def hospital_list_api(request):
             'nurse_strength': hospital.nurse_strength,
             'is_active': hospital.is_active,
             'group': hospital.group.name if hospital.group else None,
-            'unit_head': hospital.unit_head.get_full_name() if hospital.unit_head else None,
-            'unit_head_email': hospital.unit_head.email if hospital.unit_head else None,
-             'unit_head_phone': hospital.unit_head.phone_number if hospital.unit_head else None,
             'edit_url': reverse('hospital_edit', args=[hospital.pk]),
             'delete_url': reverse('hospital_delete', args=[hospital.pk]),
         })
@@ -885,6 +742,8 @@ def group_list_api(request):
 # Learner Views
 @login_required
 def learner_list(request):
+    if not (request.user.has_all_permissions() or 'view_learners' in request.user.get_all_permissions()):
+        return redirect('base')
     return render(request, 'assessments/onboarding/learner_list.html', {
         'institutions': Institution.objects.all(),
         'hospitals': Hospital.objects.all(),
@@ -895,10 +754,19 @@ def learner_list(request):
 
 @login_required
 def learner_create(request):
+    if not (request.user.has_all_permissions() or 'add_learner' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     User = get_user_model()
     if request.method == 'POST':
         form = LearnerForm(request.POST)
         if form.is_valid():
+            # Enforce B2C requirements
+            onboarding_type = form.cleaned_data.get('onboarding_type', '')
+            if str(onboarding_type).lower() == 'b2c':
+                if not form.cleaned_data.get('skillathon_event') or not form.cleaned_data.get('college'):
+                    return JsonResponse({
+                        'error': 'For B2C onboarding, Skillathon Event and College are required.'
+                    }, status=400)
             learner_name = form.cleaned_data['learner_name']
             learner_email = form.cleaned_data['learner_email']
             learner_phone = form.cleaned_data['learner_phone']
@@ -950,11 +818,21 @@ def learner_create(request):
 
 @login_required
 def learner_edit(request, pk):
+    if not (request.user.has_all_permissions() or 'edit_learner' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     User = get_user_model()
     learner = get_object_or_404(Learner, pk=pk)
     if request.method == 'POST':
         form = LearnerForm(request.POST, instance=learner)
         if form.is_valid():
+            # Enforce B2C requirements on update
+            print(form.cleaned_data)
+            onboarding_type = form.cleaned_data.get('onboarding_type', '')
+            if str(onboarding_type).lower() == 'b2c':
+                if not form.cleaned_data.get('skillathon_event') or not form.cleaned_data.get('college'):
+                    return JsonResponse({
+                        'error': 'For B2C onboarding, Skillathon Event and College are required.'
+                    }, status=400)
             learner_name = form.cleaned_data['learner_name']
             learner_email = form.cleaned_data['learner_email']
             learner_phone = form.cleaned_data['learner_phone']
@@ -1016,6 +894,8 @@ def learner_edit(request, pk):
 
 @login_required
 def learner_bulk_upload(request):
+    if not (request.user.has_all_permissions() or 'bulk_upload_learners' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     if request.method == 'POST':
         file = request.FILES.get('file')
         if not file:
@@ -1132,7 +1012,6 @@ def process_bulk_upload_with_progress(file_path, session_key):
             'Designation': 'designation',
             'Years of Experience': 'years_of_experience',
             'Educational Qualification': 'educational_qualification',
-            'Educational Institution': 'educational_institution',
             'Speciality': 'speciality',
             'State': 'state',
             'District': 'district',
@@ -1142,6 +1021,7 @@ def process_bulk_upload_with_progress(file_path, session_key):
             'Certifications': 'certifications',
             'Learner Gender': 'learner_gender',
             'Skillathon Event': 'skillathon_event',
+            'Educational Institution': 'educational_institution',
         }
 
         # Read headers
@@ -1306,8 +1186,6 @@ def process_bulk_upload_with_progress(file_path, session_key):
                                 user.set_password(default_password)
                                 user.save()
                                 users_to_sync.append(user)
-                            print("FORMMMMM")
-                            print(form.cleaned_data)
                             learner = form.save(commit=False)
                             learner.learner_user = user
                             learner.save()
@@ -1320,9 +1198,8 @@ def process_bulk_upload_with_progress(file_path, session_key):
                         })
                         
                 except Exception as e:
-                    print("ERRROORRR")
-                    print(traceback.format_exc())
-                    print(f"[DEBUG] Processing error: {str(e)}")
+                    logger.error(f"Processing error: {str(e)}")
+                    logger.error(traceback.format_exc())
                     error_rows.append({
                         'row': row_idx,
                         'errors': {'__all__': [f'Processing error: {str(e)}']}
@@ -1330,7 +1207,7 @@ def process_bulk_upload_with_progress(file_path, session_key):
         
         # Reconnect signals
         reconnect_all_signals()
-        print(f"[DEBUG] Django processing completed. Success: {success_count}, Updates: {update_count}, Errors: {len(error_rows)}")
+        logger.info(f"[DEBUG] Django processing completed. Success: {success_count}, Updates: {update_count}, Errors: {len(error_rows)}")
         
         # Update progress for Firebase sync (30% to 90%)
         progress_data.update({
@@ -1342,14 +1219,14 @@ def process_bulk_upload_with_progress(file_path, session_key):
             'error_count': len(error_rows)
         })
         cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        print(f"[DEBUG] Progress updated to 30% for Firebase sync: {progress_data}")
+        logger.info(f"[DEBUG] Progress updated to 30% for Firebase sync: {progress_data}")
         
         # Batch sync all users to Firebase with progress tracking
         if users_to_sync:
-            print(f"[DEBUG] Starting Firebase sync for {len(users_to_sync)} users...")
+            logger.info(f"[DEBUG] Starting Firebase sync for {len(users_to_sync)} users...")
             batch_sync_users_to_firestore_with_progress(users_to_sync, session_key, total_rows, skillathon_name)
         else:
-            print(f"[DEBUG] No users to sync to Firebase")
+            logger.info(f"[DEBUG] No users to sync to Firebase")
         
         # Final progress update
         progress_data.update({
@@ -1362,8 +1239,8 @@ def process_bulk_upload_with_progress(file_path, session_key):
             'errors': error_rows if error_rows else None
         })
         cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        print(f"[DEBUG] Final progress set to 100%: {progress_data}")
-        print(f"[DEBUG] Bulk upload process completed for session: {session_key}")
+        logger.info(f"[DEBUG] Final progress set to 100%: {progress_data}")
+        logger.info(f"[DEBUG] Bulk upload process completed for session: {session_key}")
         
     except Exception as e:
         # Handle any unexpected errors
@@ -1373,9 +1250,9 @@ def process_bulk_upload_with_progress(file_path, session_key):
             'progress': 100
         })
         cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        print(f"Bulk upload error: {e}")
-        print(traceback.format_exc())
-        print(f"[DEBUG] Bulk upload process failed for session: {session_key}")
+        logger.error(f"Bulk upload error: {e}")
+        logger.error(traceback.format_exc())
+        logger.error(f"[DEBUG] Bulk upload process failed for session: {session_key}")
 
 @login_required
 def upload_progress_stream(request, session_key):
@@ -1424,10 +1301,22 @@ def learner_delete(request, pk):
 # Assessor Views
 @login_required
 def assessor_list(request):
+    if not (request.user.has_all_permissions() or 'view_assessors' in request.user.get_all_permissions()):
+        return redirect('base')
     search_query = request.GET.get('search', '').strip()
     selected_specialities = request.GET.getlist('speciality')
     selected_statuses = request.GET.getlist('status')
-    assessors = Assessor.objects.all().order_by('-created_at')
+
+    assigned_colleges = request.user.assigned_institutions.values_list('id', flat=True)
+    assigned_hospitals = request.user.assigned_hospitals.values_list('id', flat=True)
+    # Filtering logic (same as main view)
+    if request.user.has_all_permissions():
+        assessors = Assessor.objects.all().order_by('-created_at')
+    else:
+        assessors = Assessor.objects.filter(
+            Q(institution_id__in=assigned_colleges) | Q(hospital_id__in=assigned_hospitals)
+        ).order_by('-created_at')
+    
     
     if search_query:
         assessors = assessors.filter(
@@ -1460,6 +1349,8 @@ def assessor_list(request):
 
 @login_required
 def assessor_create(request):
+    if not (request.user.has_all_permissions() or 'add_assessor' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     User = get_user_model()
     if request.method == 'POST':
         form = AssessorForm(request.POST)
@@ -1549,6 +1440,8 @@ def assessor_create(request):
 
 @login_required
 def assessor_edit(request, pk):
+    if not (request.user.has_all_permissions() or 'edit_assessor' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     User = get_user_model()
     assessor = get_object_or_404(Assessor, pk=pk)
     if request.method == 'POST':
@@ -1658,6 +1551,8 @@ def assessor_edit(request, pk):
 
 @login_required
 def assessor_delete(request, pk):
+    if not (request.user.has_all_permissions() or 'delete_assessor' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     assessor = get_object_or_404(Assessor, pk=pk)
     if request.method == 'POST':
         assessor.delete()
@@ -1667,14 +1562,26 @@ def assessor_delete(request, pk):
 
 @login_required
 def assessor_list_api(request):
+
+    if not (request.user.has_all_permissions() or 'view_assessors' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     offset = int(request.GET.get('offset', 0))
     limit = int(request.GET.get('limit', 10))
     search_query = request.GET.get('search', '').strip()
     
     print(f"DEBUG: Assessor search query received: '{search_query}'")
     
-    assessors = Assessor.objects.all().order_by('-created_at')
-    
+    assigned_colleges = request.user.assigned_institutions.values_list('id', flat=True)
+    assigned_hospitals = request.user.assigned_hospitals.values_list('id', flat=True)
+    # Filtering logic (same as main view)
+    if request.user.has_all_permissions():
+        assessors = Assessor.objects.all().order_by('-created_at')
+    else:
+        assessors = Assessor.objects.filter(
+            Q(institution_id__in=assigned_colleges) | Q(hospital_id__in=assigned_hospitals)
+        ).order_by('-created_at')
+        
     # Apply search filter if search query exists
     if search_query:
         print(f"DEBUG: Applying assessor search filter for: '{search_query}'")
@@ -1762,13 +1669,22 @@ def get_institutions_hospitals(request):
 # Skillathon Event Views
 @login_required
 def skillathon_list(request):
+    if not (request.user.has_all_permissions() or 'view_skillathons' in request.user.get_all_permissions()):
+        return redirect('base')
+    
+    assigned_skillathons = request.user.assigned_skillathons.values_list('id', flat=True)
+    if request.user.has_all_permissions():
+        events = SkillathonEvent.objects.all().order_by('-date')
+    else:
+        events = SkillathonEvent.objects.filter(id__in=assigned_skillathons).order_by('-date')
+    
     events = SkillathonEvent.objects.all().order_by('-date')
     
     # Get all unique cities for the filter dropdown
-    all_cities = SkillathonEvent.objects.values_list('city', flat=True).distinct().exclude(city__isnull=True).exclude(city='')
+    all_cities = SkillathonEvent.objects.values_list('city', flat=True).distinct().exclude(city__isnull=True).exclude(city='') if request.user.has_all_permissions() else request.user.assigned_skillathons.values_list('city', flat=True).distinct().exclude(city__isnull=True).exclude(city='')
     
     # Get all unique states for the filter dropdown
-    all_states = SkillathonEvent.objects.values_list('state', flat=True).distinct().exclude(state__isnull=True).exclude(state='')
+    all_states = SkillathonEvent.objects.values_list('state', flat=True).distinct().exclude(state__isnull=True).exclude(state='') if request.user.has_all_permissions() else request.user.assigned_skillathons.values_list('state', flat=True).distinct().exclude(state__isnull=True).exclude(state='')
     
     # Filtering
     date_from = request.GET.get('date_from')
@@ -1799,6 +1715,8 @@ def skillathon_list(request):
 
 @login_required
 def skillathon_create(request):
+    if not (request.user.has_all_permissions() or 'add_skillathon' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     if request.method == 'POST':
         form = SkillathonEventForm(request.POST)
         if form.is_valid():
@@ -1811,6 +1729,8 @@ def skillathon_create(request):
 
 @login_required
 def skillathon_edit(request, pk):
+    if not (request.user.has_all_permissions() or 'edit_skillathon' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     event = get_object_or_404(SkillathonEvent, pk=pk)
     if request.method == 'POST':
         form = SkillathonEventForm(request.POST, instance=event)
@@ -1824,6 +1744,8 @@ def skillathon_edit(request, pk):
 
 @login_required
 def skillathon_delete(request, pk):
+    if not (request.user.has_all_permissions() or 'delete_skillathon' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     event = get_object_or_404(SkillathonEvent, pk=pk)
     if request.method == 'POST':
         event.delete()
@@ -1839,7 +1761,11 @@ def skillathon_list_api(request):
 
     print(f"DEBUG: Skillathon search query received: '{search_query}'")
     
-    events = SkillathonEvent.objects.all().order_by('-date')
+    assigned_skillathons = request.user.assigned_skillathons.values_list('id', flat=True)
+    if request.user.has_all_permissions():
+        events = SkillathonEvent.objects.all().order_by('-date')
+    else:
+        events = SkillathonEvent.objects.filter(id__in=assigned_skillathons).order_by('-date')
     
     # Apply search filter if search query exists
     if search_query:
@@ -1931,14 +1857,22 @@ def reconnect_all_signals():
 
 @login_required
 def learner_list_api(request):
+    if not (request.user.has_all_permissions() or 'view_learners' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     offset = int(request.GET.get('offset', 0))
     limit = int(request.GET.get('limit', 10))
     search_query = request.GET.get('search', '').strip()
     
     print(f"DEBUG: Learner search query received: '{search_query}'")
-    
+    assigned_colleges = request.user.assigned_institutions.values_list('id', flat=True)
+    assigned_hospitals = request.user.assigned_hospitals.values_list('id', flat=True)
     # Filtering logic (same as main view)
-    learners = Learner.objects.all().order_by('-created_at')
+    if request.user.has_all_permissions():
+        learners = Learner.objects.all().order_by('-created_at')
+    else:
+        learners = Learner.objects.filter(
+            Q(college_id__in=assigned_colleges) | Q(hospital_id__in=assigned_hospitals)
+        ).order_by('-created_at')
     
     # Apply search filter if search query exists
     if search_query:

@@ -1,18 +1,23 @@
 {% extends 'assessments/base.html' %}
 
 {% block content %}
+{% load custom_filters %}
+
+{% if request.user|check_icon_navigation_permissions:'batches' %}
 <!-- Header -->
 <div class="header">
     <div class="header-left">
         <h1>Batches</h1>
         <p class="text-muted">Manage your training batches</p>
     </div>
+    {% if "create_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
     <div class="header-right">
         <button class="btn btn-primary" onclick="toggleAddBatchPanel()">
             <i class="fas fa-plus"></i>
             Add Batch
         </button>
     </div>
+    {% endif %}
 </div>
 
 <div class="main-content">
@@ -193,14 +198,18 @@
                 </div>
                 <h3>No batches found</h3>
                 <p>Get started by creating your first batch</p>
+                {% if "create_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <button class="btn btn-primary" onclick="toggleAddBatchPanel()">
                     <i class="fas fa-plus"></i>
                     Create Batch
                 </button>
+                {% endif %}
             </div>
         </div>
     </div>
 </div>
+
+{% endif %}
 
 <style>
 /* Main Content Layout */
@@ -1060,17 +1069,21 @@ function displayBatches(batches) {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${batch.batchName}</td>
-            <td>${batch.unitType}</td>
+            <td>${batch.unitType.charAt(0).toUpperCase() + batch.unitType.slice(1)}</td>
             <td>${batch.unitName}</td>
             <td>${batch.learnerCount}</td>
             <td>
                 <div class="actions">
+                    {% if "edit_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
                     <button class="btn-icon" onclick="editBatch('${batch.id}')">
                         <i class="fas fa-edit"></i>
                     </button>
+                    {% endif %}
+                    {% if "delete_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
                     <button class="btn-icon btn-danger" onclick="deleteBatch('${batch.id}')">
                         <i class="fas fa-trash"></i>
                     </button>
+                    {% endif %}
                 </div>
             </td>
         `;

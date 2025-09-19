@@ -8,8 +8,15 @@ from django.contrib.auth.models import User
 from django.contrib.auth import get_user_model
 import traceback
 import json
-# Use the default app initialized in settings.py
-db = firestore.client()
+
+from django.conf import settings
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+firebase_database = os.getenv('FIREBASE_DATABASE')
+
+db = firestore.client(database_id=firebase_database)
 
 def enable_all_signals():
     """
@@ -113,7 +120,8 @@ def create_test_and_exam_assignments(learner, skillathon_event, test_ref=None, p
                 'status': 'Pending',
                 'notes': procedure_data.get('notes', ''),
                 'procedure_name': procedure_data.get('procedureName', ''),
-                'institute': learner.college.name if learner.learner_type == 'student' else learner.hospital.name,
+                'institute': learner.college.name if learner.college else None,
+                'hospital': learner.hospital.name if learner.hospital else None,
             }
             
             # Add exam assignment to Firestore and get its reference
@@ -131,11 +139,18 @@ def sync_user_to_firestore(user):
     user_data = {
         "emailID": user.email,
         "name": user.full_name,
-        "role": user.user_role,
+        "role": user.custom_roles.name if user.custom_roles else user.user_role,
         "is_active": user.is_active,
         "date_joined": user.date_joined.isoformat() if user.date_joined else None,
         "phone_number": user.phone_number,
-        "username":user.email
+        "username":user.email,
+        "permissions_list": [perm.code for perm in user.user_permissions_custom.all()],
+        "institutions_list": [inst.name for inst in user.assigned_institutions.all()] if user.custom_roles else None,
+        "hospitals_list": [hosp.name for hosp in user.assigned_hospitals.all()] if user.custom_roles else None,
+        "skillathons_list": [skill.name for skill in user.assigned_skillathons.all()] if user.custom_roles else None,
+        "allowed_to_take_osce": user.allowed_to_take_osce if user.custom_roles else user.allowed_to_take_osce,
+        "allowed_to_take_skillathon": user.allowed_to_take_skillathon if user.custom_roles else user.allowed_to_take_skillathon,
+        "learner_type": "not_applicable" if (user.custom_roles or user.is_superuser) else "",
     }
     db.collection("Users").document(str(user.id)).set(user_data)
 
@@ -203,7 +218,8 @@ def on_institute_save(sender, instance, created, **kwargs):
         "unit_head_name": instance.unit_head.full_name if instance.unit_head else None,
         "unit_head_email": instance.unit_head.email if instance.unit_head else None,
         "unit_head_phone": instance.unit_head.phone_number if instance.unit_head else None,
-        "updated_at": instance.updated_at.isoformat() if instance.updated_at else None
+        "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
+        "skillathon_event": instance.skillathon.name if instance.skillathon else None
     }
 
     db.collection("InstituteNames").document(str(instance.id)).set(data)
@@ -284,7 +300,8 @@ def on_hospital_save(sender, instance, created, **kwargs):
         "unit_head_name": instance.unit_head.full_name if instance.unit_head else None,
         "unit_head_email": instance.unit_head.email if instance.unit_head else None,
         "unit_head_phone": instance.unit_head.phone_number if instance.unit_head else None,
-        "updated_at": instance.updated_at.isoformat() if instance.updated_at else None
+        "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
+        "skillathon_event": instance.skillathon.name if instance.skillathon else None
     }
     db.collection("HospitalNames").document(str(instance.id)).set(data)
     
@@ -439,30 +456,31 @@ def on_learner_save(sender, instance, created, **kwargs):
         docs = query.get()
         
         if docs:
+            print(instance.date_of_birth)
             # Update the first matching document with all learner data
             user_data = {
-                "learner_type": instance.learner_type,
-                "speciality": instance.speciality,
-                "state": instance.state,
-                "district": instance.district,
+                "learner_type": instance.learner_type if instance.learner_type else None,
+                "speciality": instance.speciality if instance.speciality else None,
+                "state": instance.state if instance.state else None,
+                "district": instance.district if instance.district else None,
                 "date_of_birth": instance.date_of_birth.isoformat() if instance.date_of_birth else None,
-                "certifications": instance.certifications,
-                "learner_gender": instance.learner_gender,
-                "skillathon_event": instance.skillathon_event.name if instance.skillathon_event else None
+                "certifications": instance.certifications if instance.certifications else None,
+                "learner_gender": instance.learner_gender if instance.learner_gender else None,
+                "skillathon_event": instance.skillathon_event.name if instance.skillathon_event else None,
+                "institute": instance.college.name if instance.college else None,
+                "hospital": instance.hospital.name if instance.hospital else None,
+                "course": instance.course if instance.course else None,
+                "stream": instance.stream if instance.stream else None,
+                "year_of_study": instance.year_of_study if instance.year_of_study else None,
+                "designation": instance.designation if instance.designation else None,
+                "years_of_experience": instance.years_of_experience if instance.years_of_experience else None,
+                "educational_qualification": instance.educational_qualification if instance.educational_qualification else None,
+                "onboarding_type": instance.onboarding_type if instance.onboarding_type else None,
+                "pincode": instance.pincode if instance.pincode else None,
+                "address": instance.address if instance.address else None,
+                "is_active": instance.is_active if instance.is_active else None,
+                "educational_institution_nurse": instance.educational_institution if instance.educational_institution else None,
             }
-            
-            # Add institution/hospital specific data
-            if instance.learner_type == 'student' and instance.college:
-                user_data["institution"] = instance.college.name
-                user_data["course"] = instance.course
-                user_data["stream"] = instance.stream
-                user_data["year_of_study"] = instance.year_of_study
-            elif instance.learner_type == 'nurse' and instance.hospital:
-                user_data["hospital"] = instance.hospital.name
-                user_data["designation"] = instance.designation
-                user_data["years_of_experience"] = instance.years_of_experience
-                user_data["educational_qualification"] = instance.educational_qualification
-                user_data["educational_institution"] = instance.educational_institution
             
             docs[0].reference.update(user_data)
 
@@ -685,21 +703,16 @@ def batch_sync_users_to_firestore_with_progress(users, session_key, total_rows, 
                         "certifications": learner.certifications,
                         "learner_gender": learner.learner_gender,
                         "skillathon_event": learner.skillathon_event.name if learner.skillathon_event else None,
-                        "onboarding_type": learner.onboarding_type
+                        "onboarding_type": learner.onboarding_type,
+                        "institute": learner.college.name if learner.college else None,
+                        "hospital": learner.hospital.name if learner.hospital else None,
+                        "course": learner.course if learner.course else None,
+                        "stream": learner.stream if learner.stream else None,
+                        "year_of_study": learner.year_of_study if learner.year_of_study else None,
+                        "designation": learner.designation if learner.designation else None,
+                        "years_of_experience": learner.years_of_experience if learner.years_of_experience else None,
+                        "educational_qualification": learner.educational_qualification if learner.educational_qualification else None,
                     }
-                    
-                    # Add institution/hospital specific data
-                    if learner.learner_type == 'student' and learner.college:
-                        user_data["institution"] = learner.college.name
-                        user_data["course"] = learner.course
-                        user_data["stream"] = learner.stream
-                        user_data["year_of_study"] = learner.year_of_study
-                    elif learner.learner_type == 'nurse' and learner.hospital:
-                        user_data["hospital"] = learner.hospital.name
-                        user_data["designation"] = learner.designation
-                        user_data["years_of_experience"] = learner.years_of_experience
-                        user_data["educational_qualification"] = learner.educational_qualification
-                        user_data["educational_institution"] = learner.educational_institution
                     
                     docs[0].reference.update(user_data)
                     
