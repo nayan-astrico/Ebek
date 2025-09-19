@@ -24,3 +24,4 @@ assessments/migrations/0018_hospital_skillathon_institution_skillathon.py
 assessments/add_learner_test_cases.txt
 find_unused_procedures.py
 get_remaining_procedure_assignments.py
+assessments/migrations/00*

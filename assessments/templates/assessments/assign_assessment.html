@@ -11,10 +11,12 @@
         <p class="text-muted">Manage your assessments</p>
     </div>
     <div class="header-right">
+        {% if "assign_assignment" in request.user.get_all_permissions or request.user.has_all_permissions %}
         <button class="btn btn-primary" onclick="toggleAssignPanel()">
             <i class="fas fa-plus"></i>
             Assign Assessment
         </button>
+        {% endif %}
     </div>
 </div>
 
@@ -39,6 +41,7 @@
                 <th>Skillathon</th>
                 <th>Procedures</th>
                 <th>Status</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -61,6 +64,20 @@
                     <span class="badge {% if test.status == 'Not Completed' %}inactive{% else %}active{% endif %}">
                         {{ test.status }}
                     </span>
+                </td>
+                <td>
+                    <div class="actions">
+                        {% if "edit_assignment" in request.user.get_all_permissions or request.user.has_all_permissions %}
+                        <button class="btn-icon" onclick="openEditTestPanel('{{ test.id }}')" title="Edit">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        {% endif %}
+                        {% if "delete_assignment" in request.user.get_all_permissions or request.user.has_all_permissions %}
+                        <button class="btn-icon btn-danger" onclick="deleteTest(this, '{{ test.id }}')" title="Delete">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        {% endif %}
+                    </div>
                 </td>
             </tr>
             {% empty %}
@@ -99,9 +116,11 @@
 <div class="assign-panel" id="assignPanel">
     <div class="assign-header">
         <h3>Assign Assessment</h3>
+        {% if "assign_assignment" in request.user.get_all_permissions or request.user.has_all_permissions %}
         <button type="button" class="btn-close" onclick="toggleAssignPanel()">
             <i class="fas fa-times"></i>
         </button>
+        {% endif %}
     </div>
     <form id="assignForm" onsubmit="return false;" style="overflow: scroll;">
         {% csrf_token %}
@@ -182,6 +201,64 @@
     </form>
 </div>
 <div class="overlay" id="assignOverlay" onclick="toggleAssignPanel()"></div>
+
+<!-- Edit Assessment Side Panel -->
+<div class="assign-panel" id="editPanel">
+    <div class="assign-header">
+        <h3>Edit Assessment</h3>
+        <button type="button" class="btn-close" onclick="toggleEditPanel()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    <form id="editForm" onsubmit="return false;" style="overflow: scroll;">
+        {% csrf_token %}
+        <div class="assign-content">
+            <div class="form-group">
+                <label class="form-label">Assessment Name</label>
+                <input type="text" id="editAssessmentName" class="form-control">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Skillathon</label>
+                <input type="text" id="editSkillathon" class="form-control">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Procedures</label>
+                <div id="editProcedures" class="chip-container"></div>
+                <div class="dropdown-container">
+                    <button class="dropdown-btn" id="editProcedureDropdownBtn">Select Procedure</button>
+                    <ul class="dropdown-list" id="editProcedureDropdownList"></ul>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Assessors</label>
+                <div id="editAssessors" class="chip-container"></div>
+                <div class="dropdown-container">
+                    <button class="dropdown-btn" id="editAssessorDropdownBtn">Select Assessor</button>
+                    <ul class="dropdown-list" id="editAssessorDropdownList"></ul>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Status</label>
+                <select id="editStatus" class="form-control">
+                    <option value="Not Completed">Not Completed</option>
+                    <option value="Completed">Completed</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Date</label>
+                <input type="date" id="editDate" class="form-control" style="border-radius: 5px; height: 45px;">
+            </div>
+        </div>
+        <div class="assign-actions">
+            <button type="button" class="btn btn-light" onclick="toggleEditPanel()">Cancel</button>
+            <button type="submit" class="btn btn-primary edit-save-btn">
+                Save
+                <span class="spinner-border spinner-border-sm" style="display: none;" role="status" aria-hidden="true"></span>
+            </button>
+        </div>
+    </form>
+</div>
+<div class="overlay" id="editOverlay" onclick="toggleEditPanel()"></div>
 
 <style>
     .btn {
@@ -302,7 +379,7 @@
         overflow-y: auto;
         margin-top: 5px;
         display: none;
-        z-index: 1000;
+        z-index: 2000; /* ensure visible over side panel */
     }
 
     .dropdown-list.show {
@@ -346,6 +423,7 @@
         border: 1px solid #ced4da;
         border-radius: 5px;
     }
+    #editStatus.form-control { width: 100%; }
 
 
     .card {
@@ -600,8 +678,38 @@
     }
 
     $(document).ready(function () {
-        // Handle dropdown toggle and auto-closing logic
-        $('.dropdown-btn').click(function (e) {
+        // Load procedures/assessors for edit dropdowns when buttons clicked
+        $('#editProcedureDropdownBtn').off('click').on('click', function(e){
+            e.preventDefault(); e.stopPropagation();
+            $.get('/fetch-procedures/', function(res){
+                populateDropdown('editProcedureDropdownList', res.procedures, 'name');
+                $('#editProcedureDropdownList').show();
+            });
+        });
+        $('#editAssessorDropdownBtn').off('click').on('click', function(e){
+            e.preventDefault(); e.stopPropagation();
+            $.get('/fetch-assessors/', function(res){
+                populateDropdown('editAssessorDropdownList', res.assessors, 'name');
+                $('#editAssessorDropdownList').show();
+            });
+        });
+
+        // Add to chips in edit panel (match assign: close after select)
+        $('#editProcedureDropdownList, #editAssessorDropdownList').off('click').on('click', 'li', function (e) {
+            e.preventDefault();
+            const value = $(this).data('value');
+            const id = $(this).data('id');
+            const parentId = $(this).parent().attr('id');
+            const containerId = parentId === 'editProcedureDropdownList' ? 'editProcedures' : 'editAssessors';
+            if ($(`#${containerId} .chip[data-id="${id}"]`).length === 0) {
+                $(`#${containerId}`).append(`<span class=\"chip\" data-id=\"${id}\">${value}<span class=\"remove\">&times;</span></span>`);
+            }
+            $(this).closest('.dropdown-list').hide();
+        });
+        // Remove chips in edit panel
+        $('#editProcedures, #editAssessors').on('click', '.chip .remove', function(){ $(this).parent().remove(); });
+        // Handle dropdown toggle and auto-closing logic (match assign)
+        $('.dropdown-btn').off('click').on('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
             const dropdownList = $(this).next('.dropdown-list');
@@ -626,9 +734,7 @@
         });
 
         // Close dropdown when clicking outside
-        $(document).click(function() {
-            $('.dropdown-list').hide();
-        });
+        $(document).off('click').on('click', function() { $('.dropdown-list').hide(); });
 
         // Fetch institutes dynamically
         $.ajax({
@@ -740,6 +846,10 @@
         function populateDropdown(dropdownId, items, property) {
             const dropdown = $(`#${dropdownId}`);
             dropdown.empty();
+            if (!items || !items.length) {
+                dropdown.append('<li style="color:#888; cursor:default;">No options</li>');
+                return;
+            }
             items.forEach(item => {
                 dropdown.append(`<li data-value="${item[property]}" data-id="${item['id']}">${item[property]}</li>`);
             });
@@ -830,6 +940,86 @@
         overlay.classList.toggle('active');
         document.body.style.overflow = panel.classList.contains('active') ? 'hidden' : '';
     }
+    function deleteTest(btn, testId){
+        const $btn = $(btn);
+        const originalHtml = $btn.html();
+        $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+        $.ajax({
+            url: `/api/tests/${testId}/delete/`,
+            method: 'POST',
+            headers: { 'X-CSRFToken': $('[name="csrfmiddlewaretoken"]').val() },
+        }).done(function(){
+            window.location.reload();
+        }).fail(function(xhr){
+            alert(xhr.responseJSON?.error || 'Failed to delete');
+        }).always(function(){
+            $btn.prop('disabled', false).html(originalHtml);
+        });
+    }
+
+    let __editingTestId = null;
+    function openEditTestPanel(testId){
+        __editingTestId = testId;
+        fetch(`/api/tests/${testId}/`)
+          .then(r => r.json())
+          .then(res => {
+            if(!res.success){ throw new Error(res.error || 'Failed'); }
+            const t = res.test;
+            $('#editAssessmentName').val(t.assessment_name || '');
+            $('#editSkillathon').val(t.skillathon || '');
+            const procContainer = $('#editProcedures'); procContainer.empty();
+            (t.procedures||[]).forEach(p => procContainer.append(`<span class=\"chip\" data-id=\"${p.id}\">${p.name}<span class=\"remove\">&times;</span></span>`));
+            const assContainer = $('#editAssessors'); assContainer.empty();
+            (t.assessors||[]).forEach(a => assContainer.append(`<span class=\"chip\" data-id=\"${a.id}\">${a.name}<span class=\"remove\">&times;</span></span>`));
+            $('#editStatus').val(t.status || 'Not Completed');
+            $('#editDate').val(t.testdate || '');
+            toggleEditPanel(true);
+          })
+          .catch(() => { alert('Failed to load test'); });
+    }
+
+    function toggleEditPanel(forceOpen){
+        const panel = document.getElementById('editPanel');
+        const overlay = document.getElementById('editOverlay');
+        if (forceOpen === true){
+            panel.classList.add('active');
+            overlay.classList.add('active');
+        } else {
+            panel.classList.toggle('active');
+            overlay.classList.toggle('active');
+        }
+        document.body.style.overflow = panel.classList.contains('active') ? 'hidden' : '';
+    }
+
+    $('#editForm').on('submit', function(e){
+        e.preventDefault();
+        if(!__editingTestId) return;
+        const button = $('.edit-save-btn');
+        const spinner = button.find('.spinner-border');
+        button.prop('disabled', true);
+        spinner.show();
+        // Collect ids from chips
+        const procIds = $('#editProcedures .chip').map(function(){ return $(this).data('id'); }).get();
+        const assessorIds = $('#editAssessors .chip').map(function(){ return $(this).data('id'); }).get();
+        const payload = {
+            testdate: $('#editDate').val() || undefined,
+            status: $('#editStatus').val(),
+            procedure_ids: procIds,
+            assessor_ids: assessorIds
+        };
+        fetch(`/api/tests/${__editingTestId}/update/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': $('[name="csrfmiddlewaretoken"]').val()
+            },
+            body: JSON.stringify(payload)
+        }).then(r => r.json()).then(res => {
+            if(res.success){ window.location.reload(); }
+            else { alert(res.error || 'Update failed'); }
+        }).catch(() => alert('Update failed'))
+        .finally(() => { spinner.hide(); button.prop('disabled', false); });
+    });
 </script>
 
 {% endblock %}

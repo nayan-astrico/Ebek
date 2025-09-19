@@ -15,11 +15,16 @@
 
     <!-- Navigation Tabs -->
     <div class="reports-tabs">
+        {% if "view_overall_report" in request.user.get_all_permissions  or request.user.has_all_permissions %}
         <button class="tab-button active" onclick="switchTab('overall')">Overall Report</button>
+        {% endif %}
+        {% if "view_candidate_report" in request.user.get_all_permissions or request.user.has_all_permissions %}
         <button class="tab-button" onclick="switchTab('student')">Candidate Report</button>
+        {% endif %}
     </div>
 
     <!-- Overall Report Tab -->
+    {% if "view_overall_report" in request.user.get_all_permissions or request.user.has_all_permissions %}
     <div id="overall-tab" class="tab-content active">
         <!-- Filters Section -->
         <div class="filters-section">
@@ -161,8 +166,10 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
     <!-- Student Report Tab -->
+    {% if "view_candidate_report" in request.user.get_all_permissions or request.user.has_all_permissions %}
     <div id="student-tab" class="tab-content">
             <!-- Filters Section -->
             <div class="filters-section">
@@ -228,6 +235,7 @@
                                 <i class="fas fa-search search-icon"></i>
                             </div>
                             <div class="download-buttons">
+                                {% if "download_candidate_report" in request.user.get_all_permissions or request.user.has_all_permissions %}
                                 <button class="download-btn pdf-btn" onclick="downloadStudentReport('pdf')" title="Download as PDF">
                                     <i class="fas fa-file-pdf"></i>
                                     PDF
@@ -236,6 +244,7 @@
                                     <i class="fas fa-file-excel"></i>
                                     Excel
                                 </button>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -263,7 +272,9 @@
                 <p>Please select a Skillathon to view metrics</p>
             </div>
     </div>
+    {% endif %}
 </div>
+
 
 <div id="procedurePanel" class="procedure-panel">
     <div class="panel-overlay"></div>

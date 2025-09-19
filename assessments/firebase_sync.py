@@ -139,11 +139,18 @@ def sync_user_to_firestore(user):
     user_data = {
         "emailID": user.email,
         "name": user.full_name,
-        "role": user.user_role,
+        "role": user.custom_roles.name if user.custom_roles else user.user_role,
         "is_active": user.is_active,
         "date_joined": user.date_joined.isoformat() if user.date_joined else None,
         "phone_number": user.phone_number,
-        "username":user.email
+        "username":user.email,
+        "permissions_list": [perm.code for perm in user.user_permissions_custom.all()],
+        "institutions_list": [inst.name for inst in user.assigned_institutions.all()] if user.custom_roles else None,
+        "hospitals_list": [hosp.name for hosp in user.assigned_hospitals.all()] if user.custom_roles else None,
+        "skillathons_list": [skill.name for skill in user.assigned_skillathons.all()] if user.custom_roles else None,
+        "allowed_to_take_osce": user.allowed_to_take_osce if user.custom_roles else user.allowed_to_take_osce,
+        "allowed_to_take_skillathon": user.allowed_to_take_skillathon if user.custom_roles else user.allowed_to_take_skillathon,
+        "learner_type": "not_applicable" if (user.custom_roles or user.is_superuser) else "",
     }
     db.collection("Users").document(str(user.id)).set(user_data)
 
@@ -468,6 +475,11 @@ def on_learner_save(sender, instance, created, **kwargs):
                 "designation": instance.designation if instance.designation else None,
                 "years_of_experience": instance.years_of_experience if instance.years_of_experience else None,
                 "educational_qualification": instance.educational_qualification if instance.educational_qualification else None,
+                "onboarding_type": instance.onboarding_type if instance.onboarding_type else None,
+                "pincode": instance.pincode if instance.pincode else None,
+                "address": instance.address if instance.address else None,
+                "is_active": instance.is_active if instance.is_active else None,
+                "educational_institution_nurse": instance.educational_institution if instance.educational_institution else None,
             }
             
             docs[0].reference.update(user_data)

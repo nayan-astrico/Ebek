@@ -60,7 +60,7 @@
                                 {% endif %}
                             </div>
 
-                            <div class="form-group">
+                            <!-- <div class="form-group">
                                 <label for="{{ form.group.id_for_label }}" class="form-label">Group</label>
                                 {{ form.group }}
                                 {% if form.group.errors %}
@@ -70,7 +70,7 @@
                                     {% endfor %}
                                 </div>
                                 {% endif %}
-                            </div>
+                            </div> -->
 
                             <div class="form-group">
                                 <label for="{{ form.address.id_for_label }}" class="form-label">Address</label>
@@ -126,42 +126,6 @@
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-
-                            <div class="form-group">
-                                <label for="{{ form.unit_head_name.id_for_label }}" class="form-label">Unit Head Name</label>
-                                {{ form.unit_head_name }}
-                                {% if form.unit_head_name.errors %}
-                                <div class="invalid-feedback d-block">
-                                    {% for error in form.unit_head_name.errors %}
-                                    {{ error }}
-                                    {% endfor %}
-                                </div>
-                                {% endif %}
-                            </div>
-
-                            <div class="form-group">
-                                <label for="{{ form.unit_head_email.id_for_label }}" class="form-label">Unit Head Email</label>
-                                {{ form.unit_head_email }}
-                                {% if form.unit_head_email.errors %}
-                                <div class="invalid-feedback d-block">
-                                    {% for error in form.unit_head_email.errors %}
-                                    {{ error }}
-                                    {% endfor %}
-                                </div>
-                                {% endif %}
-                            </div>
-
-                            <div class="form-group">
-                                <label for="{{ form.unit_head_phone.id_for_label }}" class="form-label">Unit Head Phone</label>
-                                {{ form.unit_head_phone }}
-                                {% if form.unit_head_phone.errors %}
-                                <div class="invalid-feedback d-block">
-                                    {% for error in form.unit_head_phone.errors %}
-                                    {{ error }}
-                                    {% endfor %}
-                                </div>
-                                {% endif %}
                             </div>
 
                             <div class="form-group">

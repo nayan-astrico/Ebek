@@ -11,10 +11,12 @@
         <p class="text-muted">Manage your training and assessment events</p>
     </div>
     <div class="header-right">
+        {% if "add_skillathon" in request.user.get_all_permissions or request.user.has_all_permissions %}
         <a href="javascript:void(0);" class="btn btn-primary"
            onclick="openSkillathonFormPanel('{% url 'skillathon_create' %}', 'Add Skillathon')">
             <i class="fas fa-plus"></i> Add Skillathon
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -892,10 +894,13 @@ function renderSkillathonRow(event) {
         <td>${event.city}, ${event.state}</td>
         <td>
             <div class="actions">
+                {% if "edit_skillathon" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <a href="javascript:void(0);" class="btn-icon"
                    onclick="openSkillathonFormPanel('${event.edit_url}', 'Edit Skillathon')">
                     <i class="fas fa-edit"></i>
                 </a>
+                {% endif %}
+                {% if "delete_skillathon" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <button type="button" 
                         class="btn-icon btn-danger" 
                         data-name="${event.name}"
@@ -904,6 +909,7 @@ function renderSkillathonRow(event) {
                         title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
+                {% endif %}
             </div>
         </td>
     </tr>

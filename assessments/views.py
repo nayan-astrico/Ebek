@@ -655,7 +655,172 @@ def assign_assessment(request):
         "query": request.GET.get("query", ""),
     })
 
+@csrf_exempt
+def get_test(request, test_id):
+    """Return consolidated details for a Test including procedures and assessors."""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Only GET method allowed'}, status=405)
+    try:
+        test_ref = db.collection('Test').document(test_id)
+        test_doc = test_ref.get()
+        if not test_doc.exists:
+            return JsonResponse({'error': 'Test not found'}, status=404)
+        test_data = test_doc.to_dict()
+
+        # Procedures
+        procedures = []
+        assessors_map = {}
+        for proc_ref in test_data.get('procedureAssignments', []) or []:
+            try:
+                proc_doc = proc_ref.get()
+                if not proc_doc.exists:
+                    continue
+                proc_data = proc_doc.to_dict()
+                procedure_ref = proc_data.get('procedure')
+                if procedure_ref:
+                    pdoc = procedure_ref.get()
+                    if pdoc.exists:
+                        procedures.append({'id': procedure_ref.id, 'name': pdoc.to_dict().get('procedureName', 'Unknown')})
+                # Supervisors can be single 'supervisor' or list 'supervisors'
+                if 'supervisors' in proc_data and isinstance(proc_data['supervisors'], list):
+                    sup_list = proc_data['supervisors']
+                else:
+                    sup = proc_data.get('supervisor')
+                    sup_list = [sup] if sup else []
+                for sref in sup_list:
+                    try:
+                        sdoc = sref.get()
+                        if sdoc.exists:
+                            sdata = sdoc.to_dict()
+                            assessors_map[sref.id] = {'id': sref.id, 'name': sdata.get('name', sdata.get('username', 'Assessor'))}
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+
+        response = {
+            'id': test_id,
+            'assessment_name': test_data.get('batchname') or test_data.get('skillathon') or '',
+            'status': test_data.get('status', 'Not Completed'),
+            'testdate': (test_data.get('testdate').strftime('%Y-%m-%d') if test_data.get('testdate') else None),
+            'procedures': procedures,
+            'assessors': list(assessors_map.values()),
+            'skillathon': test_data.get('skillathon')
+        }
+        return JsonResponse({'success': True, 'test': response})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+def delete_test(request, test_id):
+    """Delete a Test and its nested ProcedureAssignment and ExamAssignment documents."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+    try:
+        test_ref = db.collection('Test').document(test_id)
+        test_doc = test_ref.get()
+        if not test_doc.exists:
+            return JsonResponse({'error': 'Test not found'}, status=404)
+
+        test_data = test_doc.to_dict()
+        proc_refs = test_data.get('procedureAssignments', []) or []
+        # Delete children first
+        for proc_ref in proc_refs:
+            try:
+                proc_doc = proc_ref.get()
+                if proc_doc.exists:
+                    proc_data = proc_doc.to_dict()
+                    exam_refs = proc_data.get('examAssignmentArray', []) or []
+                    for exam_ref in exam_refs:
+                        try:
+                            exam_ref.delete()
+                        except Exception:
+                            pass
+                proc_ref.delete()
+            except Exception:
+                pass
+
+        # Finally delete test
+        test_ref.delete()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+def update_test(request, test_id):
+    """Update Test fields: testdate and status."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+    try:
+        body = json.loads(request.body or '{}')
+        testdate_str = body.get('testdate')
+        status_val = body.get('status')
+        procedure_ids = body.get('procedure_ids') or []
+        assessor_ids = body.get('assessor_ids') or []
+
+        test_ref = db.collection('Test').document(test_id)
+        test_doc = test_ref.get()
+        if not test_doc.exists:
+            return JsonResponse({'error': 'Test not found'}, status=404)
+
+        update_payload = {}
+        if testdate_str:
+            try:
+                # Accept YYYY-MM-DD
+                new_date = datetime.datetime.strptime(testdate_str, '%Y-%m-%d')
+                update_payload['testdate'] = new_date
+            except Exception:
+                return JsonResponse({'error': 'Invalid date format, expected YYYY-MM-DD'}, status=400)
+        if status_val:
+            update_payload['status'] = status_val
+
+        if update_payload:
+            test_ref.update(update_payload)
+
+        # If procedures/assessors provided, rebuild procedureAssignments
+        if procedure_ids or assessor_ids:
+            test_data = test_doc.to_dict()
+            # Delete existing children
+            for proc_ref in test_data.get('procedureAssignments', []) or []:
+                try:
+                    proc_doc = proc_ref.get()
+                    if proc_doc.exists:
+                        proc_data = proc_doc.to_dict()
+                        for exam_ref in proc_data.get('examAssignmentArray', []) or []:
+                            try:
+                                exam_ref.delete()
+                            except Exception:
+                                pass
+                    proc_ref.delete()
+                except Exception:
+                    pass
+
+            new_proc_refs = []
+            for procedure_id in procedure_ids:
+                procedure_ref = db.collection('ProcedureTable').document(procedure_id)
+                proc_assignment_data = {
+                    'creationDate': datetime.datetime.now(),
+                    'procedure': procedure_ref,
+                    'status': 'Pending',
+                    'typeOfTest': 'Classroom',
+                    'supervisors': [db.collection('Users').document(aid) for aid in assessor_ids],
+                    'examAssignmentArray': [],
+                    'cohortStudentExamStarted': 0,
+                    'test': test_ref,
+                }
+                proc_assignment_ref = db.collection('ProcedureAssignment').add(proc_assignment_data)[1]
+                new_proc_refs.append(proc_assignment_ref)
+
+            if new_proc_refs:
+                test_ref.update({'procedureAssignments': new_proc_refs})
+
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 def render_exam_reports_page(request):
+    if not request.user.check_icon_navigation_permissions('reports'):
+        return HttpResponse('You are not authorized to access this page')
     return render(request, 'assessments/exam_reports.html')
 
 
@@ -1583,632 +1748,631 @@ def edit_institute(request, institute_id):
     
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
-def parse_users_excel_to_json(dataframe):
-    """Parse the uploaded Excel file to JSON for user creation."""
-    users_data = []
-    validation_errors = []
+# def parse_users_excel_to_json(dataframe):
+#     """Parse the uploaded Excel file to JSON for user creation."""
+#     users_data = []
+#     validation_errors = []
     
-    for index, row in dataframe.iterrows():
-        excel_row = index + 1
+#     for index, row in dataframe.iterrows():
+#         excel_row = index + 1
         
-        # Validate required fields
-        if pd.isna(row["Username"]) and pd.isna(row["Institute"]):
-            validation_errors.append(f"Row {excel_row}: Both Username and Institute are missing")
-            continue
-        elif pd.isna(row["Username"]):
-            validation_errors.append(f"Row {excel_row}: Username is missing")
-            continue
-        elif pd.isna(row["Institute"]):
-            validation_errors.append(f"Row {excel_row}: Institute is missing")
-            continue
+#         # Validate required fields
+#         if pd.isna(row["Username"]) and pd.isna(row["Institute"]):
+#             validation_errors.append(f"Row {excel_row}: Both Username and Institute are missing")
+#             continue
+#         elif pd.isna(row["Username"]):
+#             validation_errors.append(f"Row {excel_row}: Username is missing")
+#             continue
+#         elif pd.isna(row["Institute"]):
+#             validation_errors.append(f"Row {excel_row}: Institute is missing")
+#             continue
             
-        # Validate role
-        role = str(row["Role"]).strip().lower() if not pd.isna(row["Role"]) else "student"
-        if role not in ["student", "supervisor"]:
-            role = "student"  # Default to student if invalid role
+#         # Validate role
+#         role = str(row["Role"]).strip().lower() if not pd.isna(row["Role"]) else "student"
+#         if role not in ["student", "supervisor"]:
+#             role = "student"  # Default to student if invalid role
             
-        user_data = {
-            "username": str(row["Username"]).strip(),
-            "emailID": str(row["EmailID"]).strip() if not pd.isna(row["EmailID"]) else "",
-            "role": role,
-            "institute_name": str(row["Institute"]).strip()
-        }
-        users_data.append(user_data)
+#         user_data = {
+#             "username": str(row["Username"]).strip(),
+#             "emailID": str(row["EmailID"]).strip() if not pd.isna(row["EmailID"]) else "",
+#             "role": role,
+#             "institute_name": str(row["Institute"]).strip()
+#         }
+#         users_data.append(user_data)
     
-    return users_data, validation_errors
+#     return users_data, validation_errors
 
-def upload_users_excel_view(request):
-    if request.method == 'POST':
-        form = ExcelUploadForm(request.POST, request.FILES)
-        if form.is_valid():
-            uploaded_file = form.cleaned_data['file']
+# def upload_users_excel_view(request):
+#     if request.method == 'POST':
+#         form = ExcelUploadForm(request.POST, request.FILES)
+#         if form.is_valid():
+#             uploaded_file = form.cleaned_data['file']
             
-            file_name = f"{uuid.uuid4()}_{uploaded_file.name}".replace(" ", "_")
-            file_path = os.path.join(settings.MEDIA_ROOT, 'uploaded_excels', file_name)
-            print(file_path)
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            print(file_path)
+#             file_name = f"{uuid.uuid4()}_{uploaded_file.name}".replace(" ", "_")
+#             file_path = os.path.join(settings.MEDIA_ROOT, 'uploaded_excels', file_name)
+#             print(file_path)
+#             os.makedirs(os.path.dirname(file_path), exist_ok=True)
+#             print(file_path)
             
-            with open(file_path, 'wb+') as destination:
-                for chunk in uploaded_file.chunks():
-                    destination.write(chunk)
-            print(file_path)
+#             with open(file_path, 'wb+') as destination:
+#                 for chunk in uploaded_file.chunks():
+#                     destination.write(chunk)
+#             print(file_path)
 
-            try:
-                df = pd.read_excel(file_path, header=None)  # Read without header to validate
+#             try:
+#                 df = pd.read_excel(file_path, header=None)  # Read without header to validate
 
-                # Validate specific cells in row 1
-                if not (
-                    df.iloc[0, 0] == "Username" and
-                    df.iloc[0, 1] == "EmailID" and
-                    df.iloc[0, 2] == "Institute" and
-                    df.iloc[0, 3] == "Role"  # Add Role column check
-                ):
-                    raise ValueError("Excel template is incorrect. Ensure first row contains 'Username', 'EmailID', 'Institute', 'Role'")
+#                 # Validate specific cells in row 1
+#                 if not (
+#                     df.iloc[0, 0] == "Username" and
+#                     df.iloc[0, 1] == "EmailID" and
+#                     df.iloc[0, 2] == "Institute" and
+#                     df.iloc[0, 3] == "Role"  # Add Role column check
+#                 ):
+#                     raise ValueError("Excel template is incorrect. Ensure first row contains 'Username', 'EmailID', 'Institute', 'Role'")
 
-                # Process data from row 2 onward
-                df_data = pd.read_excel(file_path, names=["Username", "EmailID", "Institute", "Role"])
-                print(df_data)
-                users_data, validation_errors = parse_users_excel_to_json(df_data)
+#                 # Process data from row 2 onward
+#                 df_data = pd.read_excel(file_path, names=["Username", "EmailID", "Institute", "Role"])
+#                 print(df_data)
+#                 users_data, validation_errors = parse_users_excel_to_json(df_data)
                 
 
-                if validation_errors:
-                    return JsonResponse({
-                        "error": "Validation errors in Excel file",
-                        "validation_errors": validation_errors
-                    }, status=400)
+#                 if validation_errors:
+#                     return JsonResponse({
+#                         "error": "Validation errors in Excel file",
+#                         "validation_errors": validation_errors
+#                     }, status=400)
 
-                # Process each user
-                created_users = []
-                processing_errors = []
+#                 # Process each user
+#                 created_users = []
+#                 processing_errors = []
                 
-                for user_data in users_data:
-                    try:
-                        # Find institute (case insensitive)
-                        institute_query = db.collection('InstituteNames').where(
-                            'instituteName', '==', user_data['institute_name']
-                        ).limit(1).stream()
+#                 for user_data in users_data:
+#                     try:
+#                         # Find institute (case insensitive)
+#                         institute_query = db.collection('InstituteNames').where(
+#                             'instituteName', '==', user_data['institute_name']
+#                         ).limit(1).stream()
                         
-                        institute_doc = next(institute_query, None)
-                        if not institute_doc:
-                            processing_errors.append(f"Institute not found for user {user_data['username']}")
-                            continue
+#                         institute_doc = next(institute_query, None)
+#                         if not institute_doc:
+#                             processing_errors.append(f"Institute not found for user {user_data['username']}")
+#                             continue
 
-                        # Create user document
-                        user_ref = db.collection('Users').document()
-                        user_ref.set({
-                            "username": user_data['username'],
-                            "emailID": user_data['emailID'],
-                            "role": user_data['role'],
-                            "institute": institute_doc.reference,
-                            "cohort": None, # Will be updated when added to a batch,
-                            "createdAt": firestore.SERVER_TIMESTAMP
-                        })
+#                         # Create user document
+#                         user_ref = db.collection('Users').document()
+#                         user_ref.set({
+#                             "username": user_data['username'],
+#                             "emailID": user_data['emailID'],
+#                             "role": user_data['role'],
+#                             "institute": institute_doc.reference,
+#                             "cohort": None, # Will be updated when added to a batch,
+#                             "createdAt": firestore.SERVER_TIMESTAMP
+#                         })
                         
-                        created_users.append(user_data['username'])
+#                         created_users.append(user_data['username'])
 
-                    except Exception as e:
-                        processing_errors.append(f"Error creating user {user_data['username']}: {str(e)}")
+#                     except Exception as e:
+#                         processing_errors.append(f"Error creating user {user_data['username']}: {str(e)}")
 
-                response_data = {
-                    "message": f"Processed {len(created_users)} users successfully",
-                    "created_users": created_users
-                }
-                if processing_errors:
-                    response_data["processing_errors"] = processing_errors
+#                 response_data = {
+#                     "message": f"Processed {len(created_users)} users successfully",
+#                     "created_users": created_users
+#                 }
+#                 if processing_errors:
+#                     response_data["processing_errors"] = processing_errors
 
-                return JsonResponse(response_data, status=200 if created_users else 400)
+#                 return JsonResponse(response_data, status=200 if created_users else 400)
 
-            except Exception as e:
-                print(e)
-                logger.error(f"Error processing file: {str(e)}")
-                return JsonResponse({"error": str(e)}, status=400)
-        else:
-            print(form.errors)
-            return JsonResponse({"error": form.errors}, status=400)
+#             except Exception as e:
+#                 print(e)
+#                 logger.error(f"Error processing file: {str(e)}")
+#                 return JsonResponse({"error": str(e)}, status=400)
+#         else:
+#             print(form.errors)
+#             return JsonResponse({"error": form.errors}, status=400)
 
-    return JsonResponse({"error": "Invalid request method"}, status=405)
+#     return JsonResponse({"error": "Invalid request method"}, status=405)
 
-@csrf_exempt
-def create_user(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            username = data.get('username', '').strip()
-            email_id = data.get('emailID', '').strip()
-            institute_id = data.get('instituteId')
-            role = data.get('role', 'student')
+# @csrf_exempt
+# def create_user(request):
+#     if request.method == 'POST':
+#         try:
+#             data = json.loads(request.body)
+#             username = data.get('username', '').strip()
+#             email_id = data.get('emailID', '').strip()
+#             institute_id = data.get('instituteId')
+#             role = data.get('role', 'student')
 
-            if not username or not institute_id:
-                return JsonResponse({'error': 'Username and Institute are required'}, status=400)
+#             if not username or not institute_id:
+#                 return JsonResponse({'error': 'Username and Institute are required'}, status=400)
 
-            # Check if username already exists
-            existing_user = db.collection('Users')\
-                .where('username', '==', username)\
-                .limit(1)\
-                .stream()
+#             # Check if username already exists
+#             existing_user = db.collection('Users')\
+#                 .where('username', '==', username)\
+#                 .limit(1)\
+#                 .stream()
             
-            if list(existing_user):
-                return JsonResponse({'error': 'Username already exists'}, status=400)
+#             if list(existing_user):
+#                 return JsonResponse({'error': 'Username already exists'}, status=400)
 
-            # Get institute reference
-            institute_ref = db.collection('InstituteNames').document(institute_id)
-            if not institute_ref.get().exists:
-                return JsonResponse({'error': 'Institute not found'}, status=404)
+#             # Get institute reference
+#             institute_ref = db.collection('InstituteNames').document(institute_id)
+#             if not institute_ref.get().exists:
+#                 return JsonResponse({'error': 'Institute not found'}, status=404)
 
-            # Create new user with createdAt field
-            new_user = {
-                'username': username,
-                'emailID': email_id,
-                'role': role,
-                'institute': institute_ref,
-                'cohort': None,
-                'createdAt': firestore.SERVER_TIMESTAMP  # Add creation timestamp
-            }
+#             # Create new user with createdAt field
+#             new_user = {
+#                 'username': username,
+#                 'emailID': email_id,
+#                 'role': role,
+#                 'institute': institute_ref,
+#                 'cohort': None,
+#                 'createdAt': firestore.SERVER_TIMESTAMP  # Add creation timestamp
+#             }
 
-            # Add to Firebase
-            user_ref = db.collection('Users').add(new_user)
+#             # Add to Firebase
+#             user_ref = db.collection('Users').add(new_user)
 
-            return JsonResponse({
-                'success': True,
-                'id': user_ref[1].id,
-                'message': 'User created successfully'
-            })
+#             return JsonResponse({
+#                 'success': True,
+#                 'id': user_ref[1].id,
+#                 'message': 'User created successfully'
+#             })
 
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
+#         except Exception as e:
+#             return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=405)
+#     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
-def users_management(request):
-    try:
-        # Get query parameters
-        query = request.GET.get("query", "")
-        offset = int(request.GET.get("offset", 0))
-        limit = int(request.GET.get("limit", 10))  # Use the limit from request
-        is_load_more = request.GET.get("load_more") == "true"
+# def users_management(request):
+#     try:
+#         # Get query parameters
+#         query = request.GET.get("query", "")
+#         offset = int(request.GET.get("offset", 0))
+#         limit = int(request.GET.get("limit", 10))  # Use the limit from request
+#         is_load_more = request.GET.get("load_more") == "true"
         
-        # Create base query
-        users_ref = db.collection('Users')
+#         # Create base query
+#         users_ref = db.collection('Users')
         
-        # Apply sorting (newest first)
-        users_ref = users_ref.order_by('createdAt', direction=firestore.Query.DESCENDING)
+#         # Apply sorting (newest first)
+#         users_ref = users_ref.order_by('createdAt', direction=firestore.Query.DESCENDING)
         
-        # For query we still need to fetch all and filter manually
-        # since Firestore doesn't support complex text search
-        if query:
-            all_users = users_ref.stream()
-            filtered_users = []
+#         # For query we still need to fetch all and filter manually
+#         # since Firestore doesn't support complex text search
+#         if query:
+#             all_users = users_ref.stream()
+#             filtered_users = []
             
-            # Manually filter by username or institute
-            for doc in all_users:
-                user_data = doc.to_dict()
-                institute_ref = user_data.get('institute')
-                institute_name = "Unknown"
+#             # Manually filter by username or institute
+#             for doc in all_users:
+#                 user_data = doc.to_dict()
+#                 institute_ref = user_data.get('institute')
+#                 institute_name = "Unknown"
                 
-                if institute_ref:
-                    institute_doc = institute_ref.get()
-                    if institute_doc.exists:
-                        institute_name = institute_doc.to_dict().get('instituteName', 'Unknown')
+#                 if institute_ref:
+#                     institute_doc = institute_ref.get()
+#                     if institute_doc.exists:
+#                         institute_name = institute_doc.to_dict().get('instituteName', 'Unknown')
                 
-                # Apply text search
-                if (query.lower() in user_data.get('username', '').lower() or 
-                    query.lower() in institute_name.lower()):
-                    filtered_users.append({
-                        'id': doc.id,
-                        'username': user_data.get('username', 'N/A'),
-                        'emailID': user_data.get('emailID', 'N/A'),
-                        'institute': institute_name,
-                        'role': user_data.get('role', 'student'),
-                        'createdAt': user_data.get('createdAt')
-                    })
+#                 # Apply text search
+#                 if (query.lower() in user_data.get('username', '').lower() or 
+#                     query.lower() in institute_name.lower()):
+#                     filtered_users.append({
+#                         'id': doc.id,
+#                         'username': user_data.get('username', 'N/A'),
+#                         'emailID': user_data.get('emailID', 'N/A'),
+#                         'institute': institute_name,
+#                         'role': user_data.get('role', 'student'),
+#                         'createdAt': user_data.get('createdAt')
+#                     })
             
-            # Apply offset and limit manually to filtered results
-            total_count = len(filtered_users)
-            users = filtered_users[offset:offset+limit]
-            has_more = total_count > (offset + limit)
+#             # Apply offset and limit manually to filtered results
+#             total_count = len(filtered_users)
+#             users = filtered_users[offset:offset+limit]
+#             has_more = total_count > (offset + limit)
             
-        else:
-            # If no query, use Firestore's native offset and limit
-            users_snapshot = users_ref.offset(offset).limit(limit).stream()
+#         else:
+#             # If no query, use Firestore's native offset and limit
+#             users_snapshot = users_ref.offset(offset).limit(limit).stream()
             
-            # Count total for has_more calculation (can be optimized with a separate count query)
-            total_query = users_ref.stream()
-            total_count = sum(1 for _ in total_query)  # Count total documents
+#             # Count total for has_more calculation (can be optimized with a separate count query)
+#             total_query = users_ref.stream()
+#             total_count = sum(1 for _ in total_query)  # Count total documents
             
-            # Process results
-            users = []
-            for doc in users_snapshot:
-                user_data = doc.to_dict()
-                institute_ref = user_data.get('institute')
-                institute_name = "Unknown"
+#             # Process results
+#             users = []
+#             for doc in users_snapshot:
+#                 user_data = doc.to_dict()
+#                 institute_ref = user_data.get('institute')
+#                 institute_name = "Unknown"
                 
-                if institute_ref:
-                    institute_doc = institute_ref.get()
-                    if institute_doc.exists:
-                        institute_name = institute_doc.to_dict().get('instituteName', 'Unknown')
+#                 if institute_ref:
+#                     institute_doc = institute_ref.get()
+#                     if institute_doc.exists:
+#                         institute_name = institute_doc.to_dict().get('instituteName', 'Unknown')
                 
-                users.append({
-                    'id': doc.id,
-                    'username': user_data.get('username', 'N/A'),
-                    'emailID': user_data.get('emailID', 'N/A'),
-                    'institute': institute_name,
-                    'role': user_data.get('role', 'student'),
-                    'createdAt': user_data.get('createdAt')
-                })
+#                 users.append({
+#                     'id': doc.id,
+#                     'username': user_data.get('username', 'N/A'),
+#                     'emailID': user_data.get('emailID', 'N/A'),
+#                     'institute': institute_name,
+#                     'role': user_data.get('role', 'student'),
+#                     'createdAt': user_data.get('createdAt')
+#                 })
             
-            has_more = total_count > (offset + limit)
+#             has_more = total_count > (offset + limit)
 
-        if is_load_more:
-            return JsonResponse({
-                "users": users,
-                "has_more": has_more
-            })
+#         if is_load_more:
+#             return JsonResponse({
+#                 "users": users,
+#                 "has_more": has_more
+#             })
 
-        return render(request, 'assessments/users_management.html', {
-            "initial_users": users,
-            "query": query,
-        })
+#         return render(request, 'assessments/users_management.html', {
+#             "initial_users": users,
+#             "query": query,
+#         })
 
-    except Exception as e:
-        logger.error(f"Error fetching users: {str(e)}")
-        if is_load_more:
-            return JsonResponse({"error": str(e)}, status=500)
-        return render(request, 'assessments/users_management.html', {
-            "error": "Failed to fetch users",
-            "initial_users": [],
-            "query": query,
-        })
+#     except Exception as e:
+#         logger.error(f"Error fetching users: {str(e)}")
+#         if is_load_more:
+#             return JsonResponse({"error": str(e)}, status=500)
+#         return render(request, 'assessments/users_management.html', {
+#             "error": "Failed to fetch users",
+#             "initial_users": [],
+#             "query": query,
+#         })
 
-@csrf_exempt
-def edit_user(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            user_id = data.get('userId')
-            username = data.get('username', '').strip()
-            email_id = data.get('emailID', '').strip()
-            institute_id = data.get('instituteId')
-            role = data.get('role', 'student')  # Get role from request
+# @csrf_exempt
+# def edit_user(request):
+#     if request.method == 'POST':
+#         try:
+#             data = json.loads(request.body)
+#             user_id = data.get('userId')
+#             username = data.get('username', '').strip()
+#             email_id = data.get('emailID', '').strip()
+#             institute_id = data.get('instituteId')
+#             role = data.get('role', 'student')  # Get role from request
 
-            if not username or not institute_id:
-                return JsonResponse({'error': 'Username and Institute are required'}, status=400)
+#             if not username or not institute_id:
+#                 return JsonResponse({'error': 'Username and Institute are required'}, status=400)
 
-            # Check if username already exists (excluding current user)
-            existing_user = db.collection('Users')\
-                .where('username', '==', username)\
-                .stream()
+#             # Check if username already exists (excluding current user)
+#             existing_user = db.collection('Users')\
+#                 .where('username', '==', username)\
+#                 .stream()
             
-            for user in existing_user:
-                if user.id != user_id:  # If username exists for a different user
-                    return JsonResponse({'error': 'Username already exists'}, status=400)
+#             for user in existing_user:
+#                 if user.id != user_id:  # If username exists for a different user
+#                     return JsonResponse({'error': 'Username already exists'}, status=400)
 
-            # Get institute reference
-            institute_ref = db.collection('InstituteNames').document(institute_id)
-            if not institute_ref.get().exists:
-                return JsonResponse({'error': 'Institute not found'}, status=404)
+#             # Get institute reference
+#             institute_ref = db.collection('InstituteNames').document(institute_id)
+#             if not institute_ref.get().exists:
+#                 return JsonResponse({'error': 'Institute not found'}, status=404)
 
-            # Update user
-            user_ref = db.collection('Users').document(user_id)
-            user_ref.update({
-                'username': username,
-                'emailID': email_id,
-                'institute': institute_ref,
-                'role': role  # Add role to update data
-            })
+#             # Update user
+#             user_ref = db.collection('Users').document(user_id)
+#             user_ref.update({
+#                 'username': username,
+#                 'emailID': email_id,
+#                 'institute': institute_ref,
+#                 'role': role  # Add role to update data
+#             })
 
-            return JsonResponse({
-                'success': True,
-                'message': 'User updated successfully'
-            })
+#             return JsonResponse({
+#                 'success': True,
+#                 'message': 'User updated successfully'
+#             })
 
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
+#         except Exception as e:
+#             return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({'error': 'Invalid request method'}, status=405)
+#     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
-@csrf_exempt
-def cohort_list(request):
-    try:
-        # Fetch cohorts from Firestore
-        cohorts_ref = db.collection('Cohort')
-        cohorts = []
+# @csrf_exempt
+# def cohort_list(request):
+#     try:
+#         # Fetch cohorts from Firestore
+#         cohorts_ref = db.collection('Cohort')
+#         cohorts = []
         
-        # Get search query if any
-        query = request.GET.get("query", "")
+#         # Get search query if any
+#         query = request.GET.get("query", "")
         
-        for doc in cohorts_ref.stream():
-            cohort_data = doc.to_dict()
+#         for doc in cohorts_ref.stream():
+#             cohort_data = doc.to_dict()
             
-            # Get institutes
-            institutes = []
-            if 'instituteName' in cohort_data:
-                institutes.append(cohort_data['instituteName'])
+#             # Get institutes
+#             institutes = []
+#             if 'instituteName' in cohort_data:
+#                 institutes.append(cohort_data['instituteName'])
             
-            # Get student count
-            student_count = len(cohort_data.get('users', []))
+#             # Get student count
+#             student_count = len(cohort_data.get('users', []))
             
-            cohort = {
-                'id': doc.id,
-                'name': cohort_data.get('cohortName', 'N/A'),
-                'institutes': ', '.join(institutes),
-                'student_count': student_count
-            }
+#             cohort = {
+#                 'id': doc.id,
+#                 'name': cohort_data.get('cohortName', 'N/A'),
+#                 'institutes': ', '.join(institutes),
+#                 'student_count': student_count
+#             }
             
-            # Apply search filter if query exists
-            if query:
-                if query.lower() in cohort['name'].lower():
-                    cohorts.append(cohort)
-            else:
-                cohorts.append(cohort)
+#             # Apply search filter if query exists
+#             if query:
+#                 if query.lower() in cohort['name'].lower():
+#                     cohorts.append(cohort)
+#             else:
+#                 cohorts.append(cohort)
         
-        # Pagination
-        paginator = Paginator(cohorts, 10)
-        page_number = request.GET.get("page")
-        page_obj = paginator.get_page(page_number)
+#         # Pagination
+#         paginator = Paginator(cohorts, 10)
+#         page_number = request.GET.get("page")
+#         page_obj = paginator.get_page(page_number)
         
-        return render(request, 'assessments/cohort_list.html', {
-            "page_obj": page_obj,
-            "query": query,
-        })
+#         return render(request, 'assessments/cohort_list.html', {
+#             "page_obj": page_obj,
+#             "query": query,
+#         })
         
-    except Exception as e:
-        logger.error(f"Error fetching cohorts: {str(e)}")
-        return render(request, 'assessments/cohort_list.html', {
-            "error": "Failed to fetch cohorts",
-            "page_obj": [],
-            "query": query,
-        })
+#     except Exception as e:
+#         logger.error(f"Error fetching cohorts: {str(e)}")
+#         return render(request, 'assessments/cohort_list.html', {
+#             "error": "Failed to fetch cohorts",
+#             "page_obj": [],
+#             "query": query,
+#         })
 
-@csrf_exempt
-def fetch_institute_students(request):
-    institute_id = request.GET.get('institute_id')
-    if not institute_id:
-        return JsonResponse({'error': 'Institute ID is required'}, status=400)
+# @csrf_exempt
+# def fetch_institute_students(request):
+#     institute_id = request.GET.get('institute_id')
+#     if not institute_id:
+#         return JsonResponse({'error': 'Institute ID is required'}, status=400)
     
-    try:
-        institute_ref = db.collection('InstituteNames').document(institute_id)
-        students_ref = db.collection('Users').where('institute', '==', institute_ref)
+#     try:
+#         institute_ref = db.collection('InstituteNames').document(institute_id)
+#         students_ref = db.collection('Users').where('institute', '==', institute_ref)
         
-        students = []
-        for doc in students_ref.stream():
-            student_data = doc.to_dict()
-            students.append({
-                'id': doc.id,
-                'username': student_data.get('username', 'N/A')
-            })
+#         students = []
+#         for doc in students_ref.stream():
+#             student_data = doc.to_dict()
+#             students.append({
+#                 'id': doc.id,
+#                 'username': student_data.get('username', 'N/A')
+#             })
         
-        return JsonResponse({'students': students})
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+#         return JsonResponse({'students': students})
+#     except Exception as e:
+#         return JsonResponse({'error': str(e)}, status=500)
 
-@csrf_exempt
-def create_cohort(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            name = data.get('name')
-            student_ids = data.get('studentIds', [])
+# @csrf_exempt
+# def create_cohort(request):
+#     if request.method == 'POST':
+#         try:
+#             data = json.loads(request.body)
+#             name = data.get('name')
+#             student_ids = data.get('studentIds', [])
             
-            if not name or not student_ids:
-                return JsonResponse({'error': 'Name and student IDs are required'}, status=400)
+#             if not name or not student_ids:
+#                 return JsonResponse({'error': 'Name and student IDs are required'}, status=400)
             
-            # Create student references
-            student_refs = [db.collection('Users').document(sid) for sid in student_ids]
+#             # Create student references
+#             student_refs = [db.collection('Users').document(sid) for sid in student_ids]
             
-            # Get institute from first student (assuming all students are from same institute)
-            first_student = db.collection('Users').document(student_ids[0]).get()
-            institute_ref = first_student.to_dict().get('institute')
+#             # Get institute from first student (assuming all students are from same institute)
+#             first_student = db.collection('Users').document(student_ids[0]).get()
+#             institute_ref = first_student.to_dict().get('institute')
             
-            # Create cohort
-            cohort_ref = db.collection('Cohort').document()
-            cohort_data = {
-                'cohortName': name,
-                'users': student_refs,
-                'instituteName': institute_ref.get().to_dict().get('instituteName'),
-                'createdAt': firestore.SERVER_TIMESTAMP
-            }
+#             # Create cohort
+#             cohort_ref = db.collection('Cohort').document()
+#             cohort_data = {
+#                 'cohortName': name,
+#                 'users': student_refs,
+#                 'instituteName': institute_ref.get().to_dict().get('instituteName'),
+#                 'createdAt': firestore.SERVER_TIMESTAMP
+#             }
             
-            cohort_ref.set(cohort_data)
+#             cohort_ref.set(cohort_data)
             
-            # Update each student's cohort reference
-            for student_id in student_ids:
-                db.collection('Users').document(student_id).update({
-                    'cohort': cohort_ref
-                })
+#             # Update each student's cohort reference
+#             for student_id in student_ids:
+#                 db.collection('Users').document(student_id).update({
+#                     'cohort': cohort_ref
+#                 })
             
-            return JsonResponse({
-                'success': True,
-                'message': 'Cohort created successfully'
-            })
+#             return JsonResponse({
+#                 'success': True,
+#                 'message': 'Cohort created successfully'
+#             })
             
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
+#         except Exception as e:
+#             return JsonResponse({'error': str(e)}, status=500)
     
-    return JsonResponse({'error': 'Invalid request method'}, status=405)
+#     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
-def add_students_to_existing_exams(cohort_ref, student_refs):
-    """Helper function to add students to all existing exams for a cohort."""
-    # Get all tests for this cohort
-    tests_ref = db.collection('Test').where('cohort', '==', cohort_ref).stream()
+# def add_students_to_existing_exams(cohort_ref, student_refs):
+#     """Helper function to add students to all existing exams for a cohort."""
+#     # Get all tests for this cohort
+#     tests_ref = db.collection('Test').where('cohort', '==', cohort_ref).stream()
     
-    for test in tests_ref:
-        test_data = test.to_dict()
-        procedure_assignments = test_data.get('procedureAssignments', [])
+#     for test in tests_ref:
+#         test_data = test.to_dict()
+#         procedure_assignments = test_data.get('procedureAssignments', [])
         
-        # For each procedure assignment in the test
-        for proc_assignment_ref in procedure_assignments:
-            proc_assignment = proc_assignment_ref.get().to_dict()
-            procedure_ref = proc_assignment.get('procedure')
+#         # For each procedure assignment in the test
+#         for proc_assignment_ref in procedure_assignments:
+#             proc_assignment = proc_assignment_ref.get().to_dict()
+#             procedure_ref = proc_assignment.get('procedure')
             
-            if procedure_ref:
-                procedure_data = procedure_ref.get().to_dict()
+#             if procedure_ref:
+#                 procedure_data = procedure_ref.get().to_dict()
                 
-                # Create exam assignments for new students
-                for student_ref in student_refs:
-                    exam_assignment_data = {
-                        'user': student_ref,
-                        'examMetaData': procedure_data.get('examMetaData', {}),
-                        'status': 'Pending',
-                        'notes': procedure_data.get('notes', ''),
-                        'procedure_name': procedure_data.get('procedureName', '')
-                    }
+#                 # Create exam assignments for new students
+#                 for student_ref in student_refs:
+#                     exam_assignment_data = {
+#                         'user': student_ref,
+#                         'examMetaData': procedure_data.get('examMetaData', {}),
+#                         'status': 'Pending',
+#                         'notes': procedure_data.get('notes', ''),
+#                         'procedure_name': procedure_data.get('procedureName', '')
+#                     }
                     
-                    # Create new exam assignment
-                    exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
+#                     # Create new exam assignment
+#                     exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
                     
-                    # Add to procedure assignment's examAssignmentArray
-                    proc_assignment_ref.update({
-                        'examAssignmentArray': firestore.ArrayUnion([exam_assignment_ref])
-                    })
+#                     # Add to procedure assignment's examAssignmentArray
+#                     proc_assignment_ref.update({
+#                         'examAssignmentArray': firestore.ArrayUnion([exam_assignment_ref])
+#                     })
 
-@csrf_exempt
-def add_student_to_cohort(request, cohort_id):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            student_ids = data.get('studentIds', [])
+# @csrf_exempt
+# def add_student_to_cohort(request, cohort_id):
+#     if request.method == 'POST':
+#         try:
+#             data = json.loads(request.body)
+#             student_ids = data.get('studentIds', [])
             
-            if not student_ids:
-                return JsonResponse({'error': 'Student IDs are required'}, status=400)
+#             if not student_ids:
+#                 return JsonResponse({'error': 'Student IDs are required'}, status=400)
             
-            # Get cohort reference
-            cohort_ref = db.collection('Cohort').document(cohort_id)
-            cohort_doc = cohort_ref.get()
+#             # Get cohort reference
+#             cohort_ref = db.collection('Cohort').document(cohort_id)
+#             cohort_doc = cohort_ref.get()
             
-            if not cohort_doc.exists:
-                return JsonResponse({'error': 'Cohort not found'}, status=404)
+#             if not cohort_doc.exists:
+#                 return JsonResponse({'error': 'Cohort not found'}, status=404)
             
-            # Get existing students in cohort
-            cohort_data = cohort_doc.to_dict()
-            existing_student_refs = cohort_data.get('users', [])
-            existing_student_ids = [ref.id for ref in existing_student_refs]
+#             # Get existing students in cohort
+#             cohort_data = cohort_doc.to_dict()
+#             existing_student_refs = cohort_data.get('users', [])
+#             existing_student_ids = [ref.id for ref in existing_student_refs]
             
-            # Filter out students that are already in the cohort
-            new_student_ids = [sid for sid in student_ids if sid not in existing_student_ids]
+#             # Filter out students that are already in the cohort
+#             new_student_ids = [sid for sid in student_ids if sid not in existing_student_ids]
             
-            if not new_student_ids:
-                return JsonResponse({
-                    'success': True,
-                    'message': 'All students are already in this cohort'
-                })
+#             if not new_student_ids:
+#                 return JsonResponse({
+#                     'success': True,
+#                     'message': 'All students are already in this cohort'
+#                 })
             
-            # Create student references for only new students
-            new_student_refs = [db.collection('Users').document(sid) for sid in new_student_ids]
+#             # Create student references for only new students
+#             new_student_refs = [db.collection('Users').document(sid) for sid in new_student_ids]
             
-            # Update cohort with new students
-            cohort_ref.update({
-                'users': firestore.ArrayUnion(new_student_refs)
-            })
+#             # Update cohort with new students
+#             cohort_ref.update({
+#                 'users': firestore.ArrayUnion(new_student_refs)
+#             })
             
-            # Update each student's cohort reference
-            for student_id in new_student_ids:
-                db.collection('Users').document(student_id).update({
-                    'cohort': cohort_ref
-                })
+#             # Update each student's cohort reference
+#             for student_id in new_student_ids:
+#                 db.collection('Users').document(student_id).update({
+#                     'cohort': cohort_ref
+#                 })
             
-            # Add students to existing exams
-            add_students_to_existing_exams(cohort_ref, new_student_refs)
+#             # Add students to existing exams
+#             add_students_to_existing_exams(cohort_ref, new_student_refs)
             
-            return JsonResponse({
-                'success': True,
-                'message': f'Added {len(new_student_ids)} new students to cohort successfully'
-            })
+#             return JsonResponse({
+#                 'success': True,
+#                 'message': f'Added {len(new_student_ids)} new students to cohort successfully'
+#             })
             
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
+#         except Exception as e:
+#             return JsonResponse({'error': str(e)}, status=500)
     
-    return JsonResponse({'error': 'Invalid request method'}, status=405)
+#     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
-@csrf_exempt
-def view_cohort_students(request, cohort_id):
-    try:
-        # Get cohort reference
-        cohort_ref = db.collection('Cohort').document(cohort_id)
-        cohort_doc = cohort_ref.get()
+# @csrf_exempt
+# def view_cohort_students(request, cohort_id):
+#     try:
+#         # Get cohort reference
+#         cohort_ref = db.collection('Cohort').document(cohort_id)
+#         cohort_doc = cohort_ref.get()
         
-        if not cohort_doc.exists:
-            return JsonResponse({'error': 'Cohort not found'}, status=404)
+#         if not cohort_doc.exists:
+#             return JsonResponse({'error': 'Cohort not found'}, status=404)
         
-        cohort_data = cohort_doc.to_dict()
-        cohort_name = cohort_data.get('cohortName', 'N/A')
-        user_refs = cohort_data.get('users', [])
+#         cohort_data = cohort_doc.to_dict()
+#         cohort_name = cohort_data.get('cohortName', 'N/A')
+#         user_refs = cohort_data.get('users', [])
         
-        # Get student details
-        students = []
-        for user_ref in user_refs:
-            user_doc = user_ref.get()
-            if user_doc.exists:
-                user_data = user_doc.to_dict()
-                institute_ref = user_data.get('institute')
-                institute_name = "Unknown"
+#         # Get student details
+#         students = []
+#         for user_ref in user_refs:
+#             user_doc = user_ref.get()
+#             if user_doc.exists:
+#                 user_data = user_doc.to_dict()
+#                 institute_ref = user_data.get('institute')
+#                 institute_name = "Unknown"
                 
-                if institute_ref:
-                    institute_doc = institute_ref.get()
-                    if institute_doc.exists:
-                        institute_name = institute_doc.to_dict().get('instituteName', 'Unknown')
+#                 if institute_ref:
+#                     institute_doc = institute_ref.get()
+#                     if institute_doc.exists:
+#                         institute_name = institute_doc.to_dict().get('instituteName', 'Unknown')
                 
-                students.append({
-                    'id': user_doc.id,
-                    'username': user_data.get('username', 'N/A'),
-                    'emailID': user_data.get('emailID', 'N/A'),
-                    'institute': institute_name
-                })
+#                 students.append({
+#                     'id': user_doc.id,
+#                     'username': user_data.get('username', 'N/A'),
+#                     'emailID': user_data.get('emailID', 'N/A'),
+#                     'institute': institute_name
+#                 })
         
-        # Sort students by username
-        students.sort(key=lambda x: x['username'])
+#         # Sort students by username
+#         students.sort(key=lambda x: x['username'])
         
-        # Pagination
-        paginator = Paginator(students, 10)  # Show 10 students per page
-        page_number = request.GET.get("page")
-        page_obj = paginator.get_page(page_number)
+#         # Pagination
+#         paginator = Paginator(students, 10)  # Show 10 students per page
+#         page_number = request.GET.get("page")
+#         page_obj = paginator.get_page(page_number)
         
-        return render(request, 'assessments/view_cohort_students.html', {
-            'cohort_id': cohort_id,
-            'cohort_name': cohort_name,
-            'page_obj': page_obj
-        })
+#         return render(request, 'assessments/view_cohort_students.html', {
+#             'cohort_id': cohort_id,
+#             'cohort_name': cohort_name,
+#             'page_obj': page_obj
+#         })
         
-    except Exception as e:
-        logger.error(f"Error viewing cohort students: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=500)
+#     except Exception as e:
+#         logger.error(f"Error viewing cohort students: {str(e)}")
+#         return JsonResponse({'error': str(e)}, status=500)
 
-@csrf_exempt
-def get_cohort_students(request, cohort_id):
-    try:
-        # Get cohort reference
-        cohort_ref = db.collection('Cohort').document(cohort_id)
-        cohort_doc = cohort_ref.get()
+# @csrf_exempt
+# def get_cohort_students(request, cohort_id):
+#     try:
+#         # Get cohort reference
+#         cohort_ref = db.collection('Cohort').document(cohort_id)
+#         cohort_doc = cohort_ref.get()
         
-        if not cohort_doc.exists:
-            return JsonResponse({'error': 'Cohort not found'}, status=404)
+#         if not cohort_doc.exists:
+#             return JsonResponse({'error': 'Cohort not found'}, status=404)
         
-        cohort_data = cohort_doc.to_dict()
-        user_refs = cohort_data.get('users', [])
+#         cohort_data = cohort_doc.to_dict()
+#         user_refs = cohort_data.get('users', [])
         
-        # Get student details
-        students = []
-        for user_ref in user_refs:
-            user_doc = user_ref.get()
-            if user_doc.exists:
-                user_data = user_doc.to_dict()
-                students.append({
-                    'id': user_doc.id,
-                    'username': user_data.get('username', 'N/A')
-                })
+#         # Get student details
+#         students = []
+#         for user_ref in user_refs:
+#             user_doc = user_ref.get()
+#             if user_doc.exists:
+#                 user_data = user_doc.to_dict()
+#                 students.append({
+#                     'id': user_doc.id,
+#                     'username': user_data.get('username', 'N/A')
+#                 })
         
-        return JsonResponse({'students': students})
+#         return JsonResponse({'students': students})
         
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+#     except Exception as e:
+#         return JsonResponse({'error': str(e)}, status=500)
+
+def base(request):
+    return render(request, 'assessments/base.html')
 
 def login_page(request):
     if request.user.is_authenticated:
-        print(request.user.user_role)
-        if request.user.user_role == 'ebek_admin' or request.user.user_role == 'super_admin':
-            return redirect('exam_reports_page')
-        else:
-            return redirect('<html>Welcome to EBEK</html>')
+        return redirect('base')
     return render(request, 'assessments/login.html')
 
 def login_view(request):
@@ -2219,7 +2383,7 @@ def login_view(request):
     if user is not None:
         login(request, user)
             # Update last login in Firebase
-        return redirect('exam_reports_page')
+        return redirect('base')
     else:
         messages.error(request, 'User not found')
         return redirect('login_page')
@@ -2330,6 +2494,8 @@ def course_management(request):
     """
     View function for the course management page.
     """
+    if not request.user.check_icon_navigation_permissions('courses'):
+        return HttpResponse('You are not authorized to access this page')
     return render(request, 'assessments/course_management.html')
 
 def course_detail(request, course_id):
@@ -2824,9 +2990,49 @@ def fetch_batches(request):
         unit_types = [u.strip().lower() for u in unit_type_param.split(',') if u.strip()] if unit_type_param else []
         statuses = [s.strip().lower() for s in status_param.split(',') if s.strip()] if status_param else []
 
-        batches_ref = db.collection('Batches')
+
+        # Limit batches to units assigned to current user (by reference)
+        assigned_institutions = list(Institution.objects.all().values_list('name', flat=True)) if request.user.has_all_permissions() else list(request.user.assigned_institutions.values_list('name', flat=True))
+        assigned_hospitals = list(Hospital.objects.all().values_list('name', flat=True)) if request.user.has_all_permissions() else list(request.user.assigned_hospitals.values_list('name', flat=True))
+        print(assigned_institutions)
+        print(assigned_hospitals)
+        unit_refs = []
+        # Resolve institute name -> doc reference
+        for inst in assigned_institutions:
+            try:
+                snap_list = db.collection('InstituteNames').where('instituteName', '==', inst).limit(1).get()
+                if snap_list:
+                    print(snap_list[0].reference)
+                    unit_refs.append(snap_list[0].reference)
+            except Exception:
+                continue
+        # Resolve hospital name -> doc reference
+        for hosp in assigned_hospitals:
+            try:
+                snap_list = db.collection('HospitalNames').where('hospitalName', '==', hosp).limit(1).get()
+                if snap_list:
+                    print(snap_list[0].reference)
+                    unit_refs.append(snap_list[0].reference)
+            except Exception:
+                continue
+
         batches = []
-        for doc in batches_ref.stream():
+        def chunk(lst, n):
+            for i in range(0, len(lst), n):
+                yield lst[i:i+n]
+
+        if unit_refs:
+            # Firestore 'in' supports up to 10 values – chunk queries and merge results
+            for refs_chunk in chunk(unit_refs, 10):
+                query = db.collection('Batches').where('unit', 'in', refs_chunk)
+                print(refs_chunk)
+                for doc in query.stream():
+                    batches.append((doc.id, doc.to_dict()))
+
+
+        # Transform and filter
+        formatted_batches = []
+        for doc_id, batch_data in batches:
             batch_data = doc.to_dict()
 
             # Filtering logic
@@ -2857,8 +3063,8 @@ def fetch_batches(request):
             learners = batch_data.get('learners', [])
             learner_count = len(learners)
 
-            batches.append({
-                'id': doc.id,
+            formatted_batches.append({
+                'id': doc_id,
                 'batchName': batch_data.get('batchName', 'N/A'),
                 'unitType': batch_data.get('unitType', 'N/A'),
                 'unitName': unit_name,
@@ -2868,10 +3074,10 @@ def fetch_batches(request):
             })
 
         # Apply pagination
-        total_count = len(batches)
+        total_count = len(formatted_batches)
         start_index = (page - 1) * page_size
         end_index = start_index + page_size
-        paginated_batches = batches[start_index:end_index]
+        paginated_batches = formatted_batches[start_index:end_index]
 
         return JsonResponse({
             'success': True,
@@ -2882,6 +3088,7 @@ def fetch_batches(request):
             'has_next': end_index < total_count
         }, status=200)
     except Exception as e:
+        print(str(e))
         return JsonResponse({
             'success': False,
             'error': str(e)
@@ -4059,3 +4266,547 @@ def download_student_report(request):
         print(f"Report generation error: {str(e)}")
         traceback.print_exc()
         return JsonResponse({'error': str(e)}, status=500)
+
+
+def create_roles(request):
+    import json
+    
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            role_name = data.get('name').strip()
+            description = data.get('description', '').strip()
+            permission_codes = data.get('permissions', [])
+            
+            if not role_name:
+                return JsonResponse({'error': 'Role name is required'}, status=400)
+            
+            # Get permission objects
+            permissions = Permission.objects.filter(code__in=permission_codes, is_active=True)
+            
+            # Create CustomRole
+            custom_role, created = CustomRole.objects.get_or_create(
+                name=role_name,
+                defaults={
+                    'description': description,
+                    'created_by': request.user if request.user.is_authenticated else None
+                }
+            )
+            
+            if not created:
+                return JsonResponse({'error': 'Role with this name already exists'}, status=400)
+            
+            # Add permissions to the role
+            custom_role.permissions.set(permissions)
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Role "{role_name}" created successfully',
+                'role_id': custom_role.id
+            })
+            
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    # GET request - render the form
+    permissions = Permission.objects.filter(is_active=True).order_by('category', 'name')
+    return render(request, 'assessments/create_roles.html', {
+        'permissions': permissions
+    })
+
+def get_roles(request):
+    """API endpoint to fetch all roles"""
+    try:
+        roles = []
+        for role in CustomRole.objects.all():
+            role_data = {
+                'id': role.id,
+                'name': role.name,
+                'description': role.description,
+                'permissions': role.get_permission_codes(),
+                'permissions_count': role.permissions.count()
+            }
+            roles.append(role_data)
+        return JsonResponse({'roles': roles})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+def edit_role(request, role_id):
+    """API endpoint to edit a role"""
+    import json
+    
+    if request.method == 'GET':
+        try:
+            role = CustomRole.objects.get(id=role_id)
+            role_data = {
+                'id': role.id,
+                'name': role.name,
+                'description': role.description,
+                'permissions': role.get_permission_codes()
+            }
+            
+            return JsonResponse({'role': role_data})
+        except CustomRole.DoesNotExist:
+            return JsonResponse({'error': 'Role not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    elif request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            role_name = data.get('name').strip()
+            description = data.get('description', '').strip()
+            permission_codes = data.get('permissions', [])
+            
+            if not role_name:
+                return JsonResponse({'error': 'Role name is required'}, status=400)
+            
+            try:
+                role = CustomRole.objects.get(id=role_id)
+            except CustomRole.DoesNotExist:
+                return JsonResponse({'error': 'Role not found'}, status=404)
+            
+            # Check if another role with the same name exists (excluding current role)
+            if CustomRole.objects.filter(name=role_name).exclude(id=role_id).exists():
+                return JsonResponse({'error': 'Role with this name already exists'}, status=400)
+            
+            # Get permission objects
+            permissions = Permission.objects.filter(code__in=permission_codes, is_active=True)
+            
+            # Update role
+            role.name = role_name
+            role.description = description
+            role.save()
+            
+            # Update permissions
+            role.permissions.set(permissions)
+
+            all_users = EbekUser.objects.filter(custom_roles__in=[role])
+            for u in all_users:
+                u.user_permissions_custom.set(role.permissions.all())
+                u.save()
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Role "{role_name}" updated successfully'
+            })
+            
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+def delete_role(request, role_id):
+    """API endpoint to delete a role"""
+    if request.method == 'POST':
+        try:
+            role = CustomRole.objects.get(id=role_id)
+            role_name = role.name
+            all_users = EbekUser.objects.filter(custom_roles__in=[role])
+            for u in all_users:
+                u.user_permissions_custom.set([])
+                u.custom_roles = None
+                u.save()
+            role.delete()
+            return JsonResponse({
+                'success': True,
+                'message': f'Role "{role_name}" deleted successfully'
+            })
+        except CustomRole.DoesNotExist:
+            return JsonResponse({'error': 'Role not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+def assign_roles(request):
+    import json
+    
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            user_id = data.get('user_id')
+            role_ids = data.get('role_ids', [])
+            
+            if not user_id:
+                return JsonResponse({'error': 'User ID is required'}, status=400)
+            
+            try:
+                user = EbekUser.objects.get(id=user_id)
+            except EbekUser.DoesNotExist:
+                return JsonResponse({'error': 'User not found'}, status=404)
+            
+            # Add new custom roles
+            for role_id in role_ids:
+                try:
+                    custom_role = CustomRole.objects.get(id=role_id)
+                    user.custom_roles.add(custom_role)
+                except CustomRole.DoesNotExist:
+                    continue
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Roles assigned successfully to {user.email}'
+            })
+            
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    # GET request - render the form
+    # Build users with custom roles via model helper (no extra API needed)
+    users_qs = EbekUser.objects.filter(is_active=True).exclude(user_role__in=['nurse', 'student'])
+    users = []
+    for u in users_qs:
+        users.append({
+            'id': u.id,
+            'email': u.email,
+            'full_name': u.full_name or u.email,
+            'custom_roles': [{'id': r.id, 'name': r.name, 'description': r.description} for r in u.get_all_roles()],
+        })
+
+    roles = CustomRole.objects.all().values('id', 'name', 'description')
+    import json
+    users_json = json.dumps(users)
+    
+    return render(request, 'assessments/assign_roles.html', {
+        'users': users,
+        'users_json': users_json,
+        'roles': list(roles)
+    })
+
+@csrf_exempt
+def get_user(request, user_id):
+    """Fetch single user with custom roles, access flags and assigned units."""
+    try:
+        user = EbekUser.objects.get(id=user_id)
+        data = {
+            'id': user.id,
+            'name': user.full_name or '',
+            'email': user.email,
+            'phone': user.phone_number or '',
+            'access_types': [t for t in ['osce' if user.allowed_to_take_osce else None, 'skillathon' if user.allowed_to_take_skillathon else None] if t],
+            'institution_ids': list(user.assigned_institutions.values_list('id', flat=True)),
+            'hospital_ids': list(user.assigned_hospitals.values_list('id', flat=True)),
+            'skillathon_ids': list(user.assigned_skillathons.values_list('id', flat=True)),
+            'custom_roles': {'id': user.custom_roles.id, 'name': user.custom_roles.name, 'description': user.custom_roles.description} if user.custom_roles else []
+        }
+        return JsonResponse({'user': data})
+    except EbekUser.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+def delete_user(request, user_id):
+    """Delete a user from Django and Firebase."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+    try:
+        user = EbekUser.objects.get(id=user_id)
+        user.delete()
+        return JsonResponse({'success': True, 'message': f'User {user.email} deleted'})
+    except EbekUser.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def create_user(request):
+    """Comprehensive user creation API with Firebase integration"""
+    import json
+    import threading
+    from django.core.mail import send_mail
+    from django.conf import settings
+    from .firebase_sync import sync_user_to_firestore, sync_user_to_firebase_auth
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        # Extract basic user data
+        name = data.get('name', '').strip()
+        email = data.get('email', '').strip()
+        phone = data.get('phone', '').strip()
+        access_types = data.get('access_types', [])
+        institution_ids = data.get('institution_ids', [])  
+        hospital_ids = data.get('hospital_ids', [])  
+        skillathon_ids = data.get('skillathon_ids', [])  
+        role_id = data.get('role_id')
+        # Derive permission ids from selected role if provided; otherwise keep empty
+        try:
+            permission_ids = list(CustomRole.objects.get(id=role_id).permissions.values_list('id', flat=True)) if role_id else []
+        except CustomRole.DoesNotExist:
+            permission_ids = []
+        
+        # Validation (institutions/hospitals/skillathons are optional)
+        if not all([name, email, phone]):
+            return JsonResponse({'error': 'Name, email, and phone are required'}, status=400)
+        
+        if not email or '@' not in email:
+            return JsonResponse({'error': 'Valid email is required'}, status=400)
+        
+        # Check if user already exists
+        if EbekUser.objects.filter(email=email).exists():
+            return JsonResponse({'error': 'User with this email already exists'}, status=400)
+        
+        
+        # For regular users, determine permissions based on access types
+        allowed_to_take_osce = 'osce' in access_types
+        allowed_to_take_skillathon = 'skillathon' in access_types
+        
+        # Get institution, hospital, and skillathon objects
+        institutions = []
+        hospitals = []
+        skillathons = []
+        permissions = []
+        
+        # Validate and get institutions (optional)
+        for inst_id in institution_ids or []:
+            try:
+                institution = Institution.objects.get(id=inst_id)
+                institutions.append(institution)
+            except Institution.DoesNotExist:
+                return JsonResponse({'error': f'Institution with ID {inst_id} not found'}, status=400)
+        
+        # Validate and get hospitals
+        for hosp_id in hospital_ids or []:
+            try:
+                hospital = Hospital.objects.get(id=hosp_id)
+                hospitals.append(hospital)
+            except Hospital.DoesNotExist:
+                return JsonResponse({'error': f'Hospital with ID {hosp_id} not found'}, status=400)
+        
+        # Validate and get skillathons
+        for skill_id in skillathon_ids or []:
+            try:
+                skillathon = SkillathonEvent.objects.get(id=skill_id)
+                skillathons.append(skillathon)
+            except SkillathonEvent.DoesNotExist:
+                return JsonResponse({'error': f'Skillathon with ID {skill_id} not found'}, status=400)
+        
+        # Validate and get permissions
+        for perm_id in permission_ids:
+            try:
+                permission = Permission.objects.get(id=perm_id)
+                permissions.append(permission)
+            except Permission.DoesNotExist:
+                return JsonResponse({'error': f'Permission with ID {perm_id} not found'}, status=400)
+        
+        # Create user with temporary password
+        temp_password = "TempPass123!"
+        # Assign custom role if provided
+        if role_id:
+            custom_role = CustomRole.objects.get(id=role_id)
+        else:
+            custom_role = None
+
+        user = EbekUser.objects.create_user(
+            email=email,
+            password=temp_password,
+            full_name=name,
+            phone_number=phone,
+            allowed_to_take_osce=allowed_to_take_osce,
+            allowed_to_take_skillathon=allowed_to_take_skillathon,
+            custom_roles=custom_role
+        )
+        
+        # Assign many-to-many relationships
+        if institutions:
+            user.assigned_institutions.set(institutions)
+        if hospitals:
+            user.assigned_hospitals.set(hospitals)
+        if skillathons:
+            user.assigned_skillathons.set(skillathons)
+        if permissions:
+            user.user_permissions_custom.set(permissions)
+        
+        # Send welcome email in a separate thread
+        def send_welcome_email():
+            try:
+                subject = 'Welcome to EBEK Platform'
+                message = f'''
+                Hello {name},
+                
+                Your account has been created successfully!
+                
+                Login Details:
+                Email: {email}
+                Temporary Password: {temp_password}
+                
+                Please change your password after first login.
+                
+                Access Permissions:
+                - Take OSCE: {'Yes' if allowed_to_take_osce else 'No'}
+                - Take Skillathon: {'Yes' if allowed_to_take_skillathon else 'No'}
+                
+                {f'Assigned Institutions: {", ".join([inst.name for inst in institutions])}' if institutions else ''}
+                {f'Assigned Hospitals: {", ".join([hosp.name for hosp in hospitals])}' if hospitals else ''}
+                {f'Assigned Skillathons: {", ".join([skill.name for skill in skillathons])}' if skillathons else ''}
+                {f'Assigned Permissions: {", ".join([perm.name for perm in permissions])}' if permissions else ''}
+                
+                Best regards,
+                EBEK Team
+                '''
+                
+                send_mail(
+                    subject,
+                    message,
+                    settings.DEFAULT_FROM_EMAIL,
+                    [email],
+                    fail_silently=False,
+                )
+            except Exception as e:
+                print(f"Email sending error: {e}")
+        
+        # Start email sending in background thread
+        email_thread = threading.Thread(target=send_welcome_email)
+        email_thread.daemon = True
+        email_thread.start()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'User "{name}" created successfully',
+            'user_id': user.id,
+            'email': user.email,
+            'temporary_password': temp_password
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        print(exc_info())
+        print(e)
+        print(traceback.format_exc())
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+def update_user(request, user_id):
+    """API to update user information including permissions and assignments"""
+    import json
+    import threading
+    from django.core.mail import send_mail
+    from django.conf import settings
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        
+        # Get user
+        try:
+            user = EbekUser.objects.get(id=user_id)
+        except EbekUser.DoesNotExist:
+            return JsonResponse({'error': 'User not found'}, status=404)
+        
+        # Extract data
+        name = data.get('name', '').strip()
+        email = data.get('email', '').strip()
+        phone = data.get('phone', '').strip()
+        access_types = data.get('access_types', [])
+        institution_ids = data.get('institution_ids', [])
+        hospital_ids = data.get('hospital_ids', [])
+        skillathon_ids = data.get('skillathon_ids', [])
+        role_id = data.get('role_id')
+        permission_ids = data.get('permission_ids', [])
+        # Align permission derivation with create_user: if role provided, derive permissions
+        if role_id:
+            try:
+                permission_ids = list(CustomRole.objects.get(id=role_id).permissions.values_list('id', flat=True))
+                print(permission_ids)
+            except CustomRole.DoesNotExist:
+                permission_ids = []
+        is_active = data.get('is_active', True)
+        
+        # Update basic fields
+        if name:
+            user.full_name = name
+        if email and email != user.email:
+            # Check if new email already exists
+            if EbekUser.objects.filter(email=email).exclude(id=user_id).exists():
+                return JsonResponse({'error': 'User with this email already exists'}, status=400)
+            user.email = email
+        if phone:
+            user.phone_number = phone
+        
+        user.is_active = is_active
+        
+        # Update permissions
+        user.allowed_to_take_osce = 'osce' in access_types
+        user.allowed_to_take_skillathon = 'skillathon' in access_types
+        
+        # Update many-to-many assignments
+        institutions = []
+        hospitals = []
+        skillathons = []
+        permissions = []
+        
+        # Validate and get institutions
+        for inst_id in institution_ids or []:
+            try:
+                institution = Institution.objects.get(id=inst_id)
+                institutions.append(institution)
+            except Institution.DoesNotExist:
+                return JsonResponse({'error': f'Institution with ID {inst_id} not found'}, status=400)
+        
+        # Validate and get hospitals
+        for hosp_id in hospital_ids or []:
+            try:
+                hospital = Hospital.objects.get(id=hosp_id)
+                hospitals.append(hospital)
+            except Hospital.DoesNotExist:
+                return JsonResponse({'error': f'Hospital with ID {hosp_id} not found'}, status=400)
+        
+        # Validate and get skillathons
+        for skill_id in skillathon_ids or []:
+            try:
+                skillathon = SkillathonEvent.objects.get(id=skill_id)
+                skillathons.append(skillathon)
+            except SkillathonEvent.DoesNotExist:
+                return JsonResponse({'error': f'Skillathon with ID {skill_id} not found'}, status=400)
+        
+        # Validate and get permissions
+        for perm_id in permission_ids:
+            try:
+                permission = Permission.objects.get(id=perm_id)
+                permissions.append(permission)
+            except Permission.DoesNotExist:
+                return JsonResponse({'error': f'Permission with ID {perm_id} not found'}, status=400)
+        
+        # Update many-to-many relationships
+        user.assigned_institutions.set(institutions)
+        user.assigned_hospitals.set(hospitals)
+        user.assigned_skillathons.set(skillathons)
+        user.user_permissions_custom.set(permissions)
+        
+        # Update custom roles
+        if role_id:
+            try:
+                custom_role = CustomRole.objects.get(id=role_id)
+                user.custom_roles = custom_role
+            except CustomRole.DoesNotExist:
+                return JsonResponse({'error': 'Selected role not found'}, status=400)
+        else:
+            user.custom_roles = None
+        
+        user.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'User "{user.full_name}" updated successfully',
+            'user_id': user.id
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        print(str(e))
+        return JsonResponse({'error': str(e)}, status=500)
+
