@@ -2368,7 +2368,7 @@ def edit_institute(request, institute_id):
 #         return JsonResponse({'error': str(e)}, status=500)
 
 def base(request):
-    return render(request, 'assessments/base.html')
+    return render(request, 'assessments/welcome.html')
 
 def login_page(request):
     if request.user.is_authenticated:
