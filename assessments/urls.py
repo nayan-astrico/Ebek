@@ -118,7 +118,7 @@ urlpatterns = [
     path('api/roles/<int:role_id>/edit/', views.edit_role, name='edit_role'),
     path('api/roles/<int:role_id>/delete/', views.delete_role, name='delete_role'),
     path('api/users/create/', views.create_user, name='create_user'),
-    path('api/users/<int:user_id>/update/', views.update_user, name='update_user')
-    ,path('api/users/<int:user_id>/', views.get_user, name='get_user')
-    ,path('api/users/<int:user_id>/delete/', views.delete_user, name='delete_user')
+    path('api/users/<int:user_id>/update/', views.update_user, name='update_user'),
+    path('api/users/<int:user_id>/', views.get_user, name='get_user'),
+    path('api/users/<int:user_id>/delete/', views.delete_user, name='delete_user')
 ]
