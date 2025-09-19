@@ -556,15 +556,14 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 70vh;
-            padding: 40px 20px;
+            min-height: 50vh;
         }
 
         .welcome-content {
             text-align: center;
             max-width: 800px;
             background: #fff;
-            padding: 60px 40px;
+            padding: 0px 40px;
             border-radius: 20px;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
             border: 1px solid #e8f4f8;
@@ -677,11 +676,10 @@
     </style>
 </head>
 <body>
-    <!-- Sidebar -->
     {% if request.user.is_authenticated %}
     <div id="sidebar">
         <div class="sidebar-header">
-            <img src="https://i.ibb.co/VW9y368B/4021762-Ebekmed-Favicon.png" alt="Ebek Logo" style="height: 38px; width: 38px; object-fit: contain;">
+            <img src="{% static 'assessments/img/Ebekmed-Favicon.png' %}" alt="Ebek Logo" style="height: 38px; width: 38px; object-fit: contain;">
             <span class="brand-text">EBEK MED</span>
         </div>
         
@@ -813,6 +811,8 @@
         </div>
 </div>
 {% endif %}
+
+
 
 <div id="sidePanel">
     {% block sidePanel %}{% endblock %}
