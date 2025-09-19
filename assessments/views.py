@@ -1133,17 +1133,31 @@ def get_grade_letter(percentage):
 def fetch_skillathons(request):
     """Fetch all skillathons from the Skillathon collection."""
     try:
-        skillathons_ref = db.collection('Skillathon')
+        assigned_skillathons = list(request.user.assigned_skillathons.values_list('name', flat=True))
+        
+        # Helper function to chunk lists
+        def chunk(lst, n):
+            for i in range(0, len(lst), n):
+                yield lst[i:i+n]
+        
         skillathons = []
-        for doc in skillathons_ref.stream():
-            skillathon_data = doc.to_dict()
-            # Parse the full ISO 8601 timestamp
-            created_at = datetime.fromisoformat(skillathon_data.get('created_at').replace('Z', '+00:00'))
-            skillathons.append({
-                'id': doc.id,
-                'name': skillathon_data.get('skillathonName', 'Unnamed Skillathon'),
-                'date': created_at.strftime('%d-%m-%Y')
-            })
+        
+        if assigned_skillathons:
+            # Firestore 'in' supports up to 10 values – chunk queries and merge results
+            for skillathon_chunk in chunk(assigned_skillathons, 10):
+                skillathons_ref = db.collection('Skillathon').where('skillathonName', 'in', skillathon_chunk)
+                for doc in skillathons_ref.stream():
+                    skillathon_data = doc.to_dict()
+                    # Parse the full ISO 8601 timestamp
+                    created_at = datetime.fromisoformat(skillathon_data.get('created_at').replace('Z', '+00:00'))
+                    skillathons.append({
+                        'id': doc.id,
+                        'name': skillathon_data.get('skillathonName', 'Unnamed Skillathon'),
+                        'date': created_at.strftime('%d-%m-%Y')
+                    })
+        else:
+            # If no assigned skillathons, return empty list
+            pass
 
         return JsonResponse({'skillathons': skillathons}, status=200)
     except Exception as e:
