@@ -780,6 +780,7 @@ def learner_create(request):
                         'is_active': True,
                     }
                 )
+                
                 if created:
                     user.full_name = learner_name
                     user.phone_number = learner_phone
@@ -1409,6 +1410,7 @@ def assessor_create(request):
             if institution_id:
                 try:
                     assessor.institution = Institution.objects.get(id=institution_id)
+                    
                 except Institution.DoesNotExist:
                     pass
             
@@ -1422,7 +1424,12 @@ def assessor_create(request):
                 assessor.is_active = True
             else:
                 assessor.is_active = False
+            
             assessor.save()
+            assessor_user = assessor.assessor_user
+            assessor_user.assigned_institutions.add(assessor.institution)
+            assessor_user.assigned_hospitals.add(assessor.hospital)
+            assessor_user.save()
             
             messages.success(request, 'Assessor created successfully.')
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -1530,6 +1537,10 @@ def assessor_edit(request, pk):
             else:
                 assessor.is_active = False
             assessor = form.save(commit=False)
+            assessor_user = assessor.assessor_user
+            assessor_user.assigned_institutions.add(assessor.institution)
+            assessor_user.assigned_hospitals.add(assessor.hospital)
+            assessor_user.save()
             assessor.save()
             messages.success(request, 'Assessor updated successfully.')
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -1629,9 +1640,9 @@ def assessor_list_api(request):
     for assessor in assessors:
         data.append({
             'id': assessor.pk,
-            'full_name': assessor.assessor_user.full_name,
-            'email': assessor.assessor_user.email,
-            'phone_number': assessor.assessor_user.phone_number,
+            'full_name': assessor.assessor_user.get_full_name() if assessor.assessor_user else "Assessor",
+            'email': assessor.assessor_user.email if assessor.assessor_user else "Assessor",
+            'phone_number': assessor.assessor_user.phone_number if assessor.assessor_user else "Assessor",
             'specialization': assessor.specialization,
             'location': assessor.location,
             'is_active': assessor.is_active,
@@ -1665,6 +1676,54 @@ def get_institutions_hospitals(request):
     else:
         print(f"DEBUG: Invalid unit_type: {unit_type}")
         return JsonResponse({'institutions': [], 'hospitals': []})
+
+# Add these new functions after the existing get_institutions_hospitals function
+
+@login_required
+def get_institutions_by_skillathon(request):
+    """API to get institutions filtered by skillathon"""
+    skillathon_id = request.GET.get('skillathon_id')
+    onboarding_type = request.GET.get('onboarding_type', '').lower()
+    
+    print(f"DEBUG: get_institutions_by_skillathon called with skillathon_id: {skillathon_id}, onboarding_type: {onboarding_type}")
+    
+    institutions = Institution.objects.filter(is_active=True)
+    
+    # Filter by skillathon if provided
+    if skillathon_id and skillathon_id != '':
+        institutions = institutions.filter(skillathon_id=skillathon_id)
+    
+    # Filter by onboarding type if provided
+    if onboarding_type:
+        institutions = institutions.filter(onboarding_type=onboarding_type)
+    
+    institutions_data = list(institutions.values('id', 'name'))
+    print(f"DEBUG: Found {len(institutions_data)} institutions")
+    
+    return JsonResponse({'institutions': institutions_data})
+
+@login_required
+def get_hospitals_by_skillathon(request):
+    """API to get hospitals filtered by skillathon"""
+    skillathon_id = request.GET.get('skillathon_id')
+    onboarding_type = request.GET.get('onboarding_type', '').lower()
+    
+    print(f"DEBUG: get_hospitals_by_skillathon called with skillathon_id: {skillathon_id}, onboarding_type: {onboarding_type}")
+    
+    hospitals = Hospital.objects.filter(is_active=True)
+    
+    # Filter by skillathon if provided
+    if skillathon_id and skillathon_id != '':
+        hospitals = hospitals.filter(skillathon_id=skillathon_id)
+    
+    # Filter by onboarding type if provided
+    if onboarding_type:
+        hospitals = hospitals.filter(onboarding_type=onboarding_type)
+    
+    hospitals_data = list(hospitals.values('id', 'name'))
+    print(f"DEBUG: Found {len(hospitals_data)} hospitals")
+    
+    return JsonResponse({'hospitals': hospitals_data})
 
 # Skillathon Event Views
 @login_required

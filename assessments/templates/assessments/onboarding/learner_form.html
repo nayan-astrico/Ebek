@@ -31,7 +31,7 @@
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group">
-                                    <label for="{{ form.onboarding_type.id_for_label }}">Onboarding Type</label>
+                                    <label for="{{ form.onboarding_type.id_for_label }}">Onboarding Type</label><span class="text-danger">*</span>
                                     {{ form.onboarding_type }}
                                     {% if form.onboarding_type.errors %}
                                     <div class="invalid-feedback d-block">
@@ -45,7 +45,7 @@
                             
                             <div class="col-md-6">
                                 <div class="form-group">
-                                    <label for="{{ form.learner_type.id_for_label }}">Learner Type</label>
+                                    <label for="{{ form.learner_type.id_for_label }}">Learner Type</label><span class="text-danger">*</span>
                                     {{ form.learner_type }}
                                     {% if form.learner_type.errors %}
                                     <div class="invalid-feedback d-block">
@@ -72,7 +72,7 @@
                                 {% endif %}
                             </div> -->
                             <div class="form-group" id="skillathon-event-fields" style="display: {% if form.instance.onboarding_type == 'b2c' %}block{% else %}none{% endif %};">
-                                <label for="{{ form.skillathon_event.id_for_label }}">Skillathon Event</label>
+                                <label for="{{ form.skillathon_event.id_for_label }}">Skillathon Event</label><span class="text-danger">*</span>
                                 {{ form.skillathon_event }}
                                 {% if form.skillathon_event.errors %}
                                 <div class="invalid-feedback d-block">
@@ -86,7 +86,7 @@
                         <div class="row">
                             <div class="col-md-4">
                                 <div class="form-group">
-                                    <label for="{{ form.learner_name.id_for_label }}">Full Name</label>
+                                    <label for="{{ form.learner_name.id_for_label }}">Full Name</label><span class="text-danger">*</span>
                                     {{ form.learner_name }}
                                     {% if form.learner_name.errors %}
                                     <div class="invalid-feedback d-block">
@@ -99,7 +99,7 @@
                             </div>
                             <div class="col-md-4">
                                 <div class="form-group">
-                                    <label for="{{ form.learner_email.id_for_label }}">Email</label>
+                                    <label for="{{ form.learner_email.id_for_label }}">Email</label><span class="text-danger">*</span>
                                     {{ form.learner_email }}
                                     {% if form.learner_email.errors %}
                                     <div class="invalid-feedback d-block">
@@ -112,7 +112,7 @@
                             </div>
                             <div class="col-md-4">
                                 <div class="form-group">
-                                    <label for="{{ form.learner_gender.id_for_label }}">Gender</label>
+                                    <label for="{{ form.learner_gender.id_for_label }}">Gender</label><span class="text-danger">*</span>
                                     {{ form.learner_gender }}
                                 </div>
                             </div>
@@ -121,7 +121,7 @@
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group">
-                                    <label for="{{ form.learner_phone.id_for_label }}">Mobile Number</label>
+                                    <label for="{{ form.learner_phone.id_for_label }}">Mobile Number</label><span class="text-danger">*</span>
                                     {{ form.learner_phone }}
                                     {% if form.learner_phone.errors %}
                                     <div class="invalid-feedback d-block">
@@ -154,7 +154,7 @@
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="form-group">
-                                        <label for="{{ form.college.id_for_label }}">College</label>
+                                        <label for="{{ form.college.id_for_label }}">College</label><span class="text-danger">*</span>
                                         {{ form.college }}
                                         {% if form.college.errors %}
                                         <div class="invalid-feedback d-block">
@@ -215,7 +215,7 @@
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="form-group">
-                                        <label for="{{ form.hospital.id_for_label }}">Hospital</label>
+                                        <label for="{{ form.hospital.id_for_label }}">Hospital</label><span class="text-danger">*</span>
                                         {{ form.hospital }}
                                         {% if form.hospital.errors %}
                                         <div class="invalid-feedback d-block">
@@ -395,6 +395,7 @@
         const learnerTypeSelect = document.getElementById('{{ form.learner_type.id_for_label }}');
         const skillathonSelect = document.getElementById('{{ form.skillathon_event.id_for_label }}');
         const collegeSelect = document.getElementById('{{ form.college.id_for_label }}');
+        const hospitalSelect = document.getElementById('{{ form.hospital.id_for_label }}');
         const educationalInstitutionInput = document.getElementById('{{ form.educational_institution.id_for_label }}');
     
         const skillathonEventFields = document.getElementById('skillathon-event-fields');
@@ -403,8 +404,9 @@
     
         function show(el){ if(el) el.style.display = 'block'; }
         function hide(el){ if(el) el.style.display = 'none'; }
-    
+        
         function toggleOnboardingFields(val){
+            console.log("DEBUG: toggleOnboardingFields called with value:", val);
             const typeVal = (val || '').toLowerCase();
             if (typeVal === 'b2c') {
                 show(skillathonEventFields);
@@ -415,6 +417,11 @@
                 if (skillathonSelect) skillathonSelect.required = false;
                 if (collegeSelect) collegeSelect.required = false;
             }
+            
+            // Load institutions and hospitals based on onboarding type
+            const skillathonId = skillathonSelect ? skillathonSelect.value : null;
+            loadInstitutions(skillathonId, typeVal);
+            loadHospitals(skillathonId, typeVal);
         }
     
         function toggleLearnerFields(val){
@@ -436,19 +443,44 @@
                 if (educationalInstitutionInput) educationalInstitutionInput.required = false;
             }
         }
+        
+        // Function to handle skillathon selection change
+        function handleSkillathonChange() {
+            const skillathonId = skillathonSelect ? skillathonSelect.value : null;
+            const onboardingType = onboardingSelect ? onboardingSelect.value.toLowerCase() : null;
+            
+            console.log("DEBUG: Skillathon changed, skillathonId:", skillathonId, "onboardingType:", onboardingType);
+            
+            // Load institutions and hospitals based on selected skillathon and onboarding type
+            loadInstitutions(skillathonId, onboardingType);
+            loadHospitals(skillathonId, onboardingType);
+        }
     
         // Initialize visibility on load with existing values (important for Edit)
         if (onboardingSelect) toggleOnboardingFields(onboardingSelect.value);
         if (learnerTypeSelect) toggleLearnerFields(learnerTypeSelect.value);
+        
+        // Load initial data based on current selections
+        const initialSkillathonId = skillathonSelect ? skillathonSelect.value : null;
+        const initialOnboardingType = onboardingSelect ? onboardingSelect.value.toLowerCase() : null;
+        if (initialOnboardingType) {
+            loadInstitutions(initialSkillathonId, initialOnboardingType);
+            loadHospitals(initialSkillathonId, initialOnboardingType);
+        }
     
-        // Also wire up change listeners (form widgets already have onchange attrs, but make it robust)
+        // Wire up change listeners
         if (onboardingSelect) onboardingSelect.addEventListener('change', function(e){
             toggleOnboardingFields(e.target.value);
             // Re-evaluate learner field requirements on onboarding change
             if (learnerTypeSelect) toggleLearnerFields(learnerTypeSelect.value);
         });
+        
         if (learnerTypeSelect) learnerTypeSelect.addEventListener('change', function(e){
             toggleLearnerFields(e.target.value);
+        });
+        
+        if (skillathonSelect) skillathonSelect.addEventListener('change', function(e){
+            handleSkillathonChange();
         });
     
         function showError(el){
@@ -483,5 +515,5 @@
             });
         }
     });
-    </script>
+</script>
 {% endblock %} 

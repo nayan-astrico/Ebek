@@ -120,5 +120,8 @@ urlpatterns = [
     path('api/users/create/', views.create_user, name='create_user'),
     path('api/users/<int:user_id>/update/', views.update_user, name='update_user'),
     path('api/users/<int:user_id>/', views.get_user, name='get_user'),
-    path('api/users/<int:user_id>/delete/', views.delete_user, name='delete_user')
+    path('api/users/<int:user_id>/delete/', views.delete_user, name='delete_user'),
+    path('api/users/<int:user_id>/toggle-active/', views.toggle_user_active, name='toggle_user_active'),
+    path('onboarding/learners/get-institutions-by-skillathon/', views.get_institutions_by_skillathon, name='get_institutions_by_skillathon'),
+    path('onboarding/learners/get-hospitals-by-skillathon/', views.get_hospitals_by_skillathon, name='get_hospitals_by_skillathon'),
 ]

@@ -55,6 +55,9 @@ class EbekUser(AbstractBaseUser, PermissionsMixin):
     # App-based permissions
     allowed_to_take_osce = models.BooleanField(default=False, help_text='User can take OSCE exams')
     allowed_to_take_skillathon = models.BooleanField(default=False, help_text='User can take skillathon events')
+    access_all_institutions = models.BooleanField(default=False, help_text='User has access to all institutions')
+    access_all_hospitals = models.BooleanField(default=False, help_text='User has access to all hospitals')
+    access_all_skillathons = models.BooleanField(default=False, help_text='User has access to all skillathon events')
     
     # Institution/Hospital/Skillathon mappings (Many-to-Many)
     assigned_institutions = models.ManyToManyField(
@@ -175,6 +178,10 @@ class EbekUser(AbstractBaseUser, PermissionsMixin):
                 return True
         if tab_name == 'assignments':
             if "view_assignment" in self.get_all_permissions() \
+                or self.has_all_permissions():
+                return True
+        if tab_name == 'onboarding':
+            if ("view_institutions" or "view_hospitals" or "view_learners" or "view_assessors" or "view_skillathons") in self.get_all_permissions() \
                 or self.has_all_permissions():
                 return True
         return False
@@ -364,6 +371,12 @@ class Assessor(models.Model):
             self.assessor_user.user_role = 'supervisor'
             self.assessor_user.save()
         super().save(*args, **kwargs)
+    
+    def get_full_name(self):
+        try:    
+            return self.assessor_user.full_name
+        except:
+            return "Assessor"
 
 class SkillathonEvent(models.Model):
 

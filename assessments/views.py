@@ -21,6 +21,7 @@ from django.shortcuts import redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import make_password
 from .models import *
+from django.db.models import Count
 from .utils_ses import *
 from django.urls import reverse
 from assessments.onboarding_views import *
@@ -3578,7 +3579,7 @@ def fetch_available_learners_for_batch(request, batch_id):
             
             available_learners.append({
                 'id': doc.id,
-                'name': learner_data.get('username', 'N/A'),
+                'name': learner_data.get('name', 'N/A'),
                 'email': learner_data.get('emailID', 'N/A'),
                 'isCurrentLearner': is_current_learner
             })
@@ -4297,6 +4298,13 @@ def create_roles(request):
             
             # Get permission objects
             permissions = Permission.objects.filter(code__in=permission_codes, is_active=True)
+
+            # Ensure exact set uniqueness
+            requested_permission_ids = set(permissions.values_list('id', flat=True))
+            existing_same_permissions = CustomRole.objects.annotate(perm_count=Count('permissions')).filter(perm_count=len(requested_permission_ids))
+            for role in existing_same_permissions:
+                if set(role.permissions.order_by('id').values_list('id', flat=True)) == requested_permission_ids:
+                    return JsonResponse({'error': 'Role with the same set of permissions already exists'}, status=400)
             
             # Create CustomRole
             custom_role, created = CustomRole.objects.get_or_create(
@@ -4474,13 +4482,17 @@ def assign_roles(request):
     
     # GET request - render the form
     # Build users with custom roles via model helper (no extra API needed)
-    users_qs = EbekUser.objects.filter(is_active=True).exclude(user_role__in=['nurse', 'student'])
+    users_qs = EbekUser.objects.exclude(user_role__in=['nurse', 'student'])
     users = []
     for u in users_qs:
         users.append({
             'id': u.id,
             'email': u.email,
             'full_name': u.full_name or u.email,
+            'is_active': u.is_active,
+            'access_all_institutes': u.access_all_institutions,
+            'access_all_hospitals': u.access_all_hospitals,
+            'access_all_skillathons': u.access_all_skillathons,
             'custom_roles': [{'id': r.id, 'name': r.name, 'description': r.description} for r in u.get_all_roles()],
         })
 
@@ -4508,6 +4520,9 @@ def get_user(request, user_id):
             'institution_ids': list(user.assigned_institutions.values_list('id', flat=True)),
             'hospital_ids': list(user.assigned_hospitals.values_list('id', flat=True)),
             'skillathon_ids': list(user.assigned_skillathons.values_list('id', flat=True)),
+            'access_all_institutes': user.access_all_institutions,
+            'access_all_hospitals': user.access_all_hospitals,
+            'access_all_skillathons': user.access_all_skillathons,
             'custom_roles': {'id': user.custom_roles.id, 'name': user.custom_roles.name, 'description': user.custom_roles.description} if user.custom_roles else []
         }
         return JsonResponse({'user': data})
@@ -4548,10 +4563,15 @@ def create_user(request):
         name = data.get('name', '').strip()
         email = data.get('email', '').strip()
         phone = data.get('phone', '').strip()
+        if EbekUser.objects.filter(email=email, phone_number=phone).exists():
+            return JsonResponse({'error': 'User with this email and mobile number already exists'}, status=400)
         access_types = data.get('access_types', [])
         institution_ids = data.get('institution_ids', [])  
         hospital_ids = data.get('hospital_ids', [])  
         skillathon_ids = data.get('skillathon_ids', [])  
+        access_all_institutes = data.get('access_all_institutes', False)
+        access_all_hospitals = data.get('access_all_hospitals', False)
+        access_all_skillathons = data.get('access_all_skillathons', False)
         role_id = data.get('role_id')
         # Derive permission ids from selected role if provided; otherwise keep empty
         try:
@@ -4628,15 +4648,24 @@ def create_user(request):
             phone_number=phone,
             allowed_to_take_osce=allowed_to_take_osce,
             allowed_to_take_skillathon=allowed_to_take_skillathon,
+            access_all_institutions=access_all_institutes,
+            access_all_hospitals=access_all_hospitals,
+            access_all_skillathons=access_all_skillathons,
             custom_roles=custom_role
         )
         
         # Assign many-to-many relationships
-        if institutions:
+        if access_all_institutes:
+            user.assigned_institutions.set(Institution.objects.all())
+        else:
             user.assigned_institutions.set(institutions)
-        if hospitals:
+        if access_all_hospitals:
+            user.assigned_hospitals.set(Hospital.objects.all())
+        else:
             user.assigned_hospitals.set(hospitals)
-        if skillathons:
+        if access_all_skillathons:
+            user.assigned_skillathons.set(SkillathonEvent.objects.all())
+        else:
             user.assigned_skillathons.set(skillathons)
         if permissions:
             user.user_permissions_custom.set(permissions)
@@ -4730,6 +4759,9 @@ def update_user(request, user_id):
         skillathon_ids = data.get('skillathon_ids', [])
         role_id = data.get('role_id')
         permission_ids = data.get('permission_ids', [])
+        access_all_institutes = data.get('access_all_institutes', False)
+        access_all_hospitals = data.get('access_all_hospitals', False)
+        access_all_skillathons = data.get('access_all_skillathons', False)
         # Align permission derivation with create_user: if role provided, derive permissions
         if role_id:
             try:
@@ -4755,6 +4787,9 @@ def update_user(request, user_id):
         # Update permissions
         user.allowed_to_take_osce = 'osce' in access_types
         user.allowed_to_take_skillathon = 'skillathon' in access_types
+        user.access_all_institutions = access_all_institutes
+        user.access_all_hospitals = access_all_hospitals
+        user.access_all_skillathons = access_all_skillathons
         
         # Update many-to-many assignments
         institutions = []
@@ -4795,9 +4830,18 @@ def update_user(request, user_id):
                 return JsonResponse({'error': f'Permission with ID {perm_id} not found'}, status=400)
         
         # Update many-to-many relationships
-        user.assigned_institutions.set(institutions)
-        user.assigned_hospitals.set(hospitals)
-        user.assigned_skillathons.set(skillathons)
+        if access_all_institutes:
+            user.assigned_institutions.set(Institution.objects.all())
+        else:
+            user.assigned_institutions.set(institutions)
+        if access_all_hospitals:
+            user.assigned_hospitals.set(Hospital.objects.all())
+        else:
+            user.assigned_hospitals.set(hospitals)
+        if access_all_skillathons:
+            user.assigned_skillathons.set(SkillathonEvent.objects.all())
+        else:
+            user.assigned_skillathons.set(skillathons)
         user.user_permissions_custom.set(permissions)
         
         # Update custom roles
@@ -4824,3 +4868,33 @@ def update_user(request, user_id):
         print(str(e))
         return JsonResponse({'error': str(e)}, status=500)
 
+
+@csrf_exempt
+@login_required
+def toggle_user_active(request, user_id):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+
+    try:
+        payload = json.loads(request.body or '{}')
+        is_active = payload.get('is_active')
+        if is_active is None:
+            return JsonResponse({'error': 'Missing is_active flag'}, status=400)
+
+        try:
+            user = EbekUser.objects.get(id=user_id)
+        except EbekUser.DoesNotExist:
+            return JsonResponse({'error': 'User not found'}, status=404)
+
+        user.is_active = bool(is_active)
+        user.save(update_fields=['is_active'])
+
+        return JsonResponse({
+            'success': True,
+            'message': f'User "{user.full_name or user.email}" is now {"active" if user.is_active else "inactive"}',
+            'is_active': user.is_active,
+        })
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON payload'}, status=400)
+    except Exception as exc:
+        return JsonResponse({'error': str(exc)}, status=500)

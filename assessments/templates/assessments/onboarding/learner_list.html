@@ -1492,7 +1492,6 @@ function openLearnerFormPanel(url, title) {
     fetch(url)
         .then(response => response.text())
         .then(html => {
-            console.log(html);
             document.getElementById('learnerFormContainer').innerHTML = html;
         });
 }
@@ -2486,12 +2485,85 @@ function toggleLearnerFields(learnerType) {
 // Function to toggle fields based on onboarding type (b2b/b2c)
 function toggleOnboardingFields(onboardingType) {
     const skillathonEventFields = document.getElementById('skillathon-event-fields');
+    loadInstitutions("", onboardingType);
+    loadHospitals("", onboardingType);
     
     if (onboardingType === 'b2c') {
         skillathonEventFields.style.display = 'block';
     } else {
         skillathonEventFields.style.display = 'none';
     }
+}
+
+// Function to load institutions based on skillathon and onboarding type
+function loadInstitutions(skillathonId = null, onboardingType = null) {
+    const collegeSelect = document.getElementById('id_college');
+    if (!collegeSelect) return;
+    
+    const params = new URLSearchParams();
+    if (skillathonId) params.append('skillathon_id', skillathonId);
+    if (onboardingType) params.append('onboarding_type', onboardingType);
+    
+    fetch(`/onboarding/learners/get-institutions-by-skillathon/?${params.toString()}`)
+        .then(response => response.json())
+        .then(data => {
+            // Clear existing options except the first one (empty option)
+            collegeSelect.innerHTML = '<option value="">---------</option>';
+            
+            // Add new options
+            data.institutions.forEach(institution => {
+                const option = document.createElement('option');
+                option.value = institution.id;
+                option.textContent = institution.name;
+                collegeSelect.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading institutions:', error);
+        });
+}
+
+// Function to load hospitals based on skillathon and onboarding type
+function loadHospitals(skillathonId = null, onboardingType = null) {
+    const hospitalSelect = document.getElementById('id_hospital');
+    if (!hospitalSelect) return;
+    
+    const params = new URLSearchParams();
+    if (skillathonId) params.append('skillathon_id', skillathonId);
+    if (onboardingType) params.append('onboarding_type', onboardingType);
+    
+    fetch(`/onboarding/learners/get-hospitals-by-skillathon/?${params.toString()}`)
+        .then(response => response.json())
+        .then(data => {
+            // Clear existing options except the first one (empty option)
+            hospitalSelect.innerHTML = '<option value="">---------</option>';
+            
+            // Add new options
+            data.hospitals.forEach(hospital => {
+                const option = document.createElement('option');
+                option.value = hospital.id;
+                option.textContent = hospital.name;
+                hospitalSelect.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading hospitals:', error);
+        });
+}
+
+// Function to handle skillathon selection change
+function handleSkillathonChange() {
+    const skillathonSelect = document.getElementById('id_skillathon_event');
+    const onboardingSelect = document.getElementById('id_onboarding_type');
+    
+    const skillathonId = skillathonSelect ? skillathonSelect.value : null;
+    const onboardingType = onboardingSelect ? onboardingSelect.value.toLowerCase() : null;
+    
+    console.log("DEBUG: Skillathon changed, skillathonId:", skillathonId, "onboardingType:", onboardingType);
+    
+    // Load institutions and hospitals based on selected skillathon and onboarding type
+    loadInstitutions(skillathonId, onboardingType);
+    loadHospitals(skillathonId, onboardingType);
 }
 </script>
 {% endblock %} 
