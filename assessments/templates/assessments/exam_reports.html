@@ -16,10 +16,10 @@
     <!-- Navigation Tabs -->
     <div class="reports-tabs">
         {% if "view_overall_report" in request.user.get_all_permissions  or request.user.has_all_permissions %}
-        <button class="tab-button active" onclick="switchTab('overall')">Overall Report</button>
+        <button class="tab-button active" onclick="switchTab('overall')" style="outline: none;">Overall Report</button>
         {% endif %}
         {% if "view_candidate_report" in request.user.get_all_permissions or request.user.has_all_permissions %}
-        <button class="tab-button" onclick="switchTab('student')">Candidate Report</button>
+        <button class="tab-button" onclick="switchTab('student')" style="outline: none;">Candidate Report</button>
         {% endif %}
     </div>
 
@@ -3374,8 +3374,15 @@
 
     // Initialize everything
     document.addEventListener("DOMContentLoaded", () => {
-        initializeOverallGradeChart();
-        initializeGenderCharts();
+        console.log("DOMContentLoaded");
+        try{
+            initializeOverallGradeChart();
+            initializeGenderCharts();
+        }catch(error){
+            console.error("Error initializing Overall Grade Chart and Gender Charts:", error);
+        }
+        
+        console.log("Initialized Overall Grade Chart and Gender Charts");
         
         // Fetch skillathons
         fetch('/fetch-skillathons/')

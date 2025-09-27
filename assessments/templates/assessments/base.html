@@ -710,6 +710,7 @@
         </div>
         {% endif %}
 
+        {% if request.user|check_icon_navigation_permissions:'onboarding' %}
         <div class="nav-item">
             <a href="#onboardingSubmenu" class="nav-link" data-toggle="collapse" aria-expanded="false" title="Onboarding and Management">
         <i class="fas fa-university"></i>
@@ -760,6 +761,7 @@
                 {% endif %}
             </div>
         </div>
+        {% endif %}
         {% if request.user|check_icon_navigation_permissions:'assignments' %}
         <div class="nav-item">
             <a href="{% url 'assign_assessment' %}" class="nav-link" title="View & Assign Assessments">

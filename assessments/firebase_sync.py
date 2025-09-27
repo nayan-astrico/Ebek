@@ -150,6 +150,9 @@ def sync_user_to_firestore(user):
         "skillathons_list": [skill.name for skill in user.assigned_skillathons.all()] if user.custom_roles else None,
         "allowed_to_take_osce": user.allowed_to_take_osce if user.custom_roles else user.allowed_to_take_osce,
         "allowed_to_take_skillathon": user.allowed_to_take_skillathon if user.custom_roles else user.allowed_to_take_skillathon,
+        "access_all_institutes": user.access_all_institutions,
+        "access_all_hospitals": user.access_all_hospitals,
+        "access_all_skillathons": user.access_all_skillathons,
         "learner_type": "not_applicable" if (user.custom_roles or user.is_superuser) else "",
     }
     db.collection("Users").document(str(user.id)).set(user_data)
@@ -224,19 +227,15 @@ def on_institute_save(sender, instance, created, **kwargs):
 
     db.collection("InstituteNames").document(str(instance.id)).set(data)
     
-    # Update unit head's user record with institute name
     if instance.unit_head:
-        # Find user document by email
         users_ref = db.collection("Users")
         query = users_ref.where("emailID", "==", instance.unit_head.email).limit(1)
         docs = query.get()
-        
         if docs:
-            # Update the first matching document
             user_data = {
                 "institute": instance.name,
                 "institute_id": str(instance.id),
-                "institute_active": instance.is_active,  # Add institute active status
+                "institute_active": instance.is_active,
             }
             docs[0].reference.update(user_data)
 
@@ -244,30 +243,6 @@ def on_institute_save(sender, instance, created, **kwargs):
 def on_institution_delete(sender, instance, **kwargs):
     # Delete from Firestore
     db.collection("InstituteNames").document(str(instance.id)).delete()
-    
-    # Delete unit head user if exists
-    if instance.unit_head:
-        # Delete from Firebase Auth
-        try:
-            fb_user = auth.get_user_by_email(instance.unit_head.email)
-            auth.delete_user(fb_user.uid)
-        except auth.UserNotFoundError:
-            pass
-        
-        # Delete from Firestore
-        users_ref = db.collection("Users")
-        query = users_ref.where("emailID", "==", instance.unit_head.email).limit(1)
-        docs = query.get()
-        if docs:
-            docs[0].reference.delete()
-        
-        # Delete from Django admin
-        User = get_user_model()
-        try:
-            user = User.objects.get(email=instance.unit_head.email)
-            user.delete()
-        except User.DoesNotExist:
-            pass
 
 # --- Skillathon Sync ---
 @receiver(post_save, sender=SkillathonEvent)
@@ -304,20 +279,15 @@ def on_hospital_save(sender, instance, created, **kwargs):
         "skillathon_event": instance.skillathon.name if instance.skillathon else None
     }
     db.collection("HospitalNames").document(str(instance.id)).set(data)
-    
-    # Update unit head's user record with hospital name
     if instance.unit_head:
-        # Find user document by email
         users_ref = db.collection("Users")
         query = users_ref.where("emailID", "==", instance.unit_head.email).limit(1)
         docs = query.get()
-        
         if docs:
-            # Update the first matching document
             user_data = {
                 "hospital": instance.name,
                 "hospital_id": str(instance.id),
-                "hospital_active": instance.is_active,  # Add hospital active status
+                "hospital_active": instance.is_active,
             }
             docs[0].reference.update(user_data)
 
@@ -325,30 +295,6 @@ def on_hospital_save(sender, instance, created, **kwargs):
 def on_hospital_delete(sender, instance, **kwargs):
     # Delete from Firestore
     db.collection("HospitalNames").document(str(instance.id)).delete()
-    
-    # Delete unit head user if exists
-    if instance.unit_head:
-        # Delete from Firebase Auth
-        try:
-            fb_user = auth.get_user_by_email(instance.unit_head.email)
-            auth.delete_user(fb_user.uid)
-        except auth.UserNotFoundError:
-            pass
-        
-        # Delete from Firestore
-        users_ref = db.collection("Users")
-        query = users_ref.where("emailID", "==", instance.unit_head.email).limit(1)
-        docs = query.get()
-        if docs:
-            docs[0].reference.delete()
-        
-        # Delete from Django admin
-        User = get_user_model()
-        try:
-            user = User.objects.get(email=instance.unit_head.email)
-            user.delete()
-        except User.DoesNotExist:
-            pass
 
 # --- Group Sync ---
 @receiver(post_save, sender=Group)
@@ -531,6 +477,7 @@ def on_assessor_save(sender, instance, created, **kwargs):
                 # Add institution/hospital specific data
                 if instance.institution:
                     user_data["institution"] = instance.institution.name
+                    
                 if instance.hospital:
                     user_data["hospital"] = instance.hospital.name
                 

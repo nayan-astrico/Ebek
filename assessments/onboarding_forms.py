@@ -117,6 +117,28 @@ class LearnerForm(forms.ModelForm):
             'onchange': 'toggleOnboardingFields(this.value)'
         })
 
+        self.fields['skillathon_event'].widget.attrs.update({
+            'onchange': 'handleSkillathonChange(this.value)'
+        })
+
+        self.fields['onboarding_type'].required = True
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        onboarding_type = cleaned_data.get("onboarding_type")
+        skillathon_event = cleaned_data.get("skillathon_event")
+        college = cleaned_data.get("college")
+        learner_type = cleaned_data.get("learner_type")
+        hospital = cleaned_data.get("hospital")
+
+        if onboarding_type == "b2c" and not skillathon_event:
+            self.add_error("skillathon_event", "This field is required for B2C onboarding.")
+        if learner_type == "student" and not college:
+            self.add_error("college", "This field is required for student onboarding.")
+        if learner_type == "nurse" and not hospital:
+            self.add_error("hospital", "This field is required for nurse onboarding.")
+        return cleaned_data
+        
 class AssessorForm(forms.ModelForm):
     UNIT_TYPE_CHOICES = [
         ('institution', 'Institution'),

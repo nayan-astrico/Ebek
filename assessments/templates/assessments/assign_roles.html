@@ -57,22 +57,16 @@
                     <input type="tel" class="form-control" id="userPhone" name="phone" required>
                 </div>
             </div>
-            
-            <!-- Step 2: User Type Selection (removed; all users are regular users) -->
-            <div class="form-step" id="step2" style="display: none;"></div>
-            
+                        
             <!-- Step 3: Access Type Selection (for regular users) -->
-            <div class="form-step" id="step3">
-                <h4 class="step-title">Access Type</h4>
+            <div class="form-step" id="step2">
+                <h4 class="step-title">Access Type for OSCE App</h4>
                 <div class="form-group">
                     <label>What should this user be able to do?</label>
                     <div class="access-options">
                         <div class="access-option">
                             <input type="checkbox" id="takeSkillathon" name="access_types" value="skillathon">
                             <label for="takeSkillathon" class="access-label">
-                                <div class="access-icon skillathon">
-                                    <i class="fas fa-trophy"></i>
-                                </div>
                                 <div class="access-info">
                                     <div class="access-name">Take Skillathons</div>
                                     <div class="access-description">Allow user to participate in skillathon events</div>
@@ -83,9 +77,6 @@
                         <div class="access-option">
                             <input type="checkbox" id="takeOSCE" name="access_types" value="osce">
                             <label for="takeOSCE" class="access-label">
-                                <div class="access-icon osce">
-                                    <i class="fas fa-stethoscope"></i>
-                                </div>
                                 <div class="access-info">
                                     <div class="access-name">Take OSCE</div>
                                     <div class="access-description">Allow user to participate in OSCE exams</div>
@@ -97,13 +88,16 @@
             </div>
             
             <!-- Step 4: Institution & Hospital Selection (for regular users) -->
-            <div class="form-step" id="step4">
+            <div class="form-step" id="step3">
                 <h4 class="step-title">Institution & Hospital</h4>
                 <div class="form-group">
                     <label class="form-label">Institution</label>
                     <div id="institutionChips" class="chip-container"></div>
                     <div class="dropdown-container">
                         <button class="dropdown-btn" id="institutionDropdownBtn">Select Institution</button>
+                        <div class="dropdown-search" id="institutionSearchContainer">
+                            <input type="text" id="institutionSearch" placeholder="Search institution">
+                        </div>
                         <ul class="dropdown-list" id="institutionDropdownList"></ul>
                     </div>
                 </div>
@@ -113,6 +107,9 @@
                     <div id="hospitalChips" class="chip-container"></div>
                     <div class="dropdown-container">
                         <button class="dropdown-btn" id="hospitalDropdownBtn">Select Hospital</button>
+                        <div class="dropdown-search" id="hospitalSearchContainer">
+                            <input type="text" id="hospitalSearch" placeholder="Search hospital">
+                        </div>
                         <ul class="dropdown-list" id="hospitalDropdownList"></ul>
                     </div>
                 </div>
@@ -123,13 +120,34 @@
                     <div id="skillathonChips" class="chip-container"></div>
                     <div class="dropdown-container">
                         <button class="dropdown-btn" id="skillathonDropdownBtn">Select Skillathon</button>
+                        <div class="dropdown-search" id="skillathonSearchContainer">
+                            <input type="text" id="skillathonSearch" placeholder="Search skillathon">
+                        </div>
                         <ul class="dropdown-list" id="skillathonDropdownList"></ul>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Full Access Overrides</label>
+                    <div class="full-access-options simple">
+                        <label class="full-access-simple" for="accessAllInstitutes">
+                            <input type="checkbox" id="accessAllInstitutes" name="access_all_institutes">
+                            <span>Access to all institutes</span>
+                        </label>
+                        <label class="full-access-simple" for="accessAllHospitals">
+                            <input type="checkbox" id="accessAllHospitals" name="access_all_hospitals">
+                            <span>Access to all hospitals</span>
+                        </label>
+                        <label class="full-access-simple" for="accessAllSkillathons">
+                            <input type="checkbox" id="accessAllSkillathons" name="access_all_skillathons">
+                            <span>Access to all skillathons</span>
+                        </label>
                     </div>
                 </div>
             </div>
             
             <!-- Step 5: Role Assignment (for regular users) -->
-            <div class="form-step" id="step5">
+            <div class="form-step" id="step4">
                 <h4 class="step-title">Assign Role</h4>
                 <div class="form-group">
                     <label>Select Role <span class="text-danger">*</span></label>
@@ -167,6 +185,7 @@
             <tr>
                 <th>User</th>
                 <th>Email</th>
+                <th>Status</th>
                 <th>Current Roles</th>
                 <th>Actions</th>
             </tr>
@@ -362,6 +381,77 @@
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
+}
+
+.full-access-options.simple {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.full-access-simple {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    font-size: 14px;
+    color: #374151;
+}
+
+.full-access-simple input {
+    width: 16px;
+    height: 16px;
+}
+
+.status-toggle {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.status-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.status-toggle .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #cbd5f5;
+    transition: .3s;
+}
+
+.status-toggle .slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .3s;
+}
+
+.status-toggle input:checked + .slider {
+    background-color: #1AA09A;
+}
+
+.status-toggle input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+.status-toggle .slider.round {
+    border-radius: 24px;
+}
+
+.status-toggle .slider.round:before {
+    border-radius: 50%;
 }
 
 .role-badge {
@@ -704,6 +794,34 @@
     list-style: none;
 }
 
+.dropdown-list li label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    width: 100%;
+    cursor: pointer;
+}
+
+.dropdown-list li input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.dropdown-list li label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    width: 100%;
+    cursor: pointer;
+}
+
+.dropdown-list li input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
 /* Dropdown UI (same behavior as assignments) */
 .dropdown-container { position: relative; }
 .dropdown-btn {
@@ -720,20 +838,88 @@
 .dropdown-btn:hover { background-color: #e9ecef; }
 .dropdown-list {
     position: absolute;
+    top: calc(100% + 48px);
     width: 100%;
     background: #fff;
     border: 1px solid #ced4da;
-    border-radius: 6px;
+    border-radius: 0 0 6px 6px;
     box-shadow: 0 8px 16px rgba(0,0,0,0.08);
     max-height: 240px;
     overflow-y: auto;
-    margin-top: 6px;
+    margin-top: 0;
     display: none;
     z-index: 1000;
 }
 .dropdown-list.show { display: block; }
 .dropdown-list li { padding: 10px 12px; cursor: pointer; }
 .dropdown-list li:hover { background: #f7fafc; }
+
+.dropdown-search {
+    position: absolute;
+    top: 100%;
+    width: 100%;
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-radius: 6px 6px 0 0;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.08);
+    padding: 8px 10px;
+    display: none;
+    z-index: 1001;
+}
+
+.dropdown-search.show { display: block; }
+
+.dropdown-search input {
+    width: 100%;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+}
+
+.dropdown-search {
+    position: absolute;
+    top: 100%;
+    width: 100%;
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-top: none;
+    padding: 8px 10px;
+    display: none;
+    z-index: 1010;
+}
+
+.dropdown-search.show { display: block; }
+
+.dropdown-search input {
+    width: 100%;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+}
+
+.dropdown-search {
+    position: absolute;
+    top: 100%;
+    width: 100%;
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-top: none;
+    padding: 8px 10px;
+    display: none;
+    z-index: 1010;
+}
+
+.dropdown-search.show { display: block; }
+
+.dropdown-search input {
+    width: 100%;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+}
 
 /* Modal overrides */
 .modal .spinner-border { vertical-align: middle; }
@@ -744,7 +930,7 @@
 let allUsers = [];
 let filteredUsers = [];
 let currentStep = 1;
-const totalSteps = 4; // Step 2 removed
+const totalSteps = 4; 
 let prefillRoleId = null;
 
 // Initialize on page load
@@ -753,15 +939,25 @@ document.addEventListener('DOMContentLoaded', function() {
     // Dropdown toggle and outside click (like assignments)
     document.addEventListener('click', function(){
         document.querySelectorAll('.dropdown-list').forEach(l=> l.classList.remove('show'));
+        document.querySelectorAll('.dropdown-search').forEach(s=> s.classList.remove('show'));
     });
     ['institution','hospital','skillathon'].forEach(prefix => {
         const btn = document.getElementById(prefix+'DropdownBtn');
         const list = document.getElementById(prefix+'DropdownList');
+        const searchContainer = document.getElementById(prefix+'SearchContainer');
+        const searchInput = document.getElementById(prefix+'Search');
         if(btn && list){
             btn.addEventListener('click', function(e){
                 e.preventDefault(); e.stopPropagation();
                 document.querySelectorAll('.dropdown-list').forEach(l=> { if(l!==list) l.classList.remove('show'); });
+                document.querySelectorAll('.dropdown-search').forEach(s=> { if(s!==searchContainer) s.classList.remove('show'); });
                 list.classList.toggle('show');
+                if(searchContainer){
+                    searchContainer.classList.toggle('show');
+                    if(searchContainer.classList.contains('show')){
+                        setTimeout(()=> searchInput && searchInput.focus(), 0);
+                    }
+                }
             });
             // Dedicated list click handler to ensure selection works
             list.addEventListener('click', function(e){
@@ -777,13 +973,26 @@ document.addEventListener('DOMContentLoaded', function() {
                     addChip('skillathonChips', li.dataset.id, li.dataset.value);
                 }
                 list.classList.remove('show');
+                if(searchContainer){ searchContainer.classList.remove('show'); }
             });
+            if(searchInput){
+                searchInput.addEventListener('keyup', function(){
+                    filterDropdownItems(prefix, this.value.trim().toLowerCase());
+                });
+            }
         }
     });
     
     document.getElementById('createUserForm').addEventListener('submit', function(e) {
         e.preventDefault();
         createUser();
+    });
+    document.addEventListener('change', function(e) {
+        if(e.target.classList.contains('user-status-toggle')){
+            const userId = e.target.dataset.userId;
+            const isActive = e.target.checked;
+            toggleUserStatus(userId, isActive, e.target);
+        }
     });
     
     // Add event listeners to access type checkboxes
@@ -798,7 +1007,91 @@ function addChip(containerId, id, label) {
     if ($(`#${containerId} .chip[data-id="${id}"]`).length) return;
     $(`#${containerId}`).append(`<span class="chip" data-id="${id}" data-value="${label}">${label}<span class="remove">&times;</span></span>`);
 }
+function removeChip(containerId, id){
+    $(`#${containerId} .chip[data-id="${id}"]`).remove();
+}
 function clearChips(containerId){ $(`#${containerId}`).empty(); }
+
+function uncheckDropdownCheckbox(containerId, id){
+    let listId = null;
+    if(containerId === 'institutionChips') listId = 'institutionDropdownList';
+    else if(containerId === 'hospitalChips') listId = 'hospitalDropdownList';
+    else if(containerId === 'skillathonChips') listId = 'skillathonDropdownList';
+    if(!listId) return;
+    const checkbox = document.querySelector(`#${listId} input[type="checkbox"][value="${id}"]`);
+    if(checkbox){
+        checkbox.checked = false;
+    }
+}
+
+function renderDropdownList(prefix, items){
+    const list = document.getElementById(`${prefix}DropdownList`);
+    if(!list) return;
+    const chipsId = `${prefix}Chips`;
+    const changeHandler = prefix === 'institution' ? handleInstitutionChange : prefix === 'hospital' ? handleHospitalChange : null;
+
+    list.innerHTML = '';
+
+    items.forEach(item => {
+        const li = document.createElement('li');
+        li.dataset.id = item.id;
+        li.dataset.value = item.name;
+
+        const label = document.createElement('label');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = item.id;
+
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(item.name));
+        li.appendChild(label);
+
+        const isSelected = document.querySelector(`#${chipsId} .chip[data-id="${item.id}"]`);
+        checkbox.checked = !!isSelected;
+
+        checkbox.addEventListener('change', function(){
+            if(this.checked){
+                addChip(chipsId, item.id, item.name);
+            } else {
+                removeChip(chipsId, item.id);
+            }
+            if(changeHandler) changeHandler();
+        });
+
+        label.addEventListener('click', function(e){ e.stopPropagation(); });
+        li.addEventListener('click', function(){
+            checkbox.checked = !checkbox.checked;
+            checkbox.dispatchEvent(new Event('change'));
+        });
+
+        list.appendChild(li);
+    });
+}
+
+function getDropdownItems(prefix){
+    const list = document.getElementById(`${prefix}DropdownList`);
+    if(!list) return [];
+    try {
+        return JSON.parse(list.dataset.items || '[]');
+    } catch (err) {
+        return [];
+    }
+}
+
+function filterDropdownItems(prefix, term){
+    const items = getDropdownItems(prefix);
+    if(!items.length){
+        renderDropdownList(prefix, []);
+        return;
+    }
+    if(!term){
+        renderDropdownList(prefix, items);
+        return;
+    }
+    const lower = term.toLowerCase();
+    const filtered = items.filter(item => (item.name || '').toLowerCase().includes(lower));
+    renderDropdownList(prefix, filtered);
+}
 
 // Side panel functions
 function toggleCreateUserPanel() {
@@ -833,6 +1126,7 @@ function resetForm() {
 
 // Step navigation
 function changeStep(direction) {
+    
     if (direction === 1) {
         // Next step
         if (validateCurrentStep()) {
@@ -853,17 +1147,17 @@ function changeStep(direction) {
 function showStep(step) {
     // Hide all steps
     document.getElementById('step1').classList.remove('active');
+    document.getElementById('step2').classList.remove('active');
     document.getElementById('step3').classList.remove('active');
     document.getElementById('step4').classList.remove('active');
-    document.getElementById('step5').classList.remove('active');
     
     // Show current step
-    const map = {1:'step1', 2:'step3', 3:'step4', 4:'step5'};
+    const map = {1:'step1', 2:'step2', 3:'step3', 4:'step4'};
     const targetId = map[step];
     if (targetId) document.getElementById(targetId).classList.add('active');
     
     // Load data when reaching specific steps
-    if (step === 3) {
+    if (step === 2) {
         // Load institutions, hospitals and skillathons independently
         loadInstitutions();
         loadHospitals();
@@ -871,7 +1165,7 @@ function showStep(step) {
         loadSkillathons();
     }
     
-    if (step === 4) {
+    if (step === 3) {
         // Load roles when reaching step 5 (only if not already loaded)
         const rolesList = document.getElementById('rolesList');
         if (!rolesList || rolesList.children.length === 0) {
@@ -912,13 +1206,13 @@ function validateCurrentStep() {
     
     // Step 3: access types are optional now (no validation)
     
-    if (currentStep === 3) {
+    if (currentStep === 2) {
         // Step 3 uses chip-based selectors; all fields are optional.
         // Do not reference legacy selects; allow proceeding without checks.
         return true;
     }
     
-    if (currentStep === 4) {
+    if (currentStep === 3) {
         const userType = document.querySelector('input[name="user_type"]:checked');
         if (userType && userType.value === 'regular_user') {
             const selectedRole = document.querySelector('input[name="role_id"]:checked');
@@ -965,13 +1259,9 @@ function loadInstitutions() {
     .then(data => {
         const list = document.getElementById('institutionDropdownList');
         list.innerHTML = '';
-        (data.institutions||[]).forEach(inst => {
-            const li = document.createElement('li');
-            li.dataset.id = inst.id;
-            li.dataset.value = inst.name;
-            li.textContent = inst.name;
-            list.appendChild(li);
-        });
+        const items = data.institutions || [];
+        list.dataset.items = JSON.stringify(items.map(inst => ({id: inst.id, name: inst.name})));
+        renderDropdownList('institution', items.map(inst => ({id: inst.id, name: inst.name})));
     })
     .catch(() => showError('Failed to load institutions'));
 }
@@ -993,13 +1283,9 @@ function loadHospitals() {
     .then(data => {
         const list = document.getElementById('hospitalDropdownList');
         list.innerHTML = '';
-        (data.hospitals||[]).forEach(h => {
-            const li = document.createElement('li');
-            li.dataset.id = h.id;
-            li.dataset.value = h.name;
-            li.textContent = h.name;
-            list.appendChild(li);
-        });
+        const items = data.hospitals || [];
+        list.dataset.items = JSON.stringify(items.map(h => ({id: h.id, name: h.name})));
+        renderDropdownList('hospital', items.map(h => ({id: h.id, name: h.name})));
     })
     .catch(() => showError('Failed to load hospitals'));
 }
@@ -1012,14 +1298,8 @@ function loadSkillathons() {
         const list = document.getElementById('skillathonDropdownList');
         list.innerHTML = '';
         const events = data.events || data.skillathons || [];
-        events.forEach(s => {
-            const label = s.name || s.skillathonName || 'Skillathon';
-            const li = document.createElement('li');
-            li.dataset.id = s.id;
-            li.dataset.value = label;
-            li.textContent = label;
-            list.appendChild(li);
-        });
+        list.dataset.items = JSON.stringify(events.map(s => ({id: s.id, name: s.name || s.skillathonName || 'Skillathon'})));
+        renderDropdownList('skillathon', events.map(s => ({id: s.id, name: s.name || s.skillathonName || 'Skillathon'})));
     })
     .catch(() => showError('Failed to load skillathons'));
 }
@@ -1094,6 +1374,9 @@ function createUser() {
     data.institution_ids = Array.from(document.querySelectorAll('#institutionChips .chip')).map(c => c.dataset.id);
     data.hospital_ids = Array.from(document.querySelectorAll('#hospitalChips .chip')).map(c => c.dataset.id);
     data.skillathon_ids = Array.from(document.querySelectorAll('#skillathonChips .chip')).map(c => c.dataset.id);
+    data.access_all_institutes = document.getElementById('accessAllInstitutes').checked;
+    data.access_all_hospitals = document.getElementById('accessAllHospitals').checked;
+    data.access_all_skillathons = document.getElementById('accessAllSkillathons').checked;
     
     // Add permissions (empty for now, can be extended later)
     data.permission_ids = [];
@@ -1138,6 +1421,32 @@ function createUser() {
         buttonText.textContent = isEdit ? 'Save' : 'Create User';
         submitBtn.disabled = false;
     });
+}
+
+function toggleUserStatus(userId, isActive, checkboxEl){
+    const previousChecked = checkboxEl.checked;
+    checkboxEl.disabled = true;
+    fetch(`/api/users/${userId}/toggle-active/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({ is_active: isActive })
+    }).then(response => response.json())
+      .then(data => {
+        if(!data.success){
+            checkboxEl.checked = !previousChecked;
+            showError(data.error || 'Failed to update user status');
+        } else {
+            showSuccess(data.message || 'User status updated');
+        }
+      }).catch(() => {
+        checkboxEl.checked = !previousChecked;
+        showError('Failed to update user status');
+      }).finally(() => {
+        checkboxEl.disabled = false;
+      });
 }
 
 // Assign roles function
@@ -1249,6 +1558,12 @@ function renderUsers() {
             </td>
             <td>${user.email}</td>
             <td>
+                <label class="status-toggle">
+                    <input type="checkbox" class="user-status-toggle" data-user-id="${user.id}" ${user.is_active ? 'checked' : ''}>
+                    <span class="slider round"></span>
+                </label>
+            </td>
+            <td>
                 <div class="roles-badges">
                     ${user.custom_roles.length > 0 ? 
                         user.custom_roles.map(role => `<span class="role-badge">${role.name}</span>`).join('') :
@@ -1294,7 +1609,14 @@ document.addEventListener('click', function(e){
     if(e.target.matches('.chip .remove')){
         e.preventDefault();
         const chip = e.target.closest('.chip');
-        chip.remove();
+        if(chip){
+            const containerId = chip.parentElement.id;
+            const id = chip.dataset.id;
+            chip.remove();
+            uncheckDropdownCheckbox(containerId, id);
+            if(containerId === 'institutionChips'){ handleInstitutionChange(); }
+            if(containerId === 'hospitalChips'){ handleHospitalChange(); }
+        }
     }
 });
 
@@ -1331,6 +1653,7 @@ async function openEditUser(userId){
         window.__editingUserId = userId;
         toggleCreateUserPanel();
         document.getElementById('createUserTitle').textContent = 'Edit User';
+        document.getElementById('submitButtonText').textContent = 'Save';
         
         // Reset form and set current step to 1 first
         currentStep = 1;
@@ -1343,6 +1666,9 @@ async function openEditUser(userId){
         // access
         document.getElementById('takeOSCE').checked = (u.access_types||[]).includes('osce');
         document.getElementById('takeSkillathon').checked = (u.access_types||[]).includes('skillathon');
+        document.getElementById('accessAllInstitutes').checked = !!u.access_all_institutes;
+        document.getElementById('accessAllHospitals').checked = !!u.access_all_hospitals;
+        document.getElementById('accessAllSkillathons').checked = !!u.access_all_skillathons;
         // Selections (set after ensure data lists loaded)
         await Promise.all([loadInstitutions(), loadHospitals(), loadSkillathons()]);
         // set selected options
@@ -1363,7 +1689,12 @@ async function openEditUser(userId){
         clearChips('skillathonChips'); prefillFromList('skillathonDropdownList','skillathonChips', skillIds);
         // Roles: preselect first if present
         // Remember role to preselect during loadRoles
-        prefillRoleId = (u.custom_roles||[]).length ? u.custom_roles[0].id : null;
+        try{
+            prefillRoleId = u.custom_roles.id;
+        }catch(e){
+            prefillRoleId = null;
+        }
+        console.log(prefillRoleId)
         await loadRoles();
         
         // Ensure we stay on step 1 after all data is loaded

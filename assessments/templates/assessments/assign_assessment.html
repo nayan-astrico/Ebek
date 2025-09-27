@@ -41,7 +41,7 @@
                 <th>Skillathon</th>
                 <th>Procedures</th>
                 <th>Status</th>
-                <th>Actions</th>
+                <!-- <th>Actions</th> -->
             </tr>
         </thead>
         <tbody>
@@ -65,7 +65,7 @@
                         {{ test.status }}
                     </span>
                 </td>
-                <td>
+                <!-- <td>
                     <div class="actions">
                         {% if "edit_assignment" in request.user.get_all_permissions or request.user.has_all_permissions %}
                         <button class="btn-icon" onclick="openEditTestPanel('{{ test.id }}')" title="Edit">
@@ -78,7 +78,7 @@
                         </button>
                         {% endif %}
                     </div>
-                </td>
+                </td> -->
             </tr>
             {% empty %}
             <tr>
