@@ -181,7 +181,7 @@ class EbekUser(AbstractBaseUser, PermissionsMixin):
                 or self.has_all_permissions():
                 return True
         if tab_name == 'onboarding':
-            if ("view_institutions" or "view_hospitals" or "view_learners" or "view_assessors" or "view_skillathons") in self.get_all_permissions() \
+            if ("view_institutions" in self.get_all_permissions()  or "view_hospitals" in self.get_all_permissions() or "view_learners" in self.get_all_permissions() or "view_assessors" in self.get_all_permissions() or "view_skillathons" in self.get_all_permissions()) \
                 or self.has_all_permissions():
                 return True
         return False

@@ -4913,11 +4913,11 @@ def update_test_status(request, test_id, status):
             return JsonResponse({'error': 'Test not found'}, status=404)
         test_ref.update({'status': status})
         procedure_assignments = test_doc.to_dict().get('procedureAssignments', [])
-        for procedure_assignment in procedure_assignments:
-            procedure_assignment_doc = procedure_assignment.get()
+        for procedure_assignment_ref in procedure_assignments:
+            procedure_assignment_doc = procedure_assignment_ref.get()
             if not procedure_assignment_doc.exists:
                 return JsonResponse({'error': 'Procedure assignment not found'}, status=404)
-            procedure_assignment_doc.update({'status': status})
+            procedure_assignment_ref.update({'status': status})
         return JsonResponse({'success': True})
     except Exception as e:
         print(e)
@@ -4925,4 +4925,3 @@ def update_test_status(request, test_id, status):
 
         if not status:
             return JsonResponse({'error': 'Status is required'}, status=400)
-            

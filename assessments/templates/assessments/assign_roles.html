@@ -1646,6 +1646,10 @@ function editUserRoles(userId, userName) {
 // Open edit user side panel (reuse create panel but prefill)
 async function openEditUser(userId){
     try{
+        // Reset form and set current step to 1 first
+        currentStep = 1;
+        showStep(1);
+
         const res = await fetch(`/api/users/${userId}/`);
         const data = await res.json();
         console.log(data)
@@ -1655,9 +1659,6 @@ async function openEditUser(userId){
         document.getElementById('createUserTitle').textContent = 'Edit User';
         document.getElementById('submitButtonText').textContent = 'Save';
         
-        // Reset form and set current step to 1 first
-        currentStep = 1;
-        showStep(1);
         
         const u = data.user;
         document.getElementById('userName').value = u.name || '';
@@ -1696,10 +1697,6 @@ async function openEditUser(userId){
         }
         console.log(prefillRoleId)
         await loadRoles();
-        
-        // Ensure we stay on step 1 after all data is loaded
-        currentStep = 1;
-        showStep(1);
     }catch(e){
         console.error(e); showError('Error opening user');
     }
