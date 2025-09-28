@@ -41,7 +41,7 @@
                 <th>Skillathon</th>
                 <th>Procedures</th>
                 <th style="width: 15%;">Status</th>
-                <!-- <th>Actions</th> -->
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -61,12 +61,24 @@
                     {% endfor %}
                 </td>
                 <td>
-                    <select class="status-select" data-test-id="{{ test.id }}" onchange="updateTestStatus(this, '{{ test.id }}')">
-                        <option value="Pending" {% if test.status == 'Pending' or test.status == 'Not Completed' %}selected{% endif %}>Pending</option>
-                        <option value="In Progress" {% if test.status == 'In Progress' %}selected{% endif %}>In Progress</option>
-                        <option value="Completed" {% if test.status == 'Completed' %}selected{% endif %}>Completed</option>
-                    </select>
+                    {% if test.status == 'In Progress' or test.status == 'Not Completed' %}
+                    <span class="badge badge-info">In Progress</span>
+                    {% elif test.status == 'Completed' %}
+                    <span class="badge badge-info">Completed</span>
+                    {% else %}
+                    <span class="badge badge-info">{{ test.status }}</span>
+                    {% endif %}
                 </td>
+                <td>
+                    <div class="actions">
+                        {% if test.status == 'Completed' %}
+                        <input type="checkbox" class="test-status-toggle" data-test-id="{{ test.id }}" data-status="{{ test.status }}" onchange="updateTestStatus(this, '{{ test.id }}')" checked>
+                        {% else %}
+                        <input type="checkbox" class="test-status-toggle" data-test-id="{{ test.id }}" data-status="{{ test.status }}" onchange="updateTestStatus(this, '{{ test.id }}')">
+                        {% endif %}
+                    </div>
+                </td>
+                
                 <!-- <td>
                     <div class="actions">
                         {% if "edit_assignment" in request.user.get_all_permissions or request.user.has_all_permissions %}
@@ -878,9 +890,16 @@
     });
 
     function updateTestStatus(select, testId) {
-        const status = select.value;
+        const status = select.checked;
+        console.log(status)
+        var status_new;
+        if(status == true){
+            status_new = 'Completed';
+        } else {
+            status_new = 'In Progress';
+        }
         $.ajax({
-            url: `/update-test-status/${testId}/${status}/`,
+            url: `/update-test-status/${testId}/${status_new}/`,
             type: 'GET',
             success: function (response) {
                 alert('Test status updated successfully.');
@@ -890,7 +909,7 @@
                 console.error(xhr.responseJSON.error);
             },
             complete: function () {
-                select.prop('disabled', false);
+                console.log('complete');
             },
         });
     }
