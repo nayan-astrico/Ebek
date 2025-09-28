@@ -262,6 +262,7 @@
 
 <style>
 
+
 .btn-secondary {
     background: #f8f9fa;
     border: 1px solid #dee2e6;
@@ -1656,10 +1657,10 @@ async function openEditUser(userId){
         if(!data.user){ showError('Failed to load user'); return; }
         window.__editingUserId = userId;
         toggleCreateUserPanel();
-        document.getElementById('createUserTitle').textContent = 'Edit User';
+        document.getElementById('createUserTitle').innerHTML = 'Edit User <span class="spinner-border spinner-border-sm" role="status"></span>';
         document.getElementById('submitButtonText').textContent = 'Save';
         
-        
+
         const u = data.user;
         document.getElementById('userName').value = u.name || '';
         document.getElementById('userEmail').value = u.email || '';
@@ -1697,6 +1698,7 @@ async function openEditUser(userId){
         }
         console.log(prefillRoleId)
         await loadRoles();
+        document.getElementById('createUserTitle').textContent = 'Edit User';
     }catch(e){
         console.error(e); showError('Error opening user');
     }
