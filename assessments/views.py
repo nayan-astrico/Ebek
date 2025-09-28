@@ -1134,7 +1134,11 @@ def get_grade_letter(percentage):
 def fetch_skillathons(request):
     """Fetch all skillathons from the Skillathon collection."""
     try:
-        assigned_skillathons = list(request.user.assigned_skillathons.values_list('name', flat=True))
+        if request.user.is_superuser or request.user.has_all_permissions() or request.user.access_all_skillathons:
+            print("here")
+            assigned_skillathons = SkillathonEvent.objects.all().values_list('name', flat=True)
+        else:
+            assigned_skillathons = list(request.user.assigned_skillathons.values_list('name', flat=True))
         
         # Helper function to chunk lists
         def chunk(lst, n):
@@ -4898,3 +4902,27 @@ def toggle_user_active(request, user_id):
         return JsonResponse({'error': 'Invalid JSON payload'}, status=400)
     except Exception as exc:
         return JsonResponse({'error': str(exc)}, status=500)
+
+def update_test_status(request, test_id, status):
+    try:
+        print(test_id, status)
+        test_ref = db.collection('Test').document(test_id)
+        print(test_ref)
+        test_doc = test_ref.get()
+        if not test_doc.exists:
+            return JsonResponse({'error': 'Test not found'}, status=404)
+        test_ref.update({'status': status})
+        procedure_assignments = test_doc.to_dict().get('procedureAssignments', [])
+        for procedure_assignment in procedure_assignments:
+            procedure_assignment_doc = procedure_assignment.get()
+            if not procedure_assignment_doc.exists:
+                return JsonResponse({'error': 'Procedure assignment not found'}, status=404)
+            procedure_assignment_doc.update({'status': status})
+        return JsonResponse({'success': True})
+    except Exception as e:
+        print(e)
+        return JsonResponse({'error': str(e)}, status=500)
+
+        if not status:
+            return JsonResponse({'error': 'Status is required'}, status=400)
+            

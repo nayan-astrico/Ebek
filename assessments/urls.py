@@ -31,6 +31,7 @@ urlpatterns = [
     path('fetch-particular-student/', views.fetch_particular_student, name='fetch_particular_student'),
     path('institutes/', views.institute_list, name='institute_list'),
     path('institutes/create/', views.create_institute, name='create_institute'),
+    path('update-test-status/<str:test_id>/<str:status>/', views.update_test_status, name='update_test_status'),
     # path('users/upload-excel/', views.upload_users_excel_view, name='upload_users_excel'),
     # path('users/create/', views.create_user, name='create_user'),
     # path('users/', views.users_management, name='users_management'),

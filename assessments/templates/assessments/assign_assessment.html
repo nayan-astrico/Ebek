@@ -40,7 +40,7 @@
                 <th>Assessment Name</th>
                 <th>Skillathon</th>
                 <th>Procedures</th>
-                <th>Status</th>
+                <th style="width: 15%;">Status</th>
                 <!-- <th>Actions</th> -->
             </tr>
         </thead>
@@ -61,9 +61,11 @@
                     {% endfor %}
                 </td>
                 <td>
-                    <span class="badge {% if test.status == 'Not Completed' %}inactive{% else %}active{% endif %}">
-                        {{ test.status }}
-                    </span>
+                    <select class="status-select" data-test-id="{{ test.id }}" onchange="updateTestStatus(this, '{{ test.id }}')">
+                        <option value="Pending" {% if test.status == 'Pending' or test.status == 'Not Completed' %}selected{% endif %}>Pending</option>
+                        <option value="In Progress" {% if test.status == 'In Progress' %}selected{% endif %}>In Progress</option>
+                        <option value="Completed" {% if test.status == 'Completed' %}selected{% endif %}>Completed</option>
+                    </select>
                 </td>
                 <!-- <td>
                     <div class="actions">
@@ -479,6 +481,23 @@
     .badge-info{
         background-color: #1aa09a;
     }
+    .status-select {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #fff;
+        font-size: 14px;
+        color: #2d3748;
+        cursor: pointer;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .status-select:focus {
+        outline: none;
+        border-color: #F16564;
+        box-shadow: 0 0 0 3px rgba(241, 101, 100, 0.15);
+    }
 
     .actions {
         display: flex;
@@ -677,6 +696,8 @@
         window.location.href = `?query=${query}`;
     }
 
+
+
     $(document).ready(function () {
         // Load procedures/assessors for edit dropdowns when buttons clicked
         $('#editProcedureDropdownBtn').off('click').on('click', function(e){
@@ -855,6 +876,24 @@
             });
         }
     });
+
+    function updateTestStatus(select, testId) {
+        const status = select.value;
+        $.ajax({
+            url: `/update-test-status/${testId}/${status}/`,
+            type: 'GET',
+            success: function (response) {
+                alert('Test status updated successfully.');
+                window.location.reload();
+            },
+            error: function (xhr) {
+                console.error(xhr.responseJSON.error);
+            },
+            complete: function () {
+                select.prop('disabled', false);
+            },
+        });
+    }
 
     $('#assignForm').on('submit', function (e) {
         e.preventDefault();
