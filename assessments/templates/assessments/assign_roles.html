@@ -1658,8 +1658,8 @@ async function openEditUser(userId){
         window.__editingUserId = userId;
         toggleCreateUserPanel();
         document.getElementById('createUserTitle').innerHTML = 'Edit User <span class="spinner-border spinner-border-sm" role="status"></span>';
-        document.getElementById('submitButtonText').innerHTML = "Loading...";
-        document.getElementById('submitButtonText').disabled = true;
+        document.getElementById('submitButtonText').innerHTML = "Save";
+        document.getElementById('submitBtn').disabled = true;
         
 
         const u = data.user;
@@ -1700,8 +1700,8 @@ async function openEditUser(userId){
         console.log(prefillRoleId)
         await loadRoles();
         document.getElementById('createUserTitle').textContent = 'Edit User';
-        document.getElementById('submitButtonText').innerHTML = "Save";
-        document.getElementById('submitButtonText').disabled = false;
+        document.getElementById('submitBtn').disabled = false;
+
     }catch(e){
         console.error(e); showError('Error opening user');
     }
