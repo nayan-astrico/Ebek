@@ -34,8 +34,16 @@ else:
     FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
 
 # Initialize Firebase
-cred = credentials.Certificate(FIREBASE_KEY_PATH)
-firebase_admin.initialize_app(cred)
+# Initialize Firebase
+try:
+    cred = credentials.Certificate(FIREBASE_KEY_PATH)
+    firebase_admin.initialize_app(cred)
+    print(f"Firebase initialized successfully with key: {FIREBASE_KEY_PATH}")
+except FileNotFoundError:
+    print(f"Warning: Firebase key not found at {FIREBASE_KEY_PATH}")
+    print("Firebase features will be disabled. Please add firebase_key.json to continue.")
+except Exception as e:
+    print(f"Warning: Could not initialize Firebase: {e}")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
