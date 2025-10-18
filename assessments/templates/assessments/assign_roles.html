@@ -1016,7 +1016,7 @@ function validateEmail(email) {
 function validatePhoneNumber(phone) {
     // Remove all non-digit characters (spaces, dashes, parentheses, +91, etc.)
     const digitsOnly = phone.replace(/\D/g, '');
-    // Check if exactly 10 digits and starts with 6, 7, 8, or 9 (valid Indian mobile prefixes)
+    // Check if exactly 10 digits and starts with 7, 8, or 9 (valid Indian mobile prefixes)
     const indianPhoneRegex = /^[7-9]\d{9}$/;
     return indianPhoneRegex.test(digitsOnly);
 }
