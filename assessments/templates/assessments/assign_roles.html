@@ -58,7 +58,7 @@
                 </div>
             </div>
                         
-            <!-- Step 3: Access Type Selection (for regular users) -->
+            <!-- Step 2: Access Type Selection (for regular users) -->
             <div class="form-step" id="step2">
                 <h4 class="step-title">Access Type for OSCE App</h4>
                 <div class="form-group">
@@ -87,7 +87,7 @@
                 </div>
             </div>
             
-            <!-- Step 4: Institution & Hospital Selection (for regular users) -->
+            <!-- Step 3: Institution & Hospital Selection (for regular users) -->
             <div class="form-step" id="step3">
                 <h4 class="step-title">Institution & Hospital</h4>
                 <div class="form-group">
@@ -146,7 +146,7 @@
                 </div>
             </div>
             
-            <!-- Step 5: Role Assignment (for regular users) -->
+            <!-- Step 4: Role Assignment (for regular users) -->
             <div class="form-step" id="step4">
                 <h4 class="step-title">Assign Role</h4>
                 <div class="form-group">
@@ -1003,6 +1003,70 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// ========== VALIDATION FUNCTIONS - ADDED FOR EMAIL AND PHONE VALIDATION ==========
+
+// Email validation function - checks for valid email format
+function validateEmail(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+}
+
+// Phone validation function - validates Indian phone numbers (10 digits starting with 7-9)
+function validatePhoneNumber(phone) {
+    // Remove all non-digit characters (spaces, dashes, parentheses, +91, etc.)
+    const digitsOnly = phone.replace(/\D/g, '');
+    // Check if exactly 10 digits and starts with 7-9(valid Indian mobile prefixes)
+    const indianPhoneRegex = /^[7-9]\d{9}$/;
+    return indianPhoneRegex.test(digitsOnly);
+}
+
+// Validate step 1 fields (Name, Email, Phone) - CUSTOM VALIDATION FOR STEP 1
+function validateStep1Fields() {
+    const email = document.getElementById('userEmail').value.trim();
+    const phone = document.getElementById('userPhone').value.trim();
+    const name = document.getElementById('userName').value.trim();
+    
+    // Validate name is not empty
+    if (!name) {
+        showError('Please enter the full name');
+        document.getElementById('userName').focus();
+        return false;
+    }
+    
+    // Validate email is not empty
+    if (!email) {
+        showError('Please enter an email address');
+        document.getElementById('userEmail').focus();
+        return false;
+    }
+    
+    // Validate email format using the validateEmail function
+    if (!validateEmail(email)) {
+        showError('Please enter a valid email address (e.g., user@example.com)');
+        document.getElementById('userEmail').focus();
+        return false;
+    }
+    
+    // Validate phone is not empty
+    if (!phone) {
+        showError('Please enter a phone number');
+        document.getElementById('userPhone').focus();
+        return false;
+    }
+    
+    // Validate phone format using the validatePhoneNumber function
+    if (!validatePhoneNumber(phone)) {
+        showError('Please enter a valid Indian phone number (10 digits starting with 7-9)');
+        document.getElementById('userPhone').focus();
+        return false;
+    }
+    
+    return true;
+}
+
+// ========== END OF VALIDATION FUNCTIONS ==========
+
 // ---------- Chip helpers (reused from assignments) ----------
 function addChip(containerId, id, label) {
     if ($(`#${containerId} .chip[data-id="${id}"]`).length) return;
@@ -1190,7 +1254,13 @@ function showStep(step) {
     }
 }
 
+// MODIFIED FUNCTION - Added custom validation for Step 1
 function validateCurrentStep() {
+    // Special validation for step 1 (Basic Information) - uses custom validateStep1Fields function
+    if (currentStep === 1) {
+        return validateStep1Fields();
+    }
+    
     const currentStepElement = document.getElementById(`step${currentStep}`);
     const requiredFields = currentStepElement.querySelectorAll('[required]');
     
