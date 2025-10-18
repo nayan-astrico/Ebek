@@ -1057,7 +1057,7 @@ function validateStep1Fields() {
     
     // Validate phone format using the validatePhoneNumber function
     if (!validatePhoneNumber(phone)) {
-        showError('Please enter a valid Indian phone number (10 digits)');
+        showError('Please enter a valid Indian phone number (10 digits starting with 7-9)');
         document.getElementById('userPhone').focus();
         return false;
     }
