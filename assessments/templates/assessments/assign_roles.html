@@ -1012,11 +1012,11 @@ function validateEmail(email) {
     return emailRegex.test(email);
 }
 
-// Phone validation function - validates Indian phone numbers (10 digits starting with 6-9)
+// Phone validation function - validates Indian phone numbers (10 digits starting with 7-9)
 function validatePhoneNumber(phone) {
     // Remove all non-digit characters (spaces, dashes, parentheses, +91, etc.)
     const digitsOnly = phone.replace(/\D/g, '');
-    // Check if exactly 10 digits and starts with 7, 8, or 9 (valid Indian mobile prefixes)
+    // Check if exactly 10 digits and starts with 7-9(valid Indian mobile prefixes)
     const indianPhoneRegex = /^[7-9]\d{9}$/;
     return indianPhoneRegex.test(digitsOnly);
 }
@@ -1057,7 +1057,7 @@ function validateStep1Fields() {
     
     // Validate phone format using the validatePhoneNumber function
     if (!validatePhoneNumber(phone)) {
-        showError('Please enter a valid Indian phone number (10 digits starting with 6-9)');
+        showError('Please enter a valid Indian phone number (10 digits)');
         document.getElementById('userPhone').focus();
         return false;
     }
