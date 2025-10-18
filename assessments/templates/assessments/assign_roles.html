@@ -58,7 +58,7 @@
                 </div>
             </div>
                         
-            <!-- Step 2: Access Type Selection -->
+            <!-- Step 2: Access Type Selection (for regular users) -->
             <div class="form-step" id="step2">
                 <h4 class="step-title">Access Type for OSCE App</h4>
                 <div class="form-group">
@@ -87,7 +87,7 @@
                 </div>
             </div>
             
-            <!-- Step 3: Institution & Hospital Selection -->
+            <!-- Step 3: Institution & Hospital Selection (for regular users) -->
             <div class="form-step" id="step3">
                 <h4 class="step-title">Institution & Hospital</h4>
                 <div class="form-group">
@@ -114,7 +114,7 @@
                     </div>
                 </div>
 
-                <!-- Skillathon Selection -->
+                <!-- Skillathon Selection (optional and always visible) -->
                 <div class="form-group" id="skillathonSelection">
                     <label class="form-label">Select Skillathon (Optional)</label>
                     <div id="skillathonChips" class="chip-container"></div>
@@ -146,7 +146,7 @@
                 </div>
             </div>
             
-            <!-- Step 4: Role Assignment -->
+            <!-- Step 4: Role Assignment (for regular users) -->
             <div class="form-step" id="step4">
                 <h4 class="step-title">Assign Role</h4>
                 <div class="form-group">
@@ -261,6 +261,8 @@
 <script type="application/json" id="users-data">{{ users_json|safe }}</script>
 
 <style>
+
+
 .btn-secondary {
     background: #f8f9fa;
     border: 1px solid #dee2e6;
@@ -290,7 +292,7 @@
     background: #e55a59;
     border-color: #e55a59;
 }
-
+/* Role assignment specific styles */
 .roles-container {
     border: 1px solid #e2e8f0;
     border-radius: 8px;
@@ -509,6 +511,7 @@
     transition: all 0.2s;
 }
 
+/* Multi-step form styles */
 .form-step {
     display: none;
     animation: fadeIn 0.3s ease-in-out;
@@ -532,6 +535,7 @@
     border-bottom: 2px solid #e5e7eb;
 }
 
+/* Role selection styles */
 .role-options {
     display: flex;
     flex-direction: column;
@@ -571,6 +575,7 @@
     box-shadow: 0 2px 8px rgba(241, 101, 100, 0.15);
 }
 
+/* Access type selection styles */
 .access-options {
     display: flex;
     flex-direction: column;
@@ -651,6 +656,7 @@
     line-height: 1.4;
 }
 
+/* Access icon styles */
 .access-icon {
     width: 48px;
     height: 48px;
@@ -688,6 +694,7 @@
     line-height: 1.4;
 }
 
+/* Form navigation */
 .form-navigation {
     margin-top: 24px;
     padding-top: 16px;
@@ -697,6 +704,7 @@
     align-items: center;
 }
 
+/* Custom multiselect (chips + search) */
 .chips-select {
     border: 1px solid #e2e8f0;
     border-radius: 6px;
@@ -708,7 +716,6 @@
     gap: 6px;
     cursor: text;
 }
-
 .chips-select .chip {
     display: inline-flex;
     align-items: center;
@@ -719,12 +726,10 @@
     border-radius: 16px;
     font-size: 12px;
 }
-
 .chips-select .chip .remove {
     cursor: pointer;
     opacity: 0.9;
 }
-
 .chips-select input {
     border: none;
     outline: none;
@@ -732,11 +737,9 @@
     flex: 1 1 160px;
     font-size: 14px;
 }
-
 .chips-dropdown {
     position: relative;
 }
-
 .chips-dropdown .menu {
     position: absolute;
     z-index: 9999;
@@ -749,20 +752,16 @@
     max-height: 260px;
     overflow: auto;
 }
-
 .chips-dropdown .item {
     padding: 10px 12px;
     cursor: pointer;
 }
-
 .chips-dropdown .item:hover {
     background: #f7fafc;
 }
+.hidden-select { display: none; }
 
-.hidden-select { 
-    display: none; 
-}
-
+/* Chip UI (match assignments) */
 .chip-container {
     margin-top: 8px;
     margin-bottom: 6px;
@@ -770,7 +769,6 @@
     flex-wrap: wrap;
     gap: 6px;
 }
-
 .chip {
     display: inline-flex;
     align-items: center;
@@ -780,21 +778,19 @@
     border-radius: 14px;
     font-size: 12px;
 }
-
 .chip .remove {
     margin-left: 6px;
     cursor: pointer;
     font-weight: 700;
     opacity: 0.9;
 }
-
+/* Remove bullets from dropdown lists */
 .dropdown-container ul,
 .dropdown-list {
     list-style: none;
     margin: 0;
     padding: 0;
 }
-
 .dropdown-list li {
     list-style: none;
 }
@@ -813,10 +809,22 @@
     cursor: pointer;
 }
 
-.dropdown-container { 
-    position: relative; 
+.dropdown-list li label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    width: 100%;
+    cursor: pointer;
 }
 
+.dropdown-list li input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+/* Dropdown UI (same behavior as assignments) */
+.dropdown-container { position: relative; }
 .dropdown-btn {
     width: 100%;
     padding: 10px;
@@ -828,11 +836,7 @@
     text-align: left;
     cursor: pointer;
 }
-
-.dropdown-btn:hover { 
-    background-color: #e9ecef; 
-}
-
+.dropdown-btn:hover { background-color: #e9ecef; }
 .dropdown-list {
     position: absolute;
     top: calc(100% + 48px);
@@ -847,19 +851,9 @@
     display: none;
     z-index: 1000;
 }
-
-.dropdown-list.show { 
-    display: block; 
-}
-
-.dropdown-list li { 
-    padding: 10px 12px; 
-    cursor: pointer; 
-}
-
-.dropdown-list li:hover { 
-    background: #f7fafc; 
-}
+.dropdown-list.show { display: block; }
+.dropdown-list li { padding: 10px 12px; cursor: pointer; }
+.dropdown-list li:hover { background: #f7fafc; }
 
 .dropdown-search {
     position: absolute;
@@ -874,9 +868,7 @@
     z-index: 1001;
 }
 
-.dropdown-search.show { 
-    display: block; 
-}
+.dropdown-search.show { display: block; }
 
 .dropdown-search input {
     width: 100%;
@@ -886,9 +878,52 @@
     font-size: 13px;
 }
 
-.modal .spinner-border { 
-    vertical-align: middle; 
+.dropdown-search {
+    position: absolute;
+    top: 100%;
+    width: 100%;
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-top: none;
+    padding: 8px 10px;
+    display: none;
+    z-index: 1010;
 }
+
+.dropdown-search.show { display: block; }
+
+.dropdown-search input {
+    width: 100%;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+}
+
+.dropdown-search {
+    position: absolute;
+    top: 100%;
+    width: 100%;
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-top: none;
+    padding: 8px 10px;
+    display: none;
+    z-index: 1010;
+}
+
+.dropdown-search.show { display: block; }
+
+.dropdown-search input {
+    width: 100%;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+}
+
+/* Modal overrides */
+.modal .spinner-border { vertical-align: middle; }
 </style>
 
 <script>
@@ -902,23 +937,19 @@ let prefillRoleId = null;
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     loadUsers();
-    
-    // Dropdown toggle and outside click
+    // Dropdown toggle and outside click (like assignments)
     document.addEventListener('click', function(){
         document.querySelectorAll('.dropdown-list').forEach(l=> l.classList.remove('show'));
         document.querySelectorAll('.dropdown-search').forEach(s=> s.classList.remove('show'));
     });
-    
     ['institution','hospital','skillathon'].forEach(prefix => {
         const btn = document.getElementById(prefix+'DropdownBtn');
         const list = document.getElementById(prefix+'DropdownList');
         const searchContainer = document.getElementById(prefix+'SearchContainer');
         const searchInput = document.getElementById(prefix+'Search');
-        
         if(btn && list){
             btn.addEventListener('click', function(e){
-                e.preventDefault(); 
-                e.stopPropagation();
+                e.preventDefault(); e.stopPropagation();
                 document.querySelectorAll('.dropdown-list').forEach(l=> { if(l!==list) l.classList.remove('show'); });
                 document.querySelectorAll('.dropdown-search').forEach(s=> { if(s!==searchContainer) s.classList.remove('show'); });
                 list.classList.toggle('show');
@@ -929,7 +960,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             });
-            
+            // Dedicated list click handler to ensure selection works
             list.addEventListener('click', function(e){
                 e.preventDefault();
                 e.stopPropagation();
@@ -945,7 +976,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 list.classList.remove('show');
                 if(searchContainer){ searchContainer.classList.remove('show'); }
             });
-            
             if(searchInput){
                 searchInput.addEventListener('keyup', function(){
                     filterDropdownItems(prefix, this.value.trim().toLowerCase());
@@ -958,7 +988,6 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         createUser();
     });
-    
     document.addEventListener('change', function(e) {
         if(e.target.classList.contains('user-status-toggle')){
             const userId = e.target.dataset.userId;
@@ -967,6 +996,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
+    // Add event listeners to access type checkboxes
     document.addEventListener('change', function(e) {
         if (e.target.name === 'access_types') {
             handleAccessTypeChange();
@@ -974,53 +1004,60 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// Email validation function
+// ========== VALIDATION FUNCTIONS - ADDED FOR EMAIL AND PHONE VALIDATION ==========
+
+// Email validation function - checks for valid email format
 function validateEmail(email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
 }
 
-// Phone validation function - must be valid Indian phone number (10 digits starting with 6-9)
+// Phone validation function - validates Indian phone numbers (10 digits starting with 6-9)
 function validatePhoneNumber(phone) {
-    // Remove all non-digit characters
+    // Remove all non-digit characters (spaces, dashes, parentheses, +91, etc.)
     const digitsOnly = phone.replace(/\D/g, '');
-    // Check if exactly 10 digits and starts with 6, 7, 8, or 9
+    // Check if exactly 10 digits and starts with 6, 7, 8, or 9 (valid Indian mobile prefixes)
     const indianPhoneRegex = /^[7-9]\d{9}$/;
     return indianPhoneRegex.test(digitsOnly);
 }
 
-// Validate step 1 fields
+// Validate step 1 fields (Name, Email, Phone) - CUSTOM VALIDATION FOR STEP 1
 function validateStep1Fields() {
     const email = document.getElementById('userEmail').value.trim();
     const phone = document.getElementById('userPhone').value.trim();
     const name = document.getElementById('userName').value.trim();
     
+    // Validate name is not empty
     if (!name) {
         showError('Please enter the full name');
         document.getElementById('userName').focus();
         return false;
     }
     
+    // Validate email is not empty
     if (!email) {
         showError('Please enter an email address');
         document.getElementById('userEmail').focus();
         return false;
     }
     
+    // Validate email format using the validateEmail function
     if (!validateEmail(email)) {
         showError('Please enter a valid email address (e.g., user@example.com)');
         document.getElementById('userEmail').focus();
         return false;
     }
     
+    // Validate phone is not empty
     if (!phone) {
         showError('Please enter a phone number');
         document.getElementById('userPhone').focus();
         return false;
     }
     
+    // Validate phone format using the validatePhoneNumber function
     if (!validatePhoneNumber(phone)) {
-        showError('Please enter a valid Indian phone number (10 digits)');
+        showError('Please enter a valid Indian phone number (10 digits starting with 6-9)');
         document.getElementById('userPhone').focus();
         return false;
     }
@@ -1028,19 +1065,17 @@ function validateStep1Fields() {
     return true;
 }
 
-// Chip helpers
+// ========== END OF VALIDATION FUNCTIONS ==========
+
+// ---------- Chip helpers (reused from assignments) ----------
 function addChip(containerId, id, label) {
     if ($(`#${containerId} .chip[data-id="${id}"]`).length) return;
     $(`#${containerId}`).append(`<span class="chip" data-id="${id}" data-value="${label}">${label}<span class="remove">&times;</span></span>`);
 }
-
 function removeChip(containerId, id){
     $(`#${containerId} .chip[data-id="${id}"]`).remove();
 }
-
-function clearChips(containerId){ 
-    $(`#${containerId}`).empty(); 
-}
+function clearChips(containerId){ $(`#${containerId}`).empty(); }
 
 function uncheckDropdownCheckbox(containerId, id){
     let listId = null;
@@ -1143,18 +1178,22 @@ function resetForm() {
     currentStep = 1;
     showStep(1);
     deselectAllRoles();
+    // Clear chip containers and close dropdowns
     ['institutionChips','hospitalChips','skillathonChips'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = '';
     });
     document.querySelectorAll('.dropdown-list').forEach(l=> l.classList.remove('show'));
     document.getElementById('skillathonSelection').style.display = 'block';
+    // Reset roles list
     document.getElementById('rolesList').innerHTML = '';
 }
 
 // Step navigation
 function changeStep(direction) {
+    
     if (direction === 1) {
+        // Next step
         if (validateCurrentStep()) {
             if (currentStep < totalSteps) {
                 currentStep++;
@@ -1162,6 +1201,7 @@ function changeStep(direction) {
             }
         }
     } else {
+        // Previous step
         if (currentStep > 1) {
             currentStep--;
             showStep(currentStep);
@@ -1170,16 +1210,20 @@ function changeStep(direction) {
 }
 
 function showStep(step) {
+    // Hide all steps
     document.getElementById('step1').classList.remove('active');
     document.getElementById('step2').classList.remove('active');
     document.getElementById('step3').classList.remove('active');
     document.getElementById('step4').classList.remove('active');
     
+    // Show current step
     const map = {1:'step1', 2:'step2', 3:'step3', 4:'step4'};
     const targetId = map[step];
     if (targetId) document.getElementById(targetId).classList.add('active');
     
+    // Load data when reaching specific steps
     if (step === 2) {
+        // Load institutions, hospitals and skillathons independently
         loadInstitutions();
         loadHospitals();
         document.getElementById('skillathonSelection').style.display = 'block';
@@ -1187,12 +1231,14 @@ function showStep(step) {
     }
     
     if (step === 3) {
+        // Load roles when reaching step 5 (only if not already loaded)
         const rolesList = document.getElementById('rolesList');
         if (!rolesList || rolesList.children.length === 0) {
             loadRoles();
         }
     }
     
+    // Update navigation buttons
     const prevBtn = document.getElementById('prevBtn');
     const nextBtn = document.getElementById('nextBtn');
     const submitBtn = document.getElementById('submitBtn');
@@ -1208,7 +1254,9 @@ function showStep(step) {
     }
 }
 
+// MODIFIED FUNCTION - Added custom validation for Step 1
 function validateCurrentStep() {
+    // Special validation for step 1 (Basic Information) - uses custom validateStep1Fields function
     if (currentStep === 1) {
         return validateStep1Fields();
     }
@@ -1224,7 +1272,14 @@ function validateCurrentStep() {
         }
     }
     
+    // Additional validation for specific steps
+    // Step 2 removed; all users are regular users
+    
+    // Step 3: access types are optional now (no validation)
+    
     if (currentStep === 2) {
+        // Step 3 uses chip-based selectors; all fields are optional.
+        // Do not reference legacy selects; allow proceeding without checks.
         return true;
     }
     
@@ -1242,18 +1297,22 @@ function validateCurrentStep() {
     return true;
 }
 
+// Handle user type change
 function handleUserTypeChange(userType) {
     if (userType === 'super_admin') {
-        // Skip steps for super admin
+        // Skip steps 3, 4 for super admin
+        // Super admin will have user_role = 'ebek_admin'
     } else {
-        // For regular users
+        // For regular users, proceed to access type selection
     }
 }
 
+// Handle access type change (no longer controls skillathon visibility)
 function handleAccessTypeChange() {
-    // Access toggles handler
+    // Access toggles no longer drive visibility of skillathon selection
 }
 
+// Role selection functions
 function selectAllRoles() {
     const checkboxes = document.querySelectorAll('.role-checkbox');
     checkboxes.forEach(checkbox => checkbox.checked = true);
@@ -1264,6 +1323,7 @@ function deselectAllRoles() {
     checkboxes.forEach(checkbox => checkbox.checked = false);
 }
 
+// Load institutions
 function loadInstitutions() {
     return fetch('{% url "institution_list_api" %}?offset=0&limit=1000')
     .then(response => response.json())
@@ -1277,14 +1337,17 @@ function loadInstitutions() {
     .catch(() => showError('Failed to load institutions'));
 }
 
+// Handle institution change
 function handleInstitutionChange() {
     loadRoles();
 }
 
+// Handle hospital change
 function handleHospitalChange() {
     loadRoles();
 }
 
+// Load all hospitals (independent of institution)
 function loadHospitals() {
     return fetch(`{% url "hospital_list_api" %}?offset=0&limit=1000`)
     .then(response => response.json())
@@ -1298,6 +1361,7 @@ function loadHospitals() {
     .catch(() => showError('Failed to load hospitals'));
 }
 
+// Load skillathons
 function loadSkillathons() {
     return fetch('{% url "skillathon_list_api" %}')
     .then(response => response.json())
@@ -1311,7 +1375,9 @@ function loadSkillathons() {
     .catch(() => showError('Failed to load skillathons'));
 }
 
+// Load roles based on selected hospital or institution
 function loadRoles() {
+    
     const url = '{% url "get_roles" %}';
 
     fetch(url)
@@ -1337,6 +1403,7 @@ function loadRoles() {
                 `;
                 rolesList.appendChild(roleItem);
             });
+            // Apply preselection if provided (from edit user)
             if (prefillRoleId !== null) {
                 const radio = document.getElementById(`role_${prefillRoleId}`);
                 if (radio) radio.checked = true;
@@ -1351,6 +1418,7 @@ function loadRoles() {
     });
 }
 
+// Create user function
 function createUser() {
     const form = document.getElementById('createUserForm');
     const formData = new FormData(form);
@@ -1368,9 +1436,12 @@ function createUser() {
         user_type: userType
     };
     
+    // Set user_role based on user type
+    // For all users (regular), add access types and related data (all optional)
     const accessTypes = Array.from(document.querySelectorAll('input[name="access_types"]:checked')).map(checkbox => checkbox.value);
     data.access_types = accessTypes;
     
+    // Collect multiple selections as arrays (optional)
     data.institution_ids = Array.from(document.querySelectorAll('#institutionChips .chip')).map(c => c.dataset.id);
     data.hospital_ids = Array.from(document.querySelectorAll('#hospitalChips .chip')).map(c => c.dataset.id);
     data.skillathon_ids = Array.from(document.querySelectorAll('#skillathonChips .chip')).map(c => c.dataset.id);
@@ -1378,13 +1449,16 @@ function createUser() {
     data.access_all_hospitals = document.getElementById('accessAllHospitals').checked;
     data.access_all_skillathons = document.getElementById('accessAllSkillathons').checked;
     
+    // Add permissions (empty for now, can be extended later)
     data.permission_ids = [];
     
+    // Add selected role
     const selectedRole = document.querySelector('input[name="role_id"]:checked');
     if (selectedRole) {
         data.role_id = selectedRole.value;
     }
     
+    // Show loading state
     spinner.style.display = 'inline-block';
     buttonText.textContent = isEdit ? 'Saving...' : 'Creating...';
     submitBtn.disabled = true;
@@ -1413,6 +1487,7 @@ function createUser() {
         showError('An error occurred while creating the user');
     })
     .finally(() => {
+        // Hide loading state
         spinner.style.display = 'none';
         buttonText.textContent = isEdit ? 'Save' : 'Create User';
         submitBtn.disabled = false;
@@ -1445,6 +1520,7 @@ function toggleUserStatus(userId, isActive, checkboxEl){
       });
 }
 
+// Assign roles function
 function assignRoles() {
     const userId = document.getElementById('userSelect').value;
     const selectedRoles = Array.from(document.querySelectorAll('.role-checkbox:checked'))
@@ -1470,6 +1546,7 @@ function assignRoles() {
         role_ids: selectedRoles
     };
     
+    // Show loading state
     spinner.style.display = 'inline-block';
     buttonText.textContent = 'Assigning...';
     submitBtn.disabled = true;
@@ -1497,13 +1574,17 @@ function assignRoles() {
         showError('An error occurred while assigning roles');
     })
     .finally(() => {
+        // Hide loading state
         spinner.style.display = 'none';
         buttonText.textContent = 'Assign Roles';
         submitBtn.disabled = false;
     });
 }
 
+// Load and display users
 function loadUsers() {
+    // This would typically be an API call to get all users with their roles
+    // For now, we'll use the users from the template context
     try {
         const usersDataScript = document.getElementById('users-data');
         allUsers = JSON.parse(usersDataScript.textContent).map(u => ({
@@ -1518,6 +1599,7 @@ function loadUsers() {
     renderUsers();
 }
 
+// Render users in table
 function renderUsers() {
     const tbody = document.querySelector('#usersTableBody');
     const emptyState = document.getElementById('emptyState');
@@ -1571,6 +1653,7 @@ function renderUsers() {
     });
 }
 
+// Dropdown item handlers (multi-select chips)
 document.addEventListener('click', function(e){
     const t = e.target;
     if(t.closest('#institutionDropdownList li')){
@@ -1592,6 +1675,7 @@ document.addEventListener('click', function(e){
     }
 });
 
+// Remove chip handler
 document.addEventListener('click', function(e){
     if(e.target.matches('.chip .remove')){
         e.preventDefault();
@@ -1607,6 +1691,7 @@ document.addEventListener('click', function(e){
     }
 });
 
+// Search/filter users
 function filterUsers(searchText) {
     const searchTerm = searchText.toLowerCase().trim();
     
@@ -1622,14 +1707,17 @@ function filterUsers(searchText) {
     renderUsers();
 }
 
+// Edit user roles
 function editUserRoles(userId, userName) {
+    // Set the user in the form
     document.getElementById('userSelect').value = userId;
     loadUserRoles();
     toggleAssignRolePanel();
 }
-
+// Open edit user side panel (reuse create panel but prefill)
 async function openEditUser(userId){
     try{
+        // Reset form and set current step to 1 first
         currentStep = 1;
         showStep(1);
 
@@ -1648,18 +1736,20 @@ async function openEditUser(userId){
         document.getElementById('userName').value = u.name || '';
         document.getElementById('userEmail').value = u.email || '';
         document.getElementById('userPhone').value = u.phone || '';
+        // access
         document.getElementById('takeOSCE').checked = (u.access_types||[]).includes('osce');
         document.getElementById('takeSkillathon').checked = (u.access_types||[]).includes('skillathon');
         document.getElementById('accessAllInstitutes').checked = !!u.access_all_institutes;
         document.getElementById('accessAllHospitals').checked = !!u.access_all_hospitals;
         document.getElementById('accessAllSkillathons').checked = !!u.access_all_skillathons;
-        
+        // Selections (set after ensure data lists loaded)
         await Promise.all([loadInstitutions(), loadHospitals(), loadSkillathons()]);
-        
+        // set selected options
+        // Prefill chips based on IDs
         const instIds = (u.institution_ids||[]).map(String);
         const hospIds = (u.hospital_ids||[]).map(String);
         const skillIds = (u.skillathon_ids||[]).map(String);
-        
+        // Map ids to current dropdown labels
         function prefillFromList(listId, chipsId, ids){
             const list = document.getElementById(listId);
             ids.forEach(id => {
@@ -1670,7 +1760,8 @@ async function openEditUser(userId){
         clearChips('institutionChips'); prefillFromList('institutionDropdownList','institutionChips', instIds);
         clearChips('hospitalChips'); prefillFromList('hospitalDropdownList','hospitalChips', hospIds);
         clearChips('skillathonChips'); prefillFromList('skillathonDropdownList','skillathonChips', skillIds);
-        
+        // Roles: preselect first if present
+        // Remember role to preselect during loadRoles
         try{
             prefillRoleId = u.custom_roles.id;
         }catch(e){
@@ -1686,6 +1777,7 @@ async function openEditUser(userId){
     }
 }
 
+// Delete user (modal with loader)
 function confirmDeleteUser(userId, email){
     document.getElementById('deleteUserId').value = userId;
     document.getElementById('deleteUserEmail').textContent = email;
@@ -1720,21 +1812,28 @@ document.addEventListener('DOMContentLoaded', function(){
     });
 });
 
+// Load user roles (placeholder - would need API endpoint)
 function loadUserRoles() {
     const userId = document.getElementById('userSelect').value;
     if (!userId) {
         return;
     }
+    
+    // This would typically fetch user roles from an API
+    // For now, we'll just show a placeholder
     console.log('Loading roles for user:', userId);
 }
 
+// Remove role function (placeholder)
 function removeUserRole(userId, roleId, roleName, userName) {
     document.getElementById('removeRoleName').textContent = roleName;
     document.getElementById('removeUserName').textContent = userName;
+    // Set the form action URL
     document.getElementById('removeRoleForm').action = `/remove-role/${userId}/${roleId}/`;
     $('#removeRoleModal').modal('show');
 }
 
+// Notification functions
 function showSuccess(message) {
     const notification = $(`
         <div class="alert alert-success alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
