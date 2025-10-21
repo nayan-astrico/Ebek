@@ -147,7 +147,9 @@
                 <th>Institution/Hospital</th>
                 <th>Skillathon</th>
                 <th>Status</th>
+                {% if "change_learner" in request.user.get_all_permissions or "delete_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <th>Actions</th>
+                {% endif %}
             </tr>
         </thead>
         <tbody id="learnerTableBody">

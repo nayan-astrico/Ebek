@@ -4355,9 +4355,15 @@ def get_roles(request):
                 'permissions_count': role.permissions.count()
             }
             roles.append(role_data)
-        return JsonResponse({'roles': roles})
+        return JsonResponse({
+            'success': True,
+            'roles': roles
+        })
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
 
 def edit_role(request, role_id):
     """API endpoint to edit a role"""
