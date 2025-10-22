@@ -147,7 +147,9 @@
                 <th>Institution/Hospital</th>
                 <th>Skillathon</th>
                 <th>Status</th>
+                {% if "edit_learner" in request.user.get_all_permissions or "delete_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <th>Actions</th>
+                {% endif %}
             </tr>
         </thead>
         <tbody id="learnerTableBody">
@@ -1469,6 +1471,24 @@
 
 <script>
 
+// Declare variables first
+var canEditLearner = false;
+var canDeleteLearner = false;
+
+// Then set them based on permissions
+{% if "edit_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
+canEditLearner = true;
+{% endif %}
+
+{% if "delete_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
+canDeleteLearner = true;
+{% endif %}
+
+var userPermissions = {
+    canEdit: canEditLearner,
+    canDelete: canDeleteLearner
+};
+
 function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
@@ -2364,42 +2384,46 @@ function applyFilters() {
 }
 
 function renderLearnerRow(learner) {
-    console.log(learner)
-    return `
-    <tr>
-        <td><div class="institution"><span>${learner.full_name}</span></div></td>
-        <td>${learner.email}</td>
-        <td>${learner.phone_number}</td>
-        <td>${learner.learner_type}</td>
-        <td>${learner.institution}</td>
-        <td>${learner.skillathon}</td>
-        <td>
-            <span class="badge ${learner.is_active ? 'active' : 'inactive'}">
-                ${learner.is_active ? 'Active' : 'Inactive'}
-            </span>
-        </td>
-        <td>
-            <div class="actions">
-                {% if "edit_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                <a href="javascript:void(0);" class="btn-icon"
-                   onclick="openLearnerFormPanel('${learner.edit_url}', 'Edit Learner')">
-                    <i class="fas fa-edit"></i>
-                </a>
-                {% endif %}
-                {% if "delete_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                <button type="button" 
-                        class="btn-icon btn-danger" 
-                        data-name="${learner.full_name}"
-                        data-url="${learner.delete_url}"
-                        onclick="confirmDelete(this)"
-                        title="Delete">
-                    <i class="fas fa-trash"></i>
-                </button>
-                {% endif %}
-            </div>
-        </td>
-    </tr>
-    `;
+    console.log(learner);
+    
+    var showActions = userPermissions.canEdit || userPermissions.canDelete;
+    
+    var html = '<tr>' +
+        '<td><div class="institution"><span>' + learner.full_name + '</span></div></td>' +
+        '<td>' + learner.email + '</td>' +
+        '<td>' + learner.phone_number + '</td>' +
+        '<td>' + learner.learner_type + '</td>' +
+        '<td>' + learner.institution + '</td>' +
+        '<td>' + learner.skillathon + '</td>' +
+        '<td>' +
+            '<span class="badge ' + (learner.is_active ? 'active' : 'inactive') + '">' +
+                (learner.is_active ? 'Active' : 'Inactive') +
+            '</span>' +
+        '</td>';
+    
+    if (showActions) {
+        html += '<td><div class="actions">';
+        
+        if (userPermissions.canEdit) {
+            html += '<a href="javascript:void(0);" class="btn-icon" onclick="openLearnerFormPanel(\'' + learner.edit_url + '\', \'Edit Learner\')">' +
+                '<i class="fas fa-edit"></i>' +
+                '</a>';
+        }
+        
+        if (userPermissions.canDelete) {
+            html += '<button type="button" class="btn-icon btn-danger" ' +
+                'data-name="' + learner.full_name + '" ' +
+                'data-url="' + learner.delete_url + '" ' +
+                'onclick="confirmDelete(this)" title="Delete">' +
+                '<i class="fas fa-trash"></i>' +
+                '</button>';
+        }
+        
+        html += '</div></td>';
+    }
+    
+    html += '</tr>';
+    return html;
 }
 
 function loadMoreLearners() {
@@ -2440,8 +2464,9 @@ function loadMoreLearners() {
             });
             // If no learners at all, show empty state
             if (offset === 0 && learners.length === 0) {
+                const colspanCount = userPermissions.canEdit || userPermissions.canDelete ? 8 : 7;
                 tbody.innerHTML = `<tr>
-                    <td colspan="8" class="empty">
+                    <td colspan="${colspanCount}" class="empty">
                         <i class="fas fa-user-graduate"></i>
                         <p>No learners found</p>
                         <a href="javascript:void(0);" class="btn btn-primary"
@@ -2565,5 +2590,6 @@ function handleSkillathonChange() {
     loadInstitutions(skillathonId, onboardingType);
     loadHospitals(skillathonId, onboardingType);
 }
+
 </script>
 {% endblock %} 
