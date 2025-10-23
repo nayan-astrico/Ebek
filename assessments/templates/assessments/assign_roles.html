@@ -92,7 +92,6 @@
                 <h4 class="step-title">Institution & Hospital</h4>
                 <div class="form-group">
                     <label class="form-label">Institution</label>
-                    <div id="institutionChips" class="chip-container"></div>
                     <div class="dropdown-container">
                         <button class="dropdown-btn" id="institutionDropdownBtn">Select Institution</button>
                         <div class="dropdown-search" id="institutionSearchContainer">
@@ -100,11 +99,11 @@
                         </div>
                         <ul class="dropdown-list" id="institutionDropdownList"></ul>
                     </div>
+                    <div id="institutionChips" class="chip-container"></div>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Hospital</label>
-                    <div id="hospitalChips" class="chip-container"></div>
                     <div class="dropdown-container">
                         <button class="dropdown-btn" id="hospitalDropdownBtn">Select Hospital</button>
                         <div class="dropdown-search" id="hospitalSearchContainer">
@@ -112,12 +111,12 @@
                         </div>
                         <ul class="dropdown-list" id="hospitalDropdownList"></ul>
                     </div>
+                    <div id="hospitalChips" class="chip-container"></div>
                 </div>
 
                 <!-- Skillathon Selection (optional and always visible) -->
                 <div class="form-group" id="skillathonSelection">
                     <label class="form-label">Select Skillathon (Optional)</label>
-                    <div id="skillathonChips" class="chip-container"></div>
                     <div class="dropdown-container">
                         <button class="dropdown-btn" id="skillathonDropdownBtn">Select Skillathon</button>
                         <div class="dropdown-search" id="skillathonSearchContainer">
@@ -125,6 +124,7 @@
                         </div>
                         <ul class="dropdown-list" id="skillathonDropdownList"></ul>
                     </div>
+                    <div id="skillathonChips" class="chip-container"></div>
                 </div>
 
                 <div class="form-group">
@@ -1001,6 +1001,17 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.target.name === 'access_types') {
             handleAccessTypeChange();
         }
+
+        // Add event listeners for full access override checkboxes
+        if (e.target.id === 'accessAllInstitutes') {
+            toggleInstitutionVisibility(e.target.checked);
+        }
+        if (e.target.id === 'accessAllHospitals') {
+            toggleHospitalVisibility(e.target.checked);
+        }
+        if (e.target.id === 'accessAllSkillathons') {
+            toggleSkillathonVisibility(e.target.checked);
+        }
     });
 });
 
@@ -1061,6 +1072,33 @@ function validateStep1Fields() {
         document.getElementById('userPhone').focus();
         return false;
     }
+
+    // Check if email already exists in database
+    const isEdit = document.getElementById('createUserTitle').textContent.trim().toLowerCase().includes('edit');
+    const currentUserId = window.__editingUserId; // The ID of the user being edited
+    
+    if (isEdit) {
+        // When editing, check if the new email belongs to a DIFFERENT user
+        const emailExists = allUsers.some(user => 
+            user.email.toLowerCase() === email.toLowerCase() && 
+            user.id !== currentUserId
+        );
+        
+        if (emailExists) {
+            showError('This email already exists in the system');
+            document.getElementById('userEmail').focus();
+            return false;
+        }
+    } else {
+        // When creating new user, check if email exists at all
+        const emailExists = allUsers.some(user => user.email.toLowerCase() === email.toLowerCase());
+        
+        if (emailExists) {
+            showError('This email already exists in the system');
+            document.getElementById('userEmail').focus();
+            return false;
+        }
+    }
     
     return true;
 }
@@ -1119,6 +1157,8 @@ function renderDropdownList(prefix, items){
                 addChip(chipsId, item.id, item.name);
             } else {
                 removeChip(chipsId, item.id);
+                // NEW: If user unchecks an item, uncheck the "full access" checkbox
+                uncheckFullAccessOverride(prefix);
             }
             if(changeHandler) changeHandler();
         });
@@ -1228,6 +1268,12 @@ function showStep(step) {
         loadHospitals();
         document.getElementById('skillathonSelection').style.display = 'block';
         loadSkillathons();
+
+        // Apply visibility based on current checkbox states
+        toggleInstitutionVisibility(document.getElementById('accessAllInstitutes').checked);
+        toggleHospitalVisibility(document.getElementById('accessAllHospitals').checked);
+        toggleSkillathonVisibility(document.getElementById('accessAllSkillathons').checked);
+
     }
     
     if (step === 3) {
@@ -1310,6 +1356,95 @@ function handleUserTypeChange(userType) {
 // Handle access type change (no longer controls skillathon visibility)
 function handleAccessTypeChange() {
     // Access toggles no longer drive visibility of skillathon selection
+}
+
+/// Toggle institution selection visibility
+function toggleInstitutionVisibility(isFullAccess) {
+    const chipContainer = document.getElementById('institutionChips');
+    
+    if (isFullAccess) {
+        // Hide chips but keep dropdown visible
+        chipContainer.style.display = 'none';
+        // Select all institutions in the dropdown
+        selectAllInDropdown('institutionDropdownList', 'institutionChips');
+    } else {
+        // Show chips
+        chipContainer.style.display = 'flex';
+    }
+}
+
+// Toggle hospital selection visibility
+function toggleHospitalVisibility(isFullAccess) {
+    const chipContainer = document.getElementById('hospitalChips');
+    
+    if (isFullAccess) {
+        // Hide chips but keep dropdown visible
+        chipContainer.style.display = 'none';
+        // Select all hospitals in the dropdown
+        selectAllInDropdown('hospitalDropdownList', 'hospitalChips');
+    } else {
+        // Show chips
+        chipContainer.style.display = 'flex';
+    }
+}
+
+// Toggle skillathon selection visibility
+function toggleSkillathonVisibility(isFullAccess) {
+    const chipContainer = document.getElementById('skillathonChips');
+    
+    if (isFullAccess) {
+        // Hide chips but keep dropdown visible
+        chipContainer.style.display = 'none';
+        // Select all skillathons in the dropdown
+        selectAllInDropdown('skillathonDropdownList', 'skillathonChips');
+    } else {
+        // Show chips
+        chipContainer.style.display = 'flex';
+    }
+}
+
+// Helper function to select all items in a dropdown
+function selectAllInDropdown(listId, chipsId) {
+    const list = document.getElementById(listId);
+    if (!list) return;
+    
+    // Check all checkboxes in the dropdown
+    const checkboxes = list.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach(checkbox => {
+        if (!checkbox.checked) {
+            checkbox.checked = true;
+            // Trigger change event to add chips (but they'll be hidden)
+            checkbox.dispatchEvent(new Event('change'));
+        }
+    });
+}
+
+// Uncheck the corresponding full access override checkbox when user deselects an item
+function uncheckFullAccessOverride(prefix) {
+    let checkboxId = null;
+    
+    if (prefix === 'institution') {
+        checkboxId = 'accessAllInstitutes';
+    } else if (prefix === 'hospital') {
+        checkboxId = 'accessAllHospitals';
+    } else if (prefix === 'skillathon') {
+        checkboxId = 'accessAllSkillathons';
+    }
+    
+    if (checkboxId) {
+        const checkbox = document.getElementById(checkboxId);
+        if (checkbox && checkbox.checked) {
+            checkbox.checked = false;
+            // Show the chips again
+            if (prefix === 'institution') {
+                document.getElementById('institutionChips').style.display = 'flex';
+            } else if (prefix === 'hospital') {
+                document.getElementById('hospitalChips').style.display = 'flex';
+            } else if (prefix === 'skillathon') {
+                document.getElementById('skillathonChips').style.display = 'flex';
+            }
+        }
+    }
 }
 
 // Role selection functions
@@ -1742,6 +1877,12 @@ async function openEditUser(userId){
         document.getElementById('accessAllInstitutes').checked = !!u.access_all_institutes;
         document.getElementById('accessAllHospitals').checked = !!u.access_all_hospitals;
         document.getElementById('accessAllSkillathons').checked = !!u.access_all_skillathons;
+
+        // Apply visibility based on loaded checkbox states
+        toggleInstitutionVisibility(!!u.access_all_institutes);
+        toggleHospitalVisibility(!!u.access_all_hospitals);
+        toggleSkillathonVisibility(!!u.access_all_skillathons);
+
         // Selections (set after ensure data lists loaded)
         await Promise.all([loadInstitutions(), loadHospitals(), loadSkillathons()]);
         // set selected options
