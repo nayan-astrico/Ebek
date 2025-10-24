@@ -27,11 +27,9 @@ if DEBUG == "True":
 else:
     DEBUG = False
 
-if DEBUG == True:
-    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_uat_key.json")
-    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
-else:
-    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
+
+
+FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
 
 # Initialize Firebase
 cred = credentials.Certificate(FIREBASE_KEY_PATH)

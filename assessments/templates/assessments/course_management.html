@@ -62,31 +62,6 @@
             <div class="error-message" id="proceduresError"></div>
         </div>
 
-        <div class="form-group">
-            <label>OSCE Types <span class="text-danger">*</span></label>
-            <div class="checkbox-group" id="osceTypesGroup">
-                <div class="custom-checkbox">
-                    <input type="checkbox" id="classroom" name="osce_type" value="classroom">
-                    <label for="classroom">Classroom</label>
-                </div>
-                <div class="custom-checkbox">
-                    <input type="checkbox" id="mock" name="osce_type" value="mock">
-                    <label for="mock">Mock</label>
-                </div>
-                <div class="custom-checkbox">
-                    <input type="checkbox" id="final" name="osce_type" value="final" onchange="toggleVerificationField(this)">
-                    <label for="final">Final</label>
-                </div>
-            </div>
-            <div class="error-message" id="osceTypesError"></div>
-        </div>
-
-        <div class="form-group verification-field" id="verificationField" style="display: none;">
-            <div class="custom-checkbox">
-                <input type="checkbox" id="verification" name="verification_required">
-                <label for="verification">Verification Required</label>
-            </div>
-        </div>
 
         <div class="side-panel-actions">
             <button type="button" class="btn btn-light" onclick="toggleAddCoursePanel()">Cancel</button>
@@ -1143,19 +1118,6 @@ function setupEventListeners() {
         }
     });
     
-    // OSCE Types validation
-    const osceCheckboxes = document.querySelectorAll('input[name="osce_type"]');
-    osceCheckboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            clearError('osceTypes');
-            const checkedOsce = document.querySelectorAll('input[name="osce_type"]:checked');
-            if (checkedOsce.length > 0) {
-                document.getElementById('osceTypesGroup').classList.add('success');
-            } else {
-                document.getElementById('osceTypesGroup').classList.remove('success');
-            }
-        });
-    });
     
     // Close dropdown when clicking outside
     document.addEventListener('click', function(e) {
@@ -1619,12 +1581,6 @@ function validateForm() {
         isValid = false;
     }
     
-    // Validate OSCE Types
-    const selectedOsceTypes = document.querySelectorAll('input[name="osce_type"]:checked');
-    if (selectedOsceTypes.length === 0) {
-        showError('Please select at least one OSCE type');
-        isValid = false;
-    }
     
     return isValid;
 }
@@ -1671,7 +1627,6 @@ function submitForm() {
         courseName: document.getElementById('courseName').value.trim(),
         description: document.getElementById('description').value.trim(),
         procedures: Array.from(document.querySelectorAll('#proceduresOptions input[type="checkbox"]:checked')).map(cb => cb.value),
-        osceTypes: Array.from(document.querySelectorAll('input[name="osce_type"]:checked')).map(cb => cb.value),
         verificationRequired: document.getElementById('verification').checked
     };
     

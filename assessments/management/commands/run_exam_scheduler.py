@@ -161,7 +161,8 @@ class Command(BaseCommand):
                         'status': 'Pending',
                         'notes': procedure.get('notes', ''),
                         'procedure_name': procedure.get('procedureName', ''),
-                        'institute': learner_user_doc.get("institution") if learner_user_doc.get("institution") else None,
+                        'institute': learner_user_doc.get("institute") if learner_user_doc.get("institute") else None,
+                        'institution': learner_user_doc.get("institute") if learner_user_doc.get("institute") else None,
                         'hospital': learner_user_doc.get("hospital") if learner_user_doc.get("hospital") else None,
                     }
                     
