@@ -47,7 +47,6 @@
             <div class="multiselect-container">
                 <div class="multiselect-input" onclick="toggleDropdown()" id="proceduresInput">
                     <span class="placeholder">Select procedures</span>
-                    <div class="selected-tags" id="selectedTags"></div>
                     <i class="fas fa-chevron-down dropdown-arrow"></i>
                 </div>
                 <div class="multiselect-dropdown" id="proceduresDropdown">
@@ -59,6 +58,7 @@
                     </div>
                 </div>
             </div>
+            <div class="selected-tags" id="selectedTags"></div>
             <div class="error-message" id="proceduresError"></div>
         </div>
 
@@ -470,30 +470,43 @@
     color: #a0aec0;
 }
 
+.multiselect-input i {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.multiselect-input .placeholder {
+    flex: 1;
+}
+
 .selected-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: 6px;
+    margin-top: 12px;
 }
 
 .tag {
-    background: #f7fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 4px;
-    padding: 2px 8px;
+    background: #F16564;
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+    padding: 5px 10px;
     font-size: 12px;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
 }
 
 .tag-remove {
-    cursor: pointer;
-    color: #a0aec0;
+     cursor: pointer;
+    color: #fff;
+    font-weight: 700;
+    opacity: 0.9;
 }
 
 .tag-remove:hover {
-    color: #F16564;
+    opacity: 1;
 }
 
 .dropdown-arrow {
