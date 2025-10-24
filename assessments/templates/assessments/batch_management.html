@@ -86,7 +86,6 @@
                     <div class="multiselect-container">
                         <div class="multiselect-input" onclick="toggleLearnersDropdown()" id="learnersInput">
                             <span class="placeholder">Select learners</span>
-                            <div class="selected-tags" id="selectedLearners"></div>
                             <i class="fas fa-chevron-down"></i>
                         </div>
                         <div class="multiselect-dropdown" id="learnersDropdown">
@@ -104,6 +103,7 @@
                             </div>
                         </div>
                     </div>
+                    <div class="selected-tags" id="selectedLearners"></div>
                     <div class="error-message" id="learnersError"></div>
                 </div>
 
@@ -442,6 +442,15 @@
     background: white;
 }
 
+.multiselect-input i {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.multiselect-input .placeholder {
+    flex: 1;
+}
+
 .multiselect-input.active {
     border-color: #F16564;
 }
@@ -453,18 +462,20 @@
 .selected-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: 6px;
+    margin-top: 12px;
 }
 
 .tag {
-    background: #f7fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 4px;
-    padding: 2px 8px;
+    background: #F16564;
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+    padding: 5px 10px;
     font-size: 12px;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
 }
 
 .tag-remove {
@@ -1341,10 +1352,22 @@ function updateSelectedLearners() {
     const checkboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]:checked');
     const selectedTags = document.getElementById('selectedLearners');
     const placeholder = document.querySelector('.placeholder');
+    const selectAllCheckbox = document.getElementById('selectAllLearners');
     
     selectedTags.innerHTML = '';
     selectedLearners = Array.from(checkboxes).map(cb => cb.value);
     
+    // IMPORTANT: If "Select All" is checked, don't show individual tags
+    if (selectAllCheckbox && selectAllCheckbox.checked) {
+        const allTag = document.createElement('div');
+        allTag.className = 'tag';
+        allTag.innerHTML = `All Learners Selected (${checkboxes.length})`;
+        selectedTags.appendChild(allTag);
+        placeholder.style.display = 'none';
+        return; // Exit - no tags should be shown
+    }
+
+    // Otherwise, show individual tags for selected learners
     if (selectedLearners.length > 0) {
         placeholder.style.display = 'none';
         checkboxes.forEach(checkbox => {
@@ -1694,12 +1717,20 @@ function showSuccess(message) {
 function toggleSelectAllLearners() {
     const selectAllCheckbox = document.getElementById('selectAllLearners');
     const checkboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]');
+    const selectedTags = document.getElementById('selectedLearners');
 
     if (selectAllCheckbox.checked) {
         checkboxes.forEach(checkbox => {
             checkbox.checked = true;
         });
-        updateSelectedLearners(); // Update the selected tags display
+
+        // Show "All Selected" tag
+        selectedTags.innerHTML = '';
+        const allTag = document.createElement('div');
+        allTag.className = 'tag';
+        allTag.innerHTML = `All Learners Selected (${checkboxes.length})`;
+        selectedTags.appendChild(allTag);
+
     } else {
         checkboxes.forEach(checkbox => {
             checkbox.checked = false;
