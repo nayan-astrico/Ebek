@@ -162,9 +162,9 @@
 
             <div id="external-assessment-container" style="display: none;">
                 <div class="form-group">
-                    <label for="institute" class="form-label">Select Institute</label>
+                    <label for="institute" class="form-label">Select Institute/Hospital</label>
                     <div class="dropdown-container">
-                        <button class="dropdown-btn" id="instituteDropdownBtn">Select Institute</button>
+                        <button class="dropdown-btn" id="instituteDropdownBtn">Select Institute/Hospital</button>
                         <ul class="dropdown-list" id="instituteDropdownList"></ul>
                     </div>
                 </div>
@@ -178,6 +178,15 @@
                         <ul class="dropdown-list" id="batchDropdownList"></ul>
                     </div>
                 </div>
+
+                <!-- Select Course -->
+                <div class="form-group">
+                    <label for="course" class="form-label">Select Course</label>
+                    <div class="dropdown-container">
+                        <button class="dropdown-btn" id="courseDropdownBtn">Select Course</button>
+                        <ul class="dropdown-list" id="courseDropdownList"></ul>
+                    </div>
+                </div>
             </div>
 
             <div class="form-group">
@@ -189,13 +198,33 @@
                 </div>
             </div>
 
-            <!-- Select Assessor -->
-            <div class="form-group">
-                <label for="assessor" class="form-label">Select Assessor</label>
-                <div id="assessorChipsContainer" class="chip-container"></div>
+            <!-- Selected Procedures with their Assessors (B2B only) -->
+            <div id="selectedProceduresContainer" class="selected-procedures-container" style="display: none;">
+                <label class="form-label">Selected Procedures & Assessors</label>
+                <div id="selectedProceduresList"></div>
+            </div>
+
+            <!-- Select Assessor (B2C only) -->
+            <div id="assessorSelectionContainer">
+                <div class="form-group">
+                    <label for="assessor" class="form-label">Select Assessor</label>
+                    <div id="assessorChipsContainer" class="chip-container"></div>
+                    <div class="dropdown-container">
+                        <button class="dropdown-btn" id="assessorDropdownBtn">Select Assessor</button>
+                        <ul class="dropdown-list" id="assessorDropdownList"></ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Select Exam Type (Mock/Final) -->
+            <div class="form-group" id="examTypeContainer" style="display: none;">
+                <label for="examType" class="form-label">Select Exam Type</label>
                 <div class="dropdown-container">
-                    <button class="dropdown-btn" id="assessorDropdownBtn">Select Assessor</button>
-                    <ul class="dropdown-list" id="assessorDropdownList"></ul>
+                    <button class="dropdown-btn" id="examTypeDropdownBtn">Select Exam Type</button>
+                    <ul class="dropdown-list" id="examTypeDropdownList">
+                        <li data-value="Mock" data-id="Mock">Mock</li>
+                        <li data-value="Final" data-id="Final">Final</li>
+                    </ul>
                 </div>
             </div>
 
@@ -700,6 +729,104 @@
         opacity: 1;
         pointer-events: all;
     }
+
+    .selected-procedures-container {
+        margin-top: 20px;
+    }
+
+    .procedure-item {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        background: #f8fafc;
+    }
+
+    .procedure-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .procedure-name {
+        font-weight: 600;
+        color: #2d3748;
+        font-size: 14px;
+    }
+
+    .remove-procedure {
+        background: #e53e3e;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 4px 8px;
+        cursor: pointer;
+        font-size: 12px;
+    }
+
+    .remove-procedure:hover {
+        background: #c53030;
+    }
+
+    .assessor-selection {
+        margin-top: 10px;
+    }
+
+    .assessor-chips {
+        margin-top: 8px;
+        min-height: 20px;
+    }
+
+    .assessor-dropdown {
+        position: relative;
+        margin-top: 8px;
+    }
+
+    .assessor-dropdown-btn {
+        width: 100%;
+        padding: 8px 12px;
+        font-size: 12px;
+        color: #4a5568;
+        background-color: #f7fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 4px;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .assessor-dropdown-btn:hover {
+        background-color: #edf2f7;
+    }
+
+    .assessor-dropdown-list {
+        position: absolute;
+        width: 100%;
+        background-color: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 4px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        max-height: 150px;
+        overflow-y: auto;
+        margin-top: 2px;
+        display: none;
+        z-index: 2000;
+    }
+
+    .assessor-dropdown-list.show {
+        display: block;
+    }
+
+    .assessor-dropdown-list li {
+        padding: 8px 12px;
+        cursor: pointer;
+        list-style: none;
+        font-size: 12px;
+    }
+
+    .assessor-dropdown-list li:hover {
+        background-color: #f1f3f4;
+    }
 </style>
 
 <script>
@@ -756,46 +883,114 @@
             $('#typeDropdownBtn').text(type);
             $('#typeDropdownList').hide();
             
+            // Clear all previous selections
+            $('#batchChipsContainer').empty();
+            $('#procedureChipsContainer').empty();
+            $('#assessorChipsContainer').empty();
+            $('#selectedProceduresList').empty();
+            $('#courseDropdownBtn').text('Select Course');
+            $('#courseDropdownList').empty();
+            $('#procedureDropdownList').empty();
+            $('#assessorDropdownList').empty();
+            $('#examTypeDropdownBtn').text('Select Exam Type');
+
+            $('#internal-assessment-container').show();
+            $('#external-assessment-container').hide();
+            $('#selectedProceduresContainer').hide();
+            $('#assessorSelectionContainer').show();
+            
             if (type === 'B2C') {
                 $('#internal-assessment-container').show();
                 $('#external-assessment-container').hide();
+                $('#selectedProceduresContainer').hide();
+                $('#assessorSelectionContainer').show();
+                $('#examTypeContainer').hide();
                 fetchSkillathons();
+                // Fetch procedures dynamically on page load
+                $.ajax({
+                    url: '/fetch-procedures/',
+                    type: 'GET',
+                    success: function (response) {
+                        console.log(response);
+                        populateDropdown('procedureDropdownList', response.procedures, 'name');
+                    },
+                    error: function () {
+                        console.error('Failed to fetch procedures.');
+                    },
+                });
             } else {
                 $('#internal-assessment-container').hide();
                 $('#external-assessment-container').show();
+                $('#selectedProceduresContainer').show();
+                $('#assessorSelectionContainer').hide();
+                $('#examTypeContainer').show();
+                fetchB2BInstitutesAndHospitals();
             }
+        });
+
+        // Handle exam type selection
+        $('#examTypeDropdownList li').click(function (e) {
+            e.preventDefault();
+            const examType = $(this).data('value');
+            $('#examTypeDropdownBtn').text(examType);
+            $('#examTypeDropdownList').hide();
         });
 
         // Close dropdown when clicking outside
         $(document).off('click').on('click', function() { $('.dropdown-list').hide(); });
 
-        // Fetch institutes dynamically
-        $.ajax({
-            url: '/fetch-institutes/',
-            type: 'GET',
-            success: function (response) {
-                populateDropdown('instituteDropdownList', response.institutes, 'instituteName');
-            },
-            error: function () {
-                console.error('Failed to fetch institutes.');
-            },
-        });
-
-        // Fetch batches when an institute is selected
-        $('#instituteDropdownList').on('click', 'li', function () {
-            const institute = $(this).data('value');
-            $('#instituteDropdownBtn').text(institute);
-            $('#instituteDropdownList').hide();
-
+        // Fetch institutes and hospitals with B2B onboarding type
+        function fetchB2BInstitutesAndHospitals() {
             $.ajax({
-                url: '/fetch-cohorts/',
+                url: '/fetch-institutes/',
                 type: 'GET',
-                data: { institute },
+                data: { onboarding_type: 'b2b' },
                 success: function (response) {
-                    populateDropdown('batchDropdownList', response.cohorts, 'cohortName');
+                    const institutes = response.institutes.map(inst => ({
+                        id: inst.id,
+                        name: inst.instituteName,
+                        type: inst.type || 'institution'
+                    }));
+                    populateDropdown('instituteDropdownList', institutes, 'name');
                 },
                 error: function () {
-                    console.error('Failed to fetch cohorts.');
+                    console.error('Failed to fetch B2B institutions and hospitals.');
+                },
+            });
+        }
+
+        // Fetch batches when an institute/hospital is selected (B2B)
+        $('#instituteDropdownList').on('click', 'li', function () {
+            const instituteName = $(this).data('value');
+            const instituteId = $(this).data('id');
+            const instituteType = $(this).data('type');
+            $('#instituteDropdownBtn').text(instituteName);
+            $('#instituteDropdownList').hide();
+
+            // Clear previous selections
+            $('#batchChipsContainer').empty();
+            $('#courseDropdownBtn').text('Select Course');
+            $('#courseDropdownList').empty();
+
+            // Fetch batches for the selected institute/hospital
+            $.ajax({
+                url: '/api/batches/',
+                type: 'GET',
+                data: { 
+                    unitType: instituteType,
+                    unitName: instituteName
+                },
+                success: function (response) {
+                    if (response.success) {
+                        const batches = response.batches.map(batch => ({
+                            id: batch.id,
+                            name: batch.batchName
+                        }));
+                        populateDropdown('batchDropdownList', batches, 'name');
+                    }
+                },
+                error: function () {
+                    console.error('Failed to fetch batches.');
                 },
             });
         });
@@ -839,33 +1034,141 @@
             });
         });
 
-        // Fetch procedures dynamically on page load
-        $.ajax({
-            url: '/fetch-procedures/',
-            type: 'GET',
-            success: function (response) {
-                populateDropdown('procedureDropdownList', response.procedures, 'name');
-            },
-            error: function () {
-                console.error('Failed to fetch procedures.');
-            },
-        });
+        
 
-        // Handle multi-select for batches, procedures, and assessors
-        $('#batchDropdownList, #procedureDropdownList, #assessorDropdownList').on('click', 'li', function (e) {
+        // Handle batch selection (single select for B2B)
+        $('#batchDropdownList').on('click', 'li', function (e) {
             e.preventDefault();
             const value = $(this).data('value');
             const id = $(this).data('id');
-            // Map dropdown list ID to chip container ID
-            const dropdownId = $(this).parent().attr('id');
-            let containerId = '';
-            if (dropdownId === 'batchDropdownList') containerId = 'batchChipsContainer';
-            if (dropdownId === 'procedureDropdownList') containerId = 'procedureChipsContainer';
-            if (dropdownId === 'assessorDropdownList') containerId = 'assessorChipsContainer';
+            
+            // Clear previous batch selection
+            $('#batchChipsContainer').empty();
+            $('#courseDropdownBtn').text('Select Course');
+            $('#courseDropdownList').empty();
+            
+            // Add selected batch
+            $('#batchChipsContainer').append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
+            $(this).closest('.dropdown-list').hide();
+            
+            // Fetch courses for the selected batch
+            $.ajax({
+                url: `/api/batches/${id}/courses/`,
+                type: 'GET',
+                success: function (response) {
+                    if (response.success) {
+                        const courses = response.courses.map(course => ({
+                            id: course.id,
+                            name: course.name
+                        }));
+                        populateDropdown('courseDropdownList', courses, 'name');
+                    }
+                },
+                error: function () {
+                    console.error('Failed to fetch courses for batch.');
+                },
+            });
+        });
+
+        // Handle course selection (single select for B2B)
+        $('#courseDropdownList').on('click', 'li', function (e) {
+            e.preventDefault();
+            const value = $(this).data('value');
+            const id = $(this).data('id');
+            
+            $('#courseDropdownBtn').text(value);
+            $(this).closest('.dropdown-list').hide();
+            
+            // Fetch procedures for the selected course
+            $.ajax({
+                url: `/fetch-course-procedures/${id}/`,
+                type: 'GET',
+                success: function (response) {
+                    if (response.success) {
+                        const procedures = response.procedures.map(proc => ({
+                            id: proc.id,
+                            name: proc.name
+                        }));
+                        populateDropdown('procedureDropdownList', procedures, 'name');
+                    }
+                },
+                error: function () {
+                    console.error('Failed to fetch procedures for course.');
+                },
+            });
+        });
+
+        // Handle procedure selection based on test type
+        $('#procedureDropdownList').on('click', 'li', function (e) {
+            
+            const value = $(this).data('value');
+            const id = $(this).data('id');
+            
+            // Check if procedure already selected
+            if ($(`#procedureChipsContainer .chip[data-value="${value}"]`).length === 0) {
+                // Add to procedure chips
+                $('#procedureChipsContainer').append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
+                
+                // For B2B, also add to selected procedures container with assessor selection
+                const testType = $('#typeDropdownBtn').text().trim();
+                if (testType === 'B2B') {
+                    addProcedureWithAssessorSelection(id, value);
+                }
+            }
+            $(this).closest('.dropdown-list').hide();
+        });
+
+        // Handle assessor selection for specific procedures
+        $(document).on('click', '.assessor-dropdown-btn', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const procedureId = $(this).data('procedure-id');
+            const dropdownList = $(this).next('.assessor-dropdown-list');
+            
+            // Hide other dropdowns
+            $('.assessor-dropdown-list').not(dropdownList).hide();
+            dropdownList.toggle();
+        });
+
+        // Handle assessor selection
+        $(document).on('click', '.assessor-dropdown-list li', function(e) {
+            e.preventDefault();
+            const assessorId = $(this).data('id');
+            const assessorName = $(this).data('value');
+            const procedureId = $(this).closest('.procedure-item').data('procedure-id');
+            
+            // Check if assessor already selected for this procedure
+            if ($(`.procedure-item[data-procedure-id="${procedureId}"] .assessor-chips .chip[data-id="${assessorId}"]`).length === 0) {
+                // Add assessor chip
+                $(`.procedure-item[data-procedure-id="${procedureId}"] .assessor-chips`).append(
+                    `<span class="chip" data-id="${assessorId}" data-value="${assessorName}">${assessorName}<span class="remove">&times;</span></span>`
+                );
+            }
+            $(this).closest('.assessor-dropdown-list').hide();
+        });
+
+        // Remove assessor from specific procedure
+        $(document).on('click', '.assessor-chips .chip .remove', function(e) {
+            e.preventDefault();
+            $(this).parent().remove();
+        });
+
+        // Handle remove procedure button click
+        $(document).on('click', '.remove-procedure', function(e) {
+            e.preventDefault();
+            const procedureId = $(this).data('procedure-id');
+            removeProcedure(procedureId);
+        });
+
+        // Handle multi-select for assessors (B2C)
+        $('#assessorDropdownList').on('click', 'li', function (e) {
+            e.preventDefault();
+            const value = $(this).data('value');
+            const id = $(this).data('id');
 
             // Check if already selected
-            if ($(`#${containerId} .chip[data-value="${value}"]`).length === 0) {
-                $(`#${containerId}`).append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
+            if ($(`#assessorChipsContainer .chip[data-value="${value}"]`).length === 0) {
+                $(`#assessorChipsContainer`).append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
             }
             $(this).closest('.dropdown-list').hide();
         });
@@ -874,6 +1177,74 @@
         $('.chip-container').on('click', '.chip .remove', function () {
             $(this).parent().remove();
         });
+
+        // Function to remove procedure
+        function removeProcedure(procedureId) {
+            $(`.procedure-item[data-procedure-id="${procedureId}"]`).remove();
+            $(`#procedureChipsContainer .chip[data-id="${procedureId}"]`).remove();
+            
+            // Hide container if no procedures left
+            if ($('#selectedProceduresList .procedure-item').length === 0) {
+                $('#selectedProceduresContainer').hide();
+            }
+        }
+
+        // Function to add procedure with assessor selection
+        function addProcedureWithAssessorSelection(procedureId, procedureName) {
+            const procedureItem = $(`
+                <div class="procedure-item" data-procedure-id="${procedureId}">
+                    <div class="procedure-header">
+                        <span class="procedure-name">${procedureName}</span>
+                        <button type="button" class="remove-procedure" data-procedure-id="${procedureId}">Remove</button>
+                    </div>
+                    <div class="assessor-selection">
+                        <label class="form-label" style="font-size: 12px; margin-bottom: 5px;">Select Assessors for this Procedure:</label>
+                        <div class="assessor-chips"></div>
+                        <div class="assessor-dropdown">
+                            <button class="assessor-dropdown-btn" data-procedure-id="${procedureId}">Select Assessor</button>
+                            <ul class="assessor-dropdown-list" id="assessorList_${procedureId}"></ul>
+                        </div>
+                    </div>
+                </div>
+            `);
+            
+            $('#selectedProceduresList').append(procedureItem);
+            $('#selectedProceduresContainer').show();
+            
+            // Load assessors for this procedure's dropdown
+            loadAssessorsForProcedure(procedureId);
+        }
+
+        // Function to load assessors for a specific procedure
+        function loadAssessorsForProcedure(procedureId) {
+            const selectedInstitution = $('#instituteDropdownList li').filter(function() {
+                return $(this).text() === $('#instituteDropdownBtn').text();
+            });
+            if (selectedInstitution.length > 0) {
+                const institutionId = selectedInstitution.data('id');
+                console.log(institutionId);
+            
+            $.ajax({
+                url: '/fetch-assessors/',
+                data: { institution_id: institutionId },
+                type: 'GET',
+                success: function (response) {
+                    const assessorList = $(`#assessorList_${procedureId}`);
+                    assessorList.empty();
+                    response.assessors.forEach(assessor => {
+                        assessorList.append(`<li data-id="${assessor.id}" data-value="${assessor.name}">${assessor.name}</li>`);
+                    });
+                },
+                error: function () {
+                    console.error('Failed to fetch assessors for procedure.');
+                },
+            });
+        } else {
+            alert('Please select an institution first.');
+        }
+        }
+
+        
 
         // Populate dropdown
         function populateDropdown(dropdownId, items, property) {
@@ -936,21 +1307,62 @@
 
         // Gather selected batch IDs from the chip container (for B2B)
         let batchIds = [];
+        let courseId = null;
+        let examType = null;
         if (testType === 'B2B') {
             batchIds = $('#batchChipsContainer .chip').map(function () {
                 return $(this).data('id');
             }).get();
+            
+            // Get selected course ID
+            const selectedCourse = $('#courseDropdownList li').filter(function() {
+                return $(this).text() === $('#courseDropdownBtn').text();
+            });
+            if (selectedCourse.length > 0) {
+                courseId = selectedCourse.data('id');
+            }
+            
+            // Get exam type
+            examType = $('#examTypeDropdownBtn').text().trim();
         }
 
-        // Gather selected procedure IDs from the chip container
-        const procedures = $('#procedureChipsContainer .chip').map(function () {
-            return $(this).data('id');
-        }).get();
-
-        // Gather selected assessor IDs from the chip container
-        const assessors = $('#assessorChipsContainer .chip').map(function () {
-            return $(this).data('id');
-        }).get();
+        // Gather data based on test type
+        let procedureAssessorMappings = [];
+        let procedures = [];
+        let assessors = [];
+        
+        if (testType === 'B2B') {
+            // B2B: Use per-procedure assessor selection
+            $('#selectedProceduresList .procedure-item').each(function() {
+                const procedureId = $(this).data('procedure-id');
+                const procedureName = $(this).find('.procedure-name').text();
+                const assessorIds = $(this).find('.assessor-chips .chip').map(function() {
+                    return $(this).data('id');
+                }).get();
+                
+                procedureAssessorMappings.push({
+                    procedureId: procedureId,
+                    procedureName: procedureName,
+                    assessorIds: assessorIds
+                });
+            });
+            
+            // For B2B, also gather all assessors for backward compatibility
+            const allAssessors = [];
+            procedureAssessorMappings.forEach(mapping => {
+                allAssessors.push(...mapping.assessorIds);
+            });
+            assessors = [...new Set(allAssessors)];
+        } else {
+            // B2C: Use original logic
+            procedures = $('#procedureChipsContainer .chip').map(function () {
+                return $(this).data('id');
+            }).get();
+            
+            assessors = $('#assessorChipsContainer .chip').map(function () {
+                return $(this).data('id');
+            }).get();
+        }
 
         button.prop('disabled', true);
         spinner.show();
@@ -958,19 +1370,42 @@
             return this.nodeType === 3;
         }).first().replaceWith('Assigning...');
 
+        let institutionId = null;
+        const selectedInstitution = $('#instituteDropdownList li').filter(function() {
+                return $(this).text() === $('#instituteDropdownBtn').text();
+            });
+            if (selectedInstitution.length > 0) {
+                institutionId = selectedInstitution.data('id');
+            }
+
+        console.log(institutionId);
+
         // AJAX request to create tests for multiple batches
+        const requestData = {
+            test_type: testType,
+            batch_ids: batchIds,
+            test_date: testDate,
+            skillathon_id: skillathonId,
+            course_id: courseId,
+            exam_type: examType,
+            csrfmiddlewaretoken: $('[name="csrfmiddlewaretoken"]').val(),
+            institution_id: institutionId,
+        };
+        
+        if (testType === 'B2B') {
+            // B2B: Send procedure-assessor mappings
+            requestData.procedure_assessor_mappings = JSON.stringify(procedureAssessorMappings);
+            requestData.assessor_ids = assessors;
+        } else {
+            // B2C: Send original procedure_ids and assessor_ids
+            requestData.procedure_ids = procedures;
+            requestData.assessor_ids = assessors;
+        }
+        
         $.ajax({
             url: '/create-procedure-assignment-and-test/',
             type: 'POST',
-            data: {
-                test_type: testType,
-                batch_ids: batchIds,
-                procedure_ids: procedures,
-                test_date: testDate,
-                assessor_ids: assessors,
-                skillathon_id: skillathonId,
-                csrfmiddlewaretoken: $('[name="csrfmiddlewaretoken"]').val(),
-            },
+            data: requestData,
             traditional: true,
             success: function (response) {
                 alert('Tests and assignments created successfully.');

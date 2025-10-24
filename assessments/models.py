@@ -231,6 +231,7 @@ class Institution(models.Model):
     institute_id = models.CharField(max_length=50, unique=True, editable=False)
     onboarding_type = models.CharField(max_length=3, choices=ONBOARDING_TYPES)
     skillathon = models.ForeignKey('SkillathonEvent', on_delete=models.SET_NULL, null=True, blank=True)
+    allowed_to_take_classroom_test = models.BooleanField(default=False, help_text='Whether this institution allows classroom tests')
 
     def save(self, *args, **kwargs):
         if not self.institute_id:
@@ -260,6 +261,7 @@ class Hospital(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     onboarding_type = models.CharField(max_length=3, choices=ONBOARDING_TYPES)
     skillathon = models.ForeignKey('SkillathonEvent', on_delete=models.SET_NULL, null=True, blank=True)
+    allowed_to_take_classroom_test = models.BooleanField(default=False, help_text='Whether this hospital allows classroom tests')
 
     def save(self, *args, **kwargs):
         if not self.hospital_id:

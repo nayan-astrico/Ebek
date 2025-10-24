@@ -23,6 +23,7 @@ urlpatterns = [
     path('fetch-cohorts/', views.fetch_cohorts, name='fetch-cohorts'),
     path('fetch-assessors/', views.fetch_assessors, name='fetch-assessors'),
     path('fetch-procedures/', views.fetch_procedures, name='fetch-procedures'),
+    path('fetch-course-procedures/<str:course_id>/', views.fetch_course_procedures, name='fetch-course-procedures'),
     path('create-procedure-assignment-and-test/', views.create_procedure_assignment_and_test, name='create-procedure-assignment-and-test'),
     path('exam-reports/', views.render_exam_reports_page, name='exam_reports_page'),
     path('fetch-exam-reports/', views.fetch_exam_reports, name='fetch_exam_reports'),
