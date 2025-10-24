@@ -32,7 +32,7 @@ class InstitutionForm(forms.ModelForm):
     
     class Meta:
         model = Institution
-        fields = ['name', 'address', 'state', 'district', 'pin_code', 'onboarding_type', 'skillathon']
+        fields = ['name', 'address', 'state', 'district', 'pin_code', 'onboarding_type', 'skillathon', 'allowed_to_take_classroom_test']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
@@ -41,6 +41,7 @@ class InstitutionForm(forms.ModelForm):
             'pin_code': forms.TextInput(attrs={'class': 'form-control'}),
             'onboarding_type': forms.Select(attrs={'class': 'form-control'}),
             'skillathon': forms.Select(attrs={'class': 'form-control'}),
+            'allowed_to_take_classroom_test': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
     
     def __init__(self, *args, **kwargs):
@@ -53,7 +54,7 @@ class HospitalForm(forms.ModelForm):
     
     class Meta:
         model = Hospital
-        fields = ['name', 'address', 'state', 'district', 'pin_code', 'nurse_strength', 'number_of_beds', 'onboarding_type', 'skillathon']
+        fields = ['name', 'address', 'state', 'district', 'pin_code', 'nurse_strength', 'number_of_beds', 'onboarding_type', 'skillathon', 'allowed_to_take_classroom_test']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
@@ -63,6 +64,7 @@ class HospitalForm(forms.ModelForm):
             'number_of_beds': forms.NumberInput(attrs={'class': 'form-control'}),
             'onboarding_type': forms.Select(attrs={'class': 'form-control'}),
             'skillathon': forms.Select(attrs={'class': 'form-control'}),
+            'allowed_to_take_classroom_test': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
     
     def __init__(self, *args, **kwargs):
