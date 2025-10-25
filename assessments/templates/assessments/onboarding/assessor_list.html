@@ -120,7 +120,9 @@
                             <th>Mobile Number</th>
                             <th>Speciality</th>
                             <th>Status</th>
+                            {% if "edit_assessor" in request.user.get_all_permissions or "delete_assessor" in request.user.get_all_permissions or request.user.has_all_permissions %}
                             <th>Actions</th>
+                            {% endif %}
                         </tr>
                     </thead>
                     <tbody id="assessorTableBody">
@@ -140,8 +142,35 @@
             Add Assessor
         </a>
         {% endif %}
+        <script>
+        // Declare variables first
+        var canCreateAssessor = false;
+        var canEditAssessor = false;
+        var canDeleteAssessor = false;
+
+        // Then set them based on permissions
+        {% if "add_assessor" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canCreateAssessor = true;
+        {% endif %}
+
+        {% if "edit_assessor" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canEditAssessor = true;
+        {% endif %}
+
+        {% if "delete_assessor" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canDeleteAssessor = true;
+        {% endif %}
+
+        var userPermissions = {
+            canCreate: canCreateAssessor,
+            canEdit: canEditAssessor,
+            canDelete: canDeleteAssessor
+        };
+
+        var showActionsColumn = userPermissions.canEdit || userPermissions.canDelete;
+        </script>
+        </div>
     </div>
-            </div>
 
 <!-- Delete Modal -->
 <div class="modal fade" id="deleteModal" tabindex="-1">
@@ -795,35 +824,42 @@ function buildAssessorQueryParams() {
 }
 
 function renderAssessorRow(assessor) {
-    return `
-    <tr>
-        <td><div class="institution"><span>${assessor.full_name}</span></div></td>
-        <td>${assessor.email}</td>
-        <td>${assessor.phone_number}</td>
-        <td>${assessor.specialization ? assessor.specialization : '-'}</td>
-        <td><span class="badge ${assessor.is_active ? 'active' : 'inactive'}">${assessor.is_active ? 'Active' : 'Inactive'}</span></td>
-        <td>
-            <div class="actions">
-                {% if "edit_assessor" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                <a href="javascript:void(0);" class="btn-icon"
-                   onclick="openAssessorFormPanel('${assessor.edit_url}', 'Edit Assessor')">
-                    <i class="fas fa-edit"></i>
-                </a>
-                {% endif %}
-                {% if "delete_assessor" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                <button type="button" 
-                        class="btn-icon btn-danger" 
-                        data-name="${assessor.full_name}"
-                        data-url="${assessor.delete_url}"
-                        onclick="confirmDelete(this)"
-                        title="Delete">
-                    <i class="fas fa-trash"></i>
-                </button>
-                {% endif %}
-            </div>
-        </td>
-    </tr>
-    `;
+    var showActions = userPermissions.canEdit || userPermissions.canDelete;
+    
+    var html = '<tr>' +
+               '<td><div class="institution"><span>' + assessor.full_name + '</span></div></td>' +
+               '<td>' + assessor.email + '</td>' +
+               '<td>' + assessor.phone_number + '</td>' +
+               '<td>' + (assessor.specialization ? assessor.specialization : '-') + '</td>' +
+               '<td><span class="badge ' + (assessor.is_active ? 'active' : 'inactive') + '">' + 
+                   (assessor.is_active ? 'Active' : 'Inactive') + '</span></td>';
+    
+    // Actions column - only if user has permission
+    if (showActions) {
+        html += '<td><div class="actions">';
+        
+        if (userPermissions.canEdit) {
+            html += '<a href="javascript:void(0);" class="btn-icon" ' +
+                    'onclick="openAssessorFormPanel(\'' + assessor.edit_url + '\', \'Edit Assessor\')">' +
+                    '<i class="fas fa-edit"></i>' +
+                    '</a>';
+        }
+        
+        if (userPermissions.canDelete) {
+            html += '<button type="button" class="btn-icon btn-danger" ' +
+                    'data-name="' + assessor.full_name + '" ' +
+                    'data-url="' + assessor.delete_url + '" ' +
+                    'onclick="confirmDelete(this)" ' +
+                    'title="Delete">' +
+                    '<i class="fas fa-trash"></i>' +
+                    '</button>';
+        }
+        
+        html += '</div></td>';
+    }
+    
+    html += '</tr>';
+    return html;
 }
 
 function loadMoreAssessors() {

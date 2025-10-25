@@ -176,7 +176,9 @@
                         <th>Unit Type</th>
                         <th>Unit Name</th>
                         <th>Learners</th>
+                        {% if "edit_batch" in request.user.get_all_permissions or "delete_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
                         <th>Actions</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody id="batchesTableBody">
@@ -206,6 +208,33 @@
                 {% endif %}
             </div>
         </div>
+        <script>
+        // Declare variables first
+        var canCreateBatch = false;
+        var canEditBatch = false;
+        var canDeleteBatch = false;
+
+        // Then set them based on permissions
+        {% if "create_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canCreateBatch = true;
+        {% endif %}
+
+        {% if "edit_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canEditBatch = true;
+        {% endif %}
+
+        {% if "delete_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canDeleteBatch = true;
+        {% endif %}
+
+        var userPermissions = {
+            canCreate: canCreateBatch,
+            canEdit: canEditBatch,
+            canDelete: canDeleteBatch
+        };
+
+        var showActionsColumn = userPermissions.canEdit || userPermissions.canDelete;
+        </script>
     </div>
 </div>
 
@@ -1080,26 +1109,34 @@ function displayBatches(batches) {
     
     batches.forEach(batch => {
         const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${batch.batchName}</td>
-            <td>${batch.unitType.charAt(0).toUpperCase() + batch.unitType.slice(1)}</td>
-            <td>${batch.unitName}</td>
-            <td>${batch.learnerCount}</td>
-            <td>
-                <div class="actions">
-                    {% if "edit_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                    <button class="btn-icon" onclick="editBatch('${batch.id}')">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    {% endif %}
-                    {% if "delete_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                    <button class="btn-icon btn-danger" onclick="deleteBatch('${batch.id}')">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                    {% endif %}
-                </div>
-            </td>
-        `;
+        
+        var showActions = userPermissions.canEdit || userPermissions.canDelete;
+        
+        var html = '<td>' + batch.batchName + '</td>' +
+                   '<td>' + (batch.unitType.charAt(0).toUpperCase() + batch.unitType.slice(1)) + '</td>' +
+                   '<td>' + batch.unitName + '</td>' +
+                   '<td>' + batch.learnerCount + '</td>';
+        
+        // Actions column - only if user has permission
+        if (showActions) {
+            html += '<td><div class="actions">';
+            
+            if (userPermissions.canEdit) {
+                html += '<button class="btn-icon" onclick="editBatch(\'' + batch.id + '\')">' +
+                        '<i class="fas fa-edit"></i>' +
+                        '</button>';
+            }
+            
+            if (userPermissions.canDelete) {
+                html += '<button class="btn-icon btn-danger" onclick="deleteBatch(\'' + batch.id + '\')">' +
+                        '<i class="fas fa-trash"></i>' +
+                        '</button>';
+            }
+            
+            html += '</div></td>';
+        }
+        
+        row.innerHTML = html;
         tbody.appendChild(row);
     });
 }
