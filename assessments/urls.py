@@ -85,6 +85,7 @@ urlpatterns = [
     path('courses/<str:course_id>/remove-procedure/', views.remove_procedure_from_course, name='remove_procedure_from_course'),
     path('create-roles/', views.create_roles, name='create_roles'),
     path('assign-roles/', views.assign_roles, name='assign_roles'),
+    path('fetch-assessments/',views.fetch_assessments),
     
     # Batch API endpoints
     path('api/batches/', views.fetch_batches, name='fetch_batches'),
@@ -99,6 +100,10 @@ urlpatterns = [
     path('api/fetch-learners/<str:unit_type>/<str:unit_id>/', views.fetch_learners, name='fetch_learners'),
     path('api/institute-based-skillathon/', views.institute_based_skillathon, name='institute_based_skillathon'),
     path('api/download-student-report/', views.download_student_report, name='download_student_report'),
+
+
+    path('upload-preview/', views.upload_preview, name='upload_preview'),
+    path('upload-excel/', views.upload_excel, name='upload_excel'),
 
 
     # Batch Course API endpoints
