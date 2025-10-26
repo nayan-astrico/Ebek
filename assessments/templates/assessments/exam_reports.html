@@ -249,7 +249,7 @@
                         </div>
                     </div>
                     <div class="table-wrapper">
-                        <table class="performance-table">
+                        <table class="performance-table" id="studentDetailsTable">
                             <thead id="performanceTableHead">
                                 <tr>
                                     <th class="student-col sticky-col">Candidate Name</th>
@@ -2127,6 +2127,7 @@
     let studentHasMore = true;
     let currentSkillathonId = '';
     let currentInstituteId = '';
+    let sortingInPlace = false;
 
     function showLoading() {
         document.getElementById('loadingState').style.display = 'block';
@@ -2805,6 +2806,56 @@
                     updateScoreCards(data);
                     
                     updateStudentTable(data);
+
+                    const table = document.getElementById('studentDetailsTable');
+                    const headers = table.querySelectorAll('th');
+                    let sortOrder = {}; // track ascending/descending per column
+
+                    headers.forEach((header, index) => {
+                    header.style.cursor = 'pointer';
+                    header.addEventListener('click', () => {
+                        sortingInPlace = true;
+                        const tbody = table.querySelector('tbody');
+                        const rows = Array.from(tbody.querySelectorAll('tr'));
+                        console.log(rows);
+
+                        // toggle sorting order for this column
+                        sortOrder[index] = !sortOrder[index];
+                        const ascending = sortOrder[index];
+
+                        rows.sort((a, b) => {
+                            let A = a.children[index].textContent.trim();
+                            let B = b.children[index].textContent.trim();
+
+                            // Always push "-" to the end regardless of sort direction
+                            if (A === "-" && B === "-") return 0;
+                            if (A === "-") return 1;  // A is "-", move it to the end
+                            if (B === "-") return -1; // B is "-", move it to the end
+
+                            // Extract percentage values if they exist
+                            const percentageA = A.match(/(\d+(\.\d+)?)%/);
+                            const percentageB = B.match(/(\d+(\.\d+)?)%/);
+
+                            // Extract grade and percentage if in format "E (24%)"
+                            const gradePercentA = A.match(/[A-E]\s*\((\d+(\.\d+)?)%\)/);
+                            const gradePercentB = B.match(/[A-E]\s*\((\d+(\.\d+)?)%\)/);
+
+                            if (percentageA || gradePercentA) {
+                                const valueA = parseFloat(percentageA?.[1] || gradePercentA?.[1]) || 0;
+                                const valueB = parseFloat(percentageB?.[1] || gradePercentB?.[1]) || 0;
+                                return ascending ? valueA - valueB : valueB - valueA;
+                            }
+
+                            // Default to string comparison for non-percentage values
+                            return ascending ? A.localeCompare(B) : B.localeCompare(A);
+                        });
+
+                        // Re-append sorted rows
+                        rows.forEach(row => tbody.appendChild(row));
+                    });
+                    });
+
+
                 } else {
                     if (studentMetrics) studentMetrics.style.display = 'none';
                     if (noDataFound) noDataFound.style.display = 'block';
@@ -3696,7 +3747,9 @@
         fetchStudentMetrics();
         if (!fetchStudentMetricsInterval) {
             fetchStudentMetricsInterval = setInterval(() => {
-                fetchStudentMetrics();
+                if (!sortingInPlace) {
+                    fetchStudentMetrics();
+                }
             }, 10000); // 10 seconds
         }
     }

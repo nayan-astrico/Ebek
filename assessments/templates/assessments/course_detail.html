@@ -295,31 +295,6 @@
             <div class="error-message" id="editProceduresError"></div>
         </div>
 
-        <div class="form-group">
-            <label>OSCE Types <span class="text-danger">*</span></label>
-            <div class="checkbox-group" id="editOsceTypesGroup">
-                <div class="custom-checkbox">
-                    <input type="checkbox" id="editClassroom" name="osce_type" value="classroom">
-                    <label for="editClassroom">Classroom</label>
-                </div>
-                <div class="custom-checkbox">
-                    <input type="checkbox" id="editMock" name="osce_type" value="mock">
-                    <label for="editMock">Mock</label>
-                </div>
-                <div class="custom-checkbox">
-                    <input type="checkbox" id="editFinal" name="osce_type" value="final" onchange="toggleEditVerificationField(this)">
-                    <label for="editFinal">Final</label>
-                </div>
-            </div>
-            <div class="error-message" id="editOsceTypesError"></div>
-        </div>
-
-        <div class="form-group verification-field" id="editVerificationField" style="display: none;">
-            <div class="custom-checkbox">
-                <input type="checkbox" id="editVerification" name="verification_required">
-                <label for="editVerification">Verification Required</label>
-            </div>
-        </div>
 
         <div class="side-panel-actions">
             <button type="button" class="btn btn-light" onclick="closeEditCoursePanel()">Cancel</button>

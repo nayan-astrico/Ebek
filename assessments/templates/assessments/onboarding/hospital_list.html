@@ -147,7 +147,9 @@
                 <th>Nurses</th>
                             <th>Unit Head</th>
                             <th>Status</th>
+                            {% if "edit_hospital" in request.user.get_all_permissions or "delete_hospital" in request.user.get_all_permissions or request.user.has_all_permissions %}
                             <th>Actions</th>
+                            {% endif %}
                         </tr>
                     </thead>
                     <tbody id="hospitalTableBody">
@@ -166,6 +168,33 @@
                 Add New Hospital
             </a>
             {% endif %}
+            <script>
+            // Declare variables first
+            var canCreateHospital = false;
+            var canEditHospital = false;
+            var canDeleteHospital = false;
+
+            // Then set them based on permissions
+            {% if "create_hospital" in request.user.get_all_permissions or request.user.has_all_permissions %}
+            canCreateHospital = true;
+            {% endif %}
+
+            {% if "edit_hospital" in request.user.get_all_permissions or request.user.has_all_permissions %}
+            canEditHospital = true;
+            {% endif %}
+
+            {% if "delete_hospital" in request.user.get_all_permissions or request.user.has_all_permissions %}
+            canDeleteHospital = true;
+            {% endif %}
+
+            var userPermissions = {
+                canCreate: canCreateHospital,
+                canEdit: canEditHospital,
+                canDelete: canDeleteHospital
+            };
+
+            var showActionsColumn = userPermissions.canEdit || userPermissions.canDelete;
+            </script>
         </div>
     </div>
     
@@ -271,41 +300,48 @@ function buildHospitalQueryParams() {
 function renderHospitalRow(hospital) {
     const row = document.createElement('tr');
     row.setAttribute('data-hospital-id', hospital.id);
-    row.innerHTML = `
-        <td><div class="institution"><span>${hospital.name}</span></div></td>
-        <!-- <td>${hospital.group ? hospital.group : '-'}</td> -->
-        <td>${hospital.state ? hospital.state : '-'}</td>
-        <td>${hospital.nurse_strength ? hospital.nurse_strength : '0'}</td>
-        <td>
-            ${hospital.unit_head ? `<div class="unit-head"><span>${hospital.unit_head}</span></div>` : '<span class="text-muted">-</span>'}
-        </td>
-        <td>
-            <span class="badge ${hospital.is_active ? 'active' : 'inactive'}">
-                ${hospital.is_active ? 'Active' : 'Inactive'}
-            </span>
-        </td>
-        <td>
-            <div class="actions">
-                {% if "edit_hospital" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                <a href="javascript:void(0);" class="btn-icon"
-                   onclick="openHospitalFormPanel('${hospital.edit_url}', 'Edit Hospital')"
-                   title="Edit">
-                    <i class="fas fa-edit"></i>
-                </a>
-                {% endif %}
-                {% if "delete_hospital" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                <button type="button" 
-                        class="btn-icon btn-danger" 
-                        data-name="${hospital.name}"
-                        data-url="${hospital.delete_url}"
-                        onclick="confirmDelete(this)"
-                        title="Delete">
-                    <i class="fas fa-trash"></i>
-                </button>
-                {% endif %}
-            </div>
-        </td>
-    `;
+    
+    var showActions = userPermissions.canEdit || userPermissions.canDelete;
+    
+    var html = '<td><div class="institution"><span>' + hospital.name + '</span></div></td>' +
+               '<!-- <td>' + (hospital.group ? hospital.group : '-') + '</td> -->' +
+               '<td>' + (hospital.state ? hospital.state : '-') + '</td>' +
+               '<td>' + (hospital.nurse_strength ? hospital.nurse_strength : '0') + '</td>' +
+               '<td>' + 
+                   (hospital.unit_head ? '<div class="unit-head"><span>' + hospital.unit_head + '</span></div>' : '<span class="text-muted">-</span>') +
+               '</td>' +
+               '<td>' +
+                   '<span class="badge ' + (hospital.is_active ? 'active' : 'inactive') + '">' +
+                       (hospital.is_active ? 'Active' : 'Inactive') +
+                   '</span>' +
+               '</td>';
+    
+    // Actions column - only if user has permission
+    if (showActions) {
+        html += '<td><div class="actions">';
+        
+        if (userPermissions.canEdit) {
+            html += '<a href="javascript:void(0);" class="btn-icon" ' +
+                    'onclick="openHospitalFormPanel(\'' + hospital.edit_url + '\', \'Edit Hospital\')" ' +
+                    'title="Edit">' +
+                    '<i class="fas fa-edit"></i>' +
+                    '</a>';
+        }
+        
+        if (userPermissions.canDelete) {
+            html += '<button type="button" class="btn-icon btn-danger" ' +
+                    'data-name="' + hospital.name + '" ' +
+                    'data-url="' + hospital.delete_url + '" ' +
+                    'onclick="confirmDelete(this)" ' +
+                    'title="Delete">' +
+                    '<i class="fas fa-trash"></i>' +
+                    '</button>';
+        }
+        
+        html += '</div></td>';
+    }
+    
+    row.innerHTML = html;
     return row;
 }
 

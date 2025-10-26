@@ -222,7 +222,8 @@ def on_institute_save(sender, instance, created, **kwargs):
         "unit_head_email": instance.unit_head.email if instance.unit_head else None,
         "unit_head_phone": instance.unit_head.phone_number if instance.unit_head else None,
         "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
-        "skillathon_event": instance.skillathon.name if instance.skillathon else None
+        "skillathon_event": instance.skillathon.name if instance.skillathon else None,
+        "allowed_to_take_classroom_test": instance.allowed_to_take_classroom_test
     }
 
     db.collection("InstituteNames").document(str(instance.id)).set(data)
@@ -276,7 +277,8 @@ def on_hospital_save(sender, instance, created, **kwargs):
         "unit_head_email": instance.unit_head.email if instance.unit_head else None,
         "unit_head_phone": instance.unit_head.phone_number if instance.unit_head else None,
         "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
-        "skillathon_event": instance.skillathon.name if instance.skillathon else None
+        "skillathon_event": instance.skillathon.name if instance.skillathon else None,
+        "allowed_to_take_classroom_test": instance.allowed_to_take_classroom_test
     }
     db.collection("HospitalNames").document(str(instance.id)).set(data)
     if instance.unit_head:
@@ -414,6 +416,7 @@ def on_learner_save(sender, instance, created, **kwargs):
                 "learner_gender": instance.learner_gender if instance.learner_gender else None,
                 "skillathon_event": instance.skillathon_event.name if instance.skillathon_event else None,
                 "institute": instance.college.name if instance.college else None,
+                "institution": instance.college.name if instance.college else None,
                 "hospital": instance.hospital.name if instance.hospital else None,
                 "course": instance.course if instance.course else None,
                 "stream": instance.stream if instance.stream else None,
@@ -652,6 +655,7 @@ def batch_sync_users_to_firestore_with_progress(users, session_key, total_rows, 
                         "skillathon_event": learner.skillathon_event.name if learner.skillathon_event else None,
                         "onboarding_type": learner.onboarding_type,
                         "institute": learner.college.name if learner.college else None,
+                        "institution": learner.college.name if learner.college else None,
                         "hospital": learner.hospital.name if learner.hospital else None,
                         "course": learner.course if learner.course else None,
                         "stream": learner.stream if learner.stream else None,

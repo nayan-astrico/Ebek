@@ -673,6 +673,13 @@
                 padding: 15px;
             }
         }
+
+        /* Fix user profile and logout at bottom */
+        .sidebar-bottom-section {
+            margin-top: auto;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
     </style>
 </head>
 <body>
@@ -682,7 +689,7 @@
             <img src="{% static 'assessments/img/Ebekmed-Favicon.png' %}" alt="Ebek Logo" style="height: 38px; width: 38px; object-fit: contain;">
             <span class="brand-text">EBEK MED</span>
         </div>
-        
+    <div class="nav-items">  
         {% if request.user|check_icon_navigation_permissions:'reports' %}
         <div class="nav-item">
             <a href="{% url 'exam_reports_page' %}" class="nav-link" title="View Assessment Reports">
@@ -709,7 +716,6 @@
             </a>
         </div>
         {% endif %}
-
         {% if request.user|check_icon_navigation_permissions:'onboarding' %}
         <div class="nav-item">
             <a href="#onboardingSubmenu" class="nav-link" data-toggle="collapse" aria-expanded="false" title="Onboarding and Management">
@@ -762,6 +768,7 @@
             </div>
         </div>
         {% endif %}
+
         {% if request.user|check_icon_navigation_permissions:'assignments' %}
         <div class="nav-item">
             <a href="{% url 'assign_assessment' %}" class="nav-link" title="View & Assign Assessments">
@@ -796,22 +803,24 @@
             </a>
         </div>
         {% endif %}
-
-        <div class="nav-item" style="margin-top: 100%;">
-            <div class="sidebar-user-info d-flex align-items-center">
-                <div class="sidebar-user-initial mr-2">
-                    <span class="user-initial-circle">{{ request.user.email|first|upper }}</span>
+    </div>
+        <div class="sidebar-bottom-section">
+            <div class="nav-item">
+                <div class="sidebar-user-info d-flex align-items-center">
+                    <div class="sidebar-user-initial mr-2">
+                        <span class="user-initial-circle">{{ request.user.email|first|upper }}</span>
+                    </div>
+                    <span class="sidebar-user-email">{{ request.user.full_name }}</span>
                 </div>
-                <span class="sidebar-user-email">{{ request.user.full_name }}</span>
+            </div>
+            <div class="nav-item">
+                <a href="{% url 'logout' %}" class="nav-link d-flex align-items-center sidebar-logout-link">
+                        <i class="fas fa-sign-out-alt" style="font-size: 1.2rem; margin: -6px;"></i>
+                    <span class="sidebar-logout-text" style="margin-left: 32px;">Logout</span>
+                </a>
             </div>
         </div>
-        <div class="nav-item">
-            <a href="{% url 'logout' %}" class="nav-link d-flex align-items-center sidebar-logout-link">
-                    <i class="fas fa-sign-out-alt" style="font-size: 1.2rem; margin: -6px;"></i>
-                <span class="sidebar-logout-text" style="margin-left: 32px;">Logout</span>
-            </a>
-        </div>
-</div>
+    </div>
 {% endif %}
 
 

@@ -86,7 +86,6 @@
                     <div class="multiselect-container">
                         <div class="multiselect-input" onclick="toggleLearnersDropdown()" id="learnersInput">
                             <span class="placeholder">Select learners</span>
-                            <div class="selected-tags" id="selectedLearners"></div>
                             <i class="fas fa-chevron-down"></i>
                         </div>
                         <div class="multiselect-dropdown" id="learnersDropdown">
@@ -104,6 +103,7 @@
                             </div>
                         </div>
                     </div>
+                    <div class="selected-tags" id="selectedLearners"></div>
                     <div class="error-message" id="learnersError"></div>
                 </div>
 
@@ -176,7 +176,9 @@
                         <th>Unit Type</th>
                         <th>Unit Name</th>
                         <th>Learners</th>
+                        {% if "edit_batch" in request.user.get_all_permissions or "delete_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
                         <th>Actions</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody id="batchesTableBody">
@@ -206,6 +208,33 @@
                 {% endif %}
             </div>
         </div>
+        <script>
+        // Declare variables first
+        var canCreateBatch = false;
+        var canEditBatch = false;
+        var canDeleteBatch = false;
+
+        // Then set them based on permissions
+        {% if "create_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canCreateBatch = true;
+        {% endif %}
+
+        {% if "edit_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canEditBatch = true;
+        {% endif %}
+
+        {% if "delete_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canDeleteBatch = true;
+        {% endif %}
+
+        var userPermissions = {
+            canCreate: canCreateBatch,
+            canEdit: canEditBatch,
+            canDelete: canDeleteBatch
+        };
+
+        var showActionsColumn = userPermissions.canEdit || userPermissions.canDelete;
+        </script>
     </div>
 </div>
 
@@ -442,6 +471,15 @@
     background: white;
 }
 
+.multiselect-input i {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.multiselect-input .placeholder {
+    flex: 1;
+}
+
 .multiselect-input.active {
     border-color: #F16564;
 }
@@ -453,23 +491,27 @@
 .selected-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: 6px;
+    margin-top: 12px;
 }
 
 .tag {
-    background: #f7fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 4px;
-    padding: 2px 8px;
+    background: #F16564;
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+    padding: 5px 10px;
     font-size: 12px;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
 }
 
 .tag-remove {
     cursor: pointer;
-    color: #666;
+    color: #fff;
+    font-weight: 700;
+    opacity: 0.9;
 }
 
 .multiselect-dropdown {
@@ -1067,26 +1109,34 @@ function displayBatches(batches) {
     
     batches.forEach(batch => {
         const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${batch.batchName}</td>
-            <td>${batch.unitType.charAt(0).toUpperCase() + batch.unitType.slice(1)}</td>
-            <td>${batch.unitName}</td>
-            <td>${batch.learnerCount}</td>
-            <td>
-                <div class="actions">
-                    {% if "edit_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                    <button class="btn-icon" onclick="editBatch('${batch.id}')">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    {% endif %}
-                    {% if "delete_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                    <button class="btn-icon btn-danger" onclick="deleteBatch('${batch.id}')">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                    {% endif %}
-                </div>
-            </td>
-        `;
+        
+        var showActions = userPermissions.canEdit || userPermissions.canDelete;
+        
+        var html = '<td>' + batch.batchName + '</td>' +
+                   '<td>' + (batch.unitType.charAt(0).toUpperCase() + batch.unitType.slice(1)) + '</td>' +
+                   '<td>' + batch.unitName + '</td>' +
+                   '<td>' + batch.learnerCount + '</td>';
+        
+        // Actions column - only if user has permission
+        if (showActions) {
+            html += '<td><div class="actions">';
+            
+            if (userPermissions.canEdit) {
+                html += '<button class="btn-icon" onclick="editBatch(\'' + batch.id + '\')">' +
+                        '<i class="fas fa-edit"></i>' +
+                        '</button>';
+            }
+            
+            if (userPermissions.canDelete) {
+                html += '<button class="btn-icon btn-danger" onclick="deleteBatch(\'' + batch.id + '\')">' +
+                        '<i class="fas fa-trash"></i>' +
+                        '</button>';
+            }
+            
+            html += '</div></td>';
+        }
+        
+        row.innerHTML = html;
         tbody.appendChild(row);
     });
 }
@@ -1341,10 +1391,22 @@ function updateSelectedLearners() {
     const checkboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]:checked');
     const selectedTags = document.getElementById('selectedLearners');
     const placeholder = document.querySelector('.placeholder');
+    const selectAllCheckbox = document.getElementById('selectAllLearners');
     
     selectedTags.innerHTML = '';
     selectedLearners = Array.from(checkboxes).map(cb => cb.value);
     
+    // IMPORTANT: If "Select All" is checked, don't show individual tags
+    if (selectAllCheckbox && selectAllCheckbox.checked) {
+        const allTag = document.createElement('div');
+        allTag.className = 'tag';
+        allTag.innerHTML = `All Learners Selected (${checkboxes.length})`;
+        selectedTags.appendChild(allTag);
+        placeholder.style.display = 'none';
+        return; // Exit - no tags should be shown
+    }
+
+    // Otherwise, show individual tags for selected learners
     if (selectedLearners.length > 0) {
         placeholder.style.display = 'none';
         checkboxes.forEach(checkbox => {
@@ -1694,12 +1756,20 @@ function showSuccess(message) {
 function toggleSelectAllLearners() {
     const selectAllCheckbox = document.getElementById('selectAllLearners');
     const checkboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]');
+    const selectedTags = document.getElementById('selectedLearners');
 
     if (selectAllCheckbox.checked) {
         checkboxes.forEach(checkbox => {
             checkbox.checked = true;
         });
-        updateSelectedLearners(); // Update the selected tags display
+
+        // Show "All Selected" tag
+        selectedTags.innerHTML = '';
+        const allTag = document.createElement('div');
+        allTag.className = 'tag';
+        allTag.innerHTML = `All Learners Selected (${checkboxes.length})`;
+        selectedTags.appendChild(allTag);
+
     } else {
         checkboxes.forEach(checkbox => {
             checkbox.checked = false;
