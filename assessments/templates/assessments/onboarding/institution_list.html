@@ -164,7 +164,9 @@
                 <th>Learners</th>
                 <th>Unit Head</th>
                 <th>Status</th>
+                {% if "edit_institute" in request.user.get_all_permissions or "delete_institute" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <th>Actions</th>
+                {% endif %}
             </tr>
         </thead>
         <tbody id="institutionTableBody">
@@ -183,6 +185,33 @@
                 Add New Institution
             </a>
             {% endif %}
+            <script>
+            // Declare variables first
+            var canCreateInstitution = false;
+            var canEditInstitution = false;
+            var canDeleteInstitution = false;
+
+            // Then set them based on permissions
+            {% if "create_institute" in request.user.get_all_permissions or request.user.has_all_permissions %}
+            canCreateInstitution = true;
+            {% endif %}
+
+            {% if "edit_institute" in request.user.get_all_permissions or request.user.has_all_permissions %}
+            canEditInstitution = true;
+            {% endif %}
+
+            {% if "delete_institute" in request.user.get_all_permissions or request.user.has_all_permissions %}
+            canDeleteInstitution = true;
+            {% endif %}
+
+            var userPermissions = {
+                canCreate: canCreateInstitution,
+                canEdit: canEditInstitution,
+                canDelete: canDeleteInstitution
+            };
+
+            var showActionsColumn = userPermissions.canEdit || userPermissions.canDelete;
+            </script>
         </div>
     </div>
     
@@ -551,41 +580,48 @@ function buildInstitutionQueryParams() {
 function renderInstitutionRow(inst) {
     const row = document.createElement('tr');
     row.setAttribute('data-institution-id', inst.id);
-    row.innerHTML = `
-        <td><div class="institution"><span>${inst.name}</span></div></td>
-        <!-- <td>${inst.group ? inst.group : '-'}</td> -->
-        <td>${inst.state ? inst.state : '-'}</td>
-        <td>${inst.total_strength ? inst.total_strength : '-'}</td>
-        <td>
-            ${inst.unit_head ? `<div class="unit-head"><span>${inst.unit_head}</span></div>` : '<span class="text-muted">-</span>'}
-        </td>
-        <td>
-            <span class="badge ${inst.is_active ? 'active' : 'inactive'}">
-                ${inst.is_active ? 'Active' : 'Inactive'}
-            </span>
-        </td>
-        <td>
-            <div class="actions">
-                {% if "edit_institute" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                <a href="javascript:void(0);" class="btn-icon"
-                   onclick="openInstitutionFormPanel('${inst.edit_url}', 'Edit Institution')"
-                   title="Edit">
-                    <i class="fas fa-edit"></i>
-                </a>
-                {% endif %}
-                {% if "delete_institute" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                <button type="button" 
-                        class="btn-icon btn-danger" 
-                        data-name="${inst.name}"
-                        data-url="${inst.delete_url}"
-                        onclick="confirmDelete(this)"
-                        title="Delete">
-                    <i class="fas fa-trash"></i>
-                </button>
-                {% endif %}
-            </div>
-        </td>
-    `;
+    
+    var showActions = userPermissions.canEdit || userPermissions.canDelete;
+    
+    var html = '<td><div class="institution"><span>' + inst.name + '</span></div></td>' +
+               '<!-- <td>' + (inst.group ? inst.group : '-') + '</td> -->' +
+               '<td>' + (inst.state ? inst.state : '-') + '</td>' +
+               '<td>' + (inst.total_strength ? inst.total_strength : '-') + '</td>' +
+               '<td>' + 
+                   (inst.unit_head ? '<div class="unit-head"><span>' + inst.unit_head + '</span></div>' : '<span class="text-muted">-</span>') +
+               '</td>' +
+               '<td>' +
+                   '<span class="badge ' + (inst.is_active ? 'active' : 'inactive') + '">' +
+                       (inst.is_active ? 'Active' : 'Inactive') +
+                   '</span>' +
+               '</td>';
+    
+    // Actions column - only if user has permission
+    if (showActions) {
+        html += '<td><div class="actions">';
+        
+        if (userPermissions.canEdit) {
+            html += '<a href="javascript:void(0);" class="btn-icon" ' +
+                    'onclick="openInstitutionFormPanel(\'' + inst.edit_url + '\', \'Edit Institution\')" ' +
+                    'title="Edit">' +
+                    '<i class="fas fa-edit"></i>' +
+                    '</a>';
+        }
+        
+        if (userPermissions.canDelete) {
+            html += '<button type="button" class="btn-icon btn-danger" ' +
+                    'data-name="' + inst.name + '" ' +
+                    'data-url="' + inst.delete_url + '" ' +
+                    'onclick="confirmDelete(this)" ' +
+                    'title="Delete">' +
+                    '<i class="fas fa-trash"></i>' +
+                    '</button>';
+        }
+        
+        html += '</div></td>';
+    }
+    
+    row.innerHTML = html;
     return row;
 }
 

@@ -143,6 +143,8 @@ class EbekUser(AbstractBaseUser, PermissionsMixin):
         return False
     
     def check_icon_navigation_permissions(self, tab_name):
+        onboarding_permissions = []
+        
         if tab_name == 'reports':
             if "view_overall_report" in self.get_all_permissions() \
                 or 'view_candidate_report' in self.get_all_permissions() \
@@ -181,11 +183,26 @@ class EbekUser(AbstractBaseUser, PermissionsMixin):
                 or self.has_all_permissions():
                 return True
         if tab_name == 'onboarding':
-            if ("view_institutions" in self.get_all_permissions()  or "view_hospitals" in self.get_all_permissions() or "view_learners" in self.get_all_permissions() or "view_assessors" in self.get_all_permissions() or "view_skillathons" in self.get_all_permissions()) \
-                or self.has_all_permissions():
-                return True
+                    # Check if user has ANY onboarding-related permission
+                    onboarding_permissions = [
+                        # Learners
+                        'view_learners', 'add_learner', 'edit_learner', 'delete_learner', 'bulk_upload_learners',
+                        # Institutions
+                        'view_institutes', 'create_institute', 'edit_institute', 'delete_institute',
+                        # Hospitals
+                        'view_hospitals', 'create_hospital', 'edit_hospital', 'delete_hospital',
+                        # Assessors
+                        'view_assessors', 'add_assessor', 'edit_assessor', 'delete_assessor',
+                        # Skillathons
+                        'view_skillathons', 'add_skillathon', 'edit_skillathon', 'delete_skillathon',
+                        # Groups
+                        'view_groups', 'create_group', 'edit_group', 'delete_group'
+                    ]
+        user_perms = self.get_all_permissions()
+        if any(perm in user_perms for perm in onboarding_permissions) or self.has_all_permissions():
+                    return True
         return False
-
+    
 class PasswordResetToken(models.Model):
     user = models.ForeignKey('EbekUser', on_delete=models.CASCADE)
     token = models.UUIDField(default=uuid.uuid4, unique=True)

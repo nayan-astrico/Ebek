@@ -2741,7 +2741,15 @@ def course_management(request):
     """
     if not request.user.check_icon_navigation_permissions('courses'):
         return HttpResponse('You are not authorized to access this page')
-    return render(request, 'assessments/course_management.html')
+    
+    # Get user's permissions
+    user_permissions = request.user.get_all_permissions if hasattr(request.user, 'get_all_permissions') else []
+    
+    context = {
+        'user_permissions': user_permissions,
+    }
+    
+    return render(request, 'assessments/course_management.html', context)
 
 def course_detail(request, course_id):
     """

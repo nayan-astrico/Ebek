@@ -194,7 +194,7 @@
             <!-- Users will be loaded here via AJAX -->
         </tbody>
     </table>
-    
+
     <!-- Empty State -->
     <div id="emptyState" class="empty-state">
         <div class="empty-state-content">
@@ -292,6 +292,7 @@
     background: #e55a59;
     border-color: #e55a59;
 }
+
 /* Role assignment specific styles */
 .roles-container {
     border: 1px solid #e2e8f0;
@@ -1592,7 +1593,7 @@ function createUser() {
     if (selectedRole) {
         data.role_id = selectedRole.value;
     }
-    
+
     // Show loading state
     spinner.style.display = 'inline-block';
     buttonText.textContent = isEdit ? 'Saving...' : 'Creating...';

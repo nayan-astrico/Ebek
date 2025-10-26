@@ -12,10 +12,14 @@
         <p class="text-muted">Manage your training courses</p>
     </div>
     <div class="header-right">
-        <button class="btn btn-primary" onclick="toggleAddCoursePanel()">
-            <i class="fas fa-plus"></i>
-            Add Course
-        </button>
+    {# Show Add button only if user has create_course permission #}
+    {# Don't show if user ONLY has edit/delete permissions #}
+    {% if "create_course" in request.user.get_all_permissions or request.user.has_all_permissions %}
+    <button class="btn btn-primary" onclick="toggleAddCoursePanel()">
+        <i class="fas fa-plus"></i>
+        Add Course
+    </button>
+    {% endif %}
     </div>
 </div>
 
@@ -163,8 +167,14 @@
             <tr>
                 <th>Course Name</th>
                 <th>No. of Procedures</th>
+                {% if "update_course_status" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <th>Status</th>
+                {% endif %}
+                {# Show Actions column only if user has edit OR delete permission #}
+                {# Don't show if user ONLY has create permission #}
+                {% if "edit_course" in request.user.get_all_permissions or "delete_course" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <th>Actions</th>
+                {% endif %}
             </tr>
         </thead>
         <tbody id="coursesTableBody">
@@ -191,6 +201,43 @@
             Create Course
         </button>
         {% endif %}
+        <script>
+            // Declare variables first
+            var canCreateCourse = false;
+            var canEditCourse = false;
+            var canDeleteCourse = false;
+            var canUpdateStatus = false;
+
+            // Then set them based on permissions
+            {% if "create_course" in request.user.get_all_permissions or request.user.has_all_permissions %}
+            canCreateCourse = true;
+            {% endif %}
+
+            {% if "edit_course" in request.user.get_all_permissions or request.user.has_all_permissions %}
+            canEditCourse = true;
+            {% endif %}
+
+            {% if "delete_course" in request.user.get_all_permissions or request.user.has_all_permissions %}
+            canDeleteCourse = true;
+            {% endif %}
+
+            {% if "update_course_status" in request.user.get_all_permissions or request.user.has_all_permissions %}
+            canUpdateStatus = true;
+            {% endif %}
+
+            var userPermissions = {
+                canCreate: canCreateCourse,
+                canEdit: canEditCourse,
+                canDelete: canDeleteCourse,
+                canUpdateStatus: canUpdateStatus
+            };
+
+            var showStatusColumn = userPermissions.canUpdateStatus;
+            var showActionsColumn = userPermissions.canEdit || userPermissions.canDelete;
+            
+            // Hide Add Course button if user has edit/delete but not create
+            var showAddButton = userPermissions.canCreate;
+        </script>
     </div>
 </div>
 {% endif %}
@@ -474,7 +521,9 @@
 }
 
 .tag-remove {
+    cursor: pointer;
      cursor: pointer;
+
     color: #fff;
     font-weight: 700;
     opacity: 0.9;
@@ -964,30 +1013,44 @@ let currentStatusFilters = [];
 function renderCourseRow(course) {
     const row = document.createElement('tr');
     row.className = 'course-row';
-    row.innerHTML = `
-        <td>${course.name}</td>
-        <td>${course.procedure_count}</td>
-        {% if "update_course_status" in request.user.get_all_permissions or request.user.has_all_permissions %}
-        <td>
-            <label class="switch">
-                <input type="checkbox" ${course.status === 'active' ? 'checked' : ''} onchange="toggleCourseStatus('${course.id}', this.checked ? 'active' : 'inactive')">
-                <span class="slider round"></span>
-            </label>
-        </td>
-        {% endif %}
-        <td>
-            <div class="actions">
-                <button class="btn-icon" onclick="event.stopPropagation(); editCourse('${course.id}')" title="Edit Course">
-                    <i class="fas fa-edit"></i>
-                </button>
-                {% if "delete_course" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                <button class="btn-icon btn-danger" onclick="event.stopPropagation(); deleteCourse('${course.id}')">
-                    <i class="fas fa-trash"></i>
-                </button>
-                {% endif %}
-            </div>
-        </td>
-    `;
+    
+    var showStatus = userPermissions.canUpdateStatus;
+    var showActions = userPermissions.canEdit || userPermissions.canDelete;
+    
+    var html = '<td>' + course.name + '</td>' +
+               '<td>' + course.procedure_count + '</td>';
+    
+    // Status column - only if user has permission
+    if (showStatus) {
+        html += '<td>' +
+                '<label class="switch">' +
+                    '<input type="checkbox" ' + (course.status === 'active' ? 'checked' : '') + 
+                    ' onchange="toggleCourseStatus(\'' + course.id + '\', this.checked ? \'active\' : \'inactive\')">' +
+                    '<span class="slider round"></span>' +
+                '</label>' +
+                '</td>';
+    }
+    
+    // Actions column - only if user has permission
+    if (showActions) {
+        html += '<td><div class="actions">';
+        
+        if (userPermissions.canEdit) {
+            html += '<button class="btn-icon" onclick="event.stopPropagation(); editCourse(\'' + course.id + '\')" title="Edit Course">' +
+                    '<i class="fas fa-edit"></i>' +
+                    '</button>';
+        }
+        
+        if (userPermissions.canDelete) {
+            html += '<button class="btn-icon btn-danger" onclick="event.stopPropagation(); deleteCourse(\'' + course.id + '\')">' +
+                    '<i class="fas fa-trash"></i>' +
+                    '</button>';
+        }
+        
+        html += '</div></td>';
+    }
+    
+    row.innerHTML = html;
     return row;
 }
 
