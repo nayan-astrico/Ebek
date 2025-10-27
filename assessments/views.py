@@ -589,13 +589,28 @@ def create_procedure_assignment_and_test(request):
                     if not course_doc.exists:
                         return JsonResponse({'error': f'Course with ID {course_id} does not exist.'}, status=404)
                     
-                    institute_ref = db.collection('InstituteNames').document(institution_id)
-                    print(institute_ref)
-                    institute_doc = institute_ref.get()
-                    if not institute_doc.exists:
-                        return JsonResponse({'error': f'Institute with ID {institution_id} does not exist.'}, status=404)
+                    # Determine unit type and get unit information
+                    unit_type = None
+                    unit_ref = None
+                    unit_name = None
                     
-                    institute_name = institute_doc.to_dict()['instituteName']
+                    # Check if it's an institution
+                    institute_ref = db.collection('InstituteNames').document(institution_id)
+                    institute_doc = institute_ref.get()
+                    if institute_doc.exists:
+                        unit_type = "institute"
+                        unit_ref = institute_ref
+                        unit_name = institute_doc.to_dict()['instituteName']
+                    else:
+                        # Check if it's a hospital
+                        hospital_ref = db.collection('HospitalNames').document(institution_id)
+                        hospital_doc = hospital_ref.get()
+                        if hospital_doc.exists:
+                            unit_type = "hospital"
+                            unit_ref = hospital_ref
+                            unit_name = hospital_doc.to_dict()['hospitalName']
+                        else:
+                            return JsonResponse({'error': f'Unit with ID {institution_id} does not exist in either institutions or hospitals.'}, status=404)
                     # Create batchassignment for each procedure with its specific assessors
                     for mapping in procedure_assessor_mappings:
                         procedure_id = mapping['procedureId']
@@ -618,8 +633,9 @@ def create_procedure_assignment_and_test(request):
                             'testDate': test_date_obj,
                             'createdAt': datetime.now(),
                             'status': 'Pending',
-                            'institute': institute_ref,
-                            'insitute_name': institute_name,
+                            'unitType': unit_type,  # "institution" or "hospital"
+                            'unit': unit_ref,      # Reference to institution or hospital
+                            'unit_name': unit_name, # Name of institution or hospital
                         }
 
                         batchassignment_ref = db.collection('BatchAssignment').add(batchassignment_data)[1]
@@ -637,8 +653,9 @@ def create_procedure_assignment_and_test(request):
                                     'status': 'Pending',
                                     'notes': procedure_data.get('notes', ''),
                                     'procedure_name': procedure_data.get('procedureName', ''),
-                                    'institute': learner_data.get('institution', ''),
-                                    'hospital': learner_data.get('hospital', ''),
+                                    'unitType': unit_type,  # "institution" or "hospital"
+                                    'unit': unit_ref,      # Reference to institution or hospital
+                                    'unit_name': unit_name, # Name of institution or hospital
                                     'examType': exam_type,
                                     'batchassignment': batchassignment_ref,
                                     'createdAt': datetime.now()
@@ -650,6 +667,32 @@ def create_procedure_assignment_and_test(request):
                         # Update batchassignment with exam assignments
                         batchassignment_ref.update({'examassignment': firestore.ArrayUnion(exam_assignment_refs)})
                         created_tests.append(batchassignment_ref.id)
+
+                # Create a summary document with all procedure-assessor mappings for this batch
+                if procedure_assessor_mappings:
+                    summary_data = {
+                        'batch_id': batch_id,
+                        'course_id': course_id,
+                        'unit_id': institution_id,
+                        'unitType': unit_type,  # "institution" or "hospital"
+                        'unit_name': unit_name, # Name of institution or hospital
+                        'exam_type': exam_type,
+                        'test_date': test_date_obj,
+                        'procedure_assessor_mappings': [
+                            {
+                                'procedure_id': mapping['procedureId'],
+                                'procedure_name': mapping['procedureName'],
+                                'assessor_ids': mapping['assessorIds']
+                            }
+                            for mapping in procedure_assessor_mappings
+                        ],
+                        'created_at': datetime.now(),
+                        'status': 'Active'
+                    }
+                    
+                    # Create summary document
+                    summary_ref = db.collection('BatchAssignmentSummary').add(summary_data)[1]
+                    print(f"Created summary document: {summary_ref.id}")
 
             else:
                 # B2C Workflow: Original logic
