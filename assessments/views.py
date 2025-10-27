@@ -548,6 +548,8 @@ def create_procedure_assignment_and_test(request):
             course_id = data.get('course_id', None)
             exam_type = data.get('exam_type', 'final')
             institution_id = data.get('institution_id', None)
+
+            
             
             # Parse inputs based on test type
             if test_type == 'B2B':
@@ -666,6 +668,7 @@ def create_procedure_assignment_and_test(request):
 
                         # Update batchassignment with exam assignments
                         batchassignment_ref.update({'examassignment': firestore.ArrayUnion(exam_assignment_refs)})
+                        mapping['batchassignment_id'] = batchassignment_ref.id
                         created_tests.append(batchassignment_ref.id)
 
                 # Create a summary document with all procedure-assessor mappings for this batch
@@ -682,7 +685,8 @@ def create_procedure_assignment_and_test(request):
                             {
                                 'procedure_id': mapping['procedureId'],
                                 'procedure_name': mapping['procedureName'],
-                                'assessor_ids': mapping['assessorIds']
+                                'assessor_ids': mapping['assessorIds'],
+                                'batchassignment_id': mapping['batchassignment_id']
                             }
                             for mapping in procedure_assessor_mappings
                         ],
