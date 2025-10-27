@@ -5397,6 +5397,27 @@ def upload_excel(request):
         df[['Section', 'Parameters', 'Indicators', 'Category (i.e C for Communication, K for Knowledge and D for Documentation)']] = \
             df[['Section', 'Parameters', 'Indicators', 'Category (i.e C for Communication, K for Knowledge and D for Documentation)']].fillna('')
 
+        # df[['Section', 'Parameters', 'Indicators',
+        #     'Category (i.e C for Communication, K for Knowledge and D for Documentation)']] = (
+        #     df[['Section', 'Parameters', 'Indicators',
+        #         'Category (i.e C for Communication, K for Knowledge and D for Documentation)']]
+        #     .fillna('')
+        # )
+
+        # Validate Category column
+        # category_col = 'Category (i.e C for Communication, K for Knowledge and D for Documentation)'
+        # invalid_categories = df[
+        #     ~df[category_col].isin(['C', 'K', 'D']) | (df[category_col].astype(str).str.strip() == '')
+        # ]
+
+        # if not invalid_categories.empty:
+        #     invalid_rows = (invalid_categories.index + 2).tolist()  # Excel rows start from 2 (header row is 1)
+        #     return JsonResponse({
+        #         'status': 'error',
+        #         'message': f"Invalid or missing 'Category' values in rows: {', '.join(map(str, invalid_rows))}. "
+        #                    "Allowed values are only 'C', 'K', or 'D'."
+        #     })
+
         # Validate unique Parameters
         if df['Parameters'].duplicated().any():
             duplicates = df[df['Parameters'].duplicated(keep=False)]['Parameters'].tolist()
@@ -5405,6 +5426,22 @@ def upload_excel(request):
         success = len(df)
         updated = 0
         errors = 0
+
+        # Note add code to add it to the firebase database
+
+        # df_data = pd.read_excel(file_path, skiprows=3, header=None, names=["Section", "Parameters", "Indicators", "Category","Marks","Critical"])
+        # parsed_json = parse_excel_to_json(df_data, procedure_name)
+
+        # # Upload to Firebase
+        # procedure_ref = db.collection('ProcedureTable').document()
+        # procedure_ref.set({
+        #     "procedureName": parsed_json['procedure_name'],
+        #     "examMetaData": parsed_json['exammetadata'],
+        #     "notes": parsed_json['notes'],
+        #     "active": True
+        # })
+
+        # logger.info(f"File uploaded successfully - {procedure_ref.id}")
 
         return JsonResponse({
             'status': 'success',
