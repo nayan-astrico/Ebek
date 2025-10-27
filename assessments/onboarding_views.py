@@ -1427,8 +1427,10 @@ def assessor_create(request):
             
             assessor.save()
             assessor_user = assessor.assessor_user
-            assessor_user.assigned_institutions.add(assessor.institution)
-            assessor_user.assigned_hospitals.add(assessor.hospital)
+            if institution_id:
+                assessor_user.assigned_institutions.add(assessor.institution)
+            if hospital_id:
+                assessor_user.assigned_hospitals.add(assessor.hospital)
             assessor_user.save()
             
             messages.success(request, 'Assessor created successfully.')
@@ -1538,10 +1540,12 @@ def assessor_edit(request, pk):
                 assessor.is_active = False
             assessor = form.save(commit=False)
             assessor_user = assessor.assessor_user
-            assessor_user.assigned_institutions.add(assessor.institution)
-            assessor_user.assigned_hospitals.add(assessor.hospital)
-            assessor_user.save()
+            if institution_id:
+                assessor_user.assigned_institutions.add(assessor.institution)
+            if hospital_id:
+                assessor_user.assigned_hospitals.add(assessor.hospital)
             assessor.save()
+            assessor_user.save()
             messages.success(request, 'Assessor updated successfully.')
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return HttpResponse('OK')
