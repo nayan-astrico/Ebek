@@ -335,24 +335,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Preview Excel
     async function previewExcel(file) {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-            const res = await fetch('/upload-preview/', {
-                method: 'POST',
-                headers: { 'X-CSRFToken': getCSRFToken() },
-                body: formData
-            });
-            const data = await res.json();
-            renderPreviewData(data);
-        } catch (err) {
-            alert('Error fetching preview.');
-            console.error(err);
-        }
-    }
-
-    async function previewExcel(file) {
     const formData = new FormData();
     formData.append('file', file);
 
