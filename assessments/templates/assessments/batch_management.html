@@ -1329,6 +1329,10 @@ function loadAvailableLearners() {
 
 function displayLearners(learners) {
     const container = document.getElementById('learnersOptions');
+    
+    // Store currently selected IDs before clearing
+    const currentSelections = selectedLearners.slice();
+    
     container.innerHTML = '';
     
     if (learners.length === 0) {
@@ -1342,8 +1346,12 @@ function displayLearners(learners) {
         option.style.display = 'flex';
         option.style.alignItems = 'center';
         option.style.cursor = 'pointer';
+        
+        // Check if this learner was previously selected
+        const isChecked = currentSelections.includes(learner.id);
+        
         option.innerHTML = `
-            <input type="checkbox" id="learner_${learner.id}" value="${learner.id}" onchange="updateSelectedLearners()" style="margin-left: 12px; margin-right: 12px;">
+            <input type="checkbox" id="learner_${learner.id}" value="${learner.id}" ${isChecked ? 'checked' : ''} onchange="updateSelectedLearners()" style="margin-left: 12px; margin-right: 12px;">
             <div>
                 <div style="font-weight: 500;">${learner.name}</div>
                 <div style="font-size: 12px; color: #666;">${learner.email}</div>
@@ -1379,6 +1387,7 @@ function filterLearners(searchText) {
         learner.name.toLowerCase().includes(searchText.toLowerCase()) ||
         learner.email.toLowerCase().includes(searchText.toLowerCase())
     );
+    
     displayLearners(filtered);
     
     // Update select all checkbox state after filtering
@@ -1388,41 +1397,54 @@ function filterLearners(searchText) {
 }
 
 function updateSelectedLearners() {
-    const checkboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]:checked');
     const selectedTags = document.getElementById('selectedLearners');
-    const placeholder = document.querySelector('.placeholder');
     const selectAllCheckbox = document.getElementById('selectAllLearners');
     
-    selectedTags.innerHTML = '';
-    selectedLearners = Array.from(checkboxes).map(cb => cb.value);
+    // Build selectedLearners array from ALL available learners (not just visible)
+    const newSelectedLearners = [];
     
-    // IMPORTANT: If "Select All" is checked, don't show individual tags
-    if (selectAllCheckbox && selectAllCheckbox.checked) {
-        const allTag = document.createElement('div');
-        allTag.className = 'tag';
-        allTag.innerHTML = `All Learners Selected (${checkboxes.length})`;
-        selectedTags.appendChild(allTag);
-        placeholder.style.display = 'none';
-        return; // Exit - no tags should be shown
+    availableLearners.forEach(learner => {
+        const checkbox = document.querySelector(`#learner_${learner.id}`);
+        if (checkbox) {
+            // Checkbox exists (visible in current filter)
+            if (checkbox.checked) {
+                newSelectedLearners.push(learner.id);
+            }
+        } else {
+            // Checkbox doesn't exist (filtered out) - keep if previously selected
+            if (selectedLearners.includes(learner.id)) {
+                newSelectedLearners.push(learner.id);
+            }
+        }
+    });
+    
+    selectedLearners = newSelectedLearners;
+    selectedTags.innerHTML = '';
+    
+   // If more than 5 learners selected, show summary tag
+    if (selectedLearners.length > 5) {
+        const summaryTag = document.createElement('div');
+        summaryTag.className = 'tag';
+        summaryTag.innerHTML = `Selected Learners (${selectedLearners.length})`;
+        selectedTags.appendChild(summaryTag);
+        updateSelectAllState();
+        return;
     }
 
-    // Otherwise, show individual tags for selected learners
+    // Otherwise, show individual tags for 5 or fewer selected learners
     if (selectedLearners.length > 0) {
-        placeholder.style.display = 'none';
-        checkboxes.forEach(checkbox => {
-            const learner = availableLearners.find(l => l.id === checkbox.value);
+        selectedLearners.forEach(learnerId => {
+            const learner = availableLearners.find(l => l.id === learnerId);
             if (learner) {
                 const tag = document.createElement('div');
                 tag.className = 'tag';
                 tag.innerHTML = `
                     ${learner.name}
-                    <span class="tag-remove" onclick="removeLearner('${checkbox.value}')">&times;</span>
+                    <span class="tag-remove" onclick="removeLearner('${learnerId}')">&times;</span>
                 `;
                 selectedTags.appendChild(tag);
             }
         });
-    } else {
-        placeholder.style.display = 'block';
     }
     
     // Update select all checkbox state
@@ -1446,7 +1468,7 @@ function clearErrors() {
 function resetForm() {
     document.getElementById('batchForm').reset();
     document.getElementById('selectedLearners').innerHTML = '';
-    document.querySelector('.placeholder').style.display = 'block';
+    //document.querySelector('.placeholder').style.display = 'block';
     document.getElementById('unitSelect').disabled = true;
     selectedLearners = [];
     clearErrors();
@@ -1755,41 +1777,42 @@ function showSuccess(message) {
 
 function toggleSelectAllLearners() {
     const selectAllCheckbox = document.getElementById('selectAllLearners');
-    const checkboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]');
-    const selectedTags = document.getElementById('selectedLearners');
+    const visibleCheckboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]');
 
     if (selectAllCheckbox.checked) {
-        checkboxes.forEach(checkbox => {
+        // Check only the VISIBLE checkboxes (append to existing selections)
+        visibleCheckboxes.forEach(checkbox => {
             checkbox.checked = true;
         });
-
-        // Show "All Selected" tag
-        selectedTags.innerHTML = '';
-        const allTag = document.createElement('div');
-        allTag.className = 'tag';
-        allTag.innerHTML = `All Learners Selected (${checkboxes.length})`;
-        selectedTags.appendChild(allTag);
-
+        
+        // Uncheck the "Select All" checkbox immediately after checking visible items
+        // This prevents it from triggering the summary tag display
+        selectAllCheckbox.checked = false;
+        
+        updateSelectedLearners();
     } else {
-        checkboxes.forEach(checkbox => {
+        // Uncheck only the VISIBLE checkboxes
+        visibleCheckboxes.forEach(checkbox => {
             checkbox.checked = false;
         });
-        updateSelectedLearners(); // Update the selected tags display
+        updateSelectedLearners();
     }
 }
 
 function updateSelectAllState() {
     const selectAllCheckbox = document.getElementById('selectAllLearners');
-    const learnerCheckboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]');
-    const checkedCheckboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]:checked');
     
-    if (learnerCheckboxes.length === 0) {
+    // Count total selected from ALL available learners, not just visible ones
+    const totalLearners = availableLearners.length;
+    const totalSelected = selectedLearners.length;
+    
+    if (totalLearners === 0) {
         selectAllCheckbox.checked = false;
         selectAllCheckbox.indeterminate = false;
-    } else if (checkedCheckboxes.length === 0) {
+    } else if (totalSelected === 0) {
         selectAllCheckbox.checked = false;
         selectAllCheckbox.indeterminate = false;
-    } else if (checkedCheckboxes.length === learnerCheckboxes.length) {
+    } else if (totalSelected === totalLearners) {
         selectAllCheckbox.checked = true;
         selectAllCheckbox.indeterminate = false;
     } else {
