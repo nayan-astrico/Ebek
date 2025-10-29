@@ -64,19 +64,21 @@ class EbekUser(AbstractBaseUser, PermissionsMixin):
         'Institution', 
         blank=True,
         help_text='Institutions assigned to this user',
-        related_name='assigned_users'
+        related_name='assigned_users',
     )
+
     assigned_hospitals = models.ManyToManyField(
         'Hospital', 
         blank=True,
         help_text='Hospitals assigned to this user',
-        related_name='assigned_users'
+        related_name='assigned_users',
     )
+
     assigned_skillathons = models.ManyToManyField(
         'SkillathonEvent', 
         blank=True,
         help_text='Skillathon events assigned to this user',
-        related_name='assigned_users'
+        related_name='assigned_users',
     )
     
     # Permissions many-to-many relationship
@@ -84,7 +86,7 @@ class EbekUser(AbstractBaseUser, PermissionsMixin):
         'Permission',
         blank=True,
         help_text='Custom permissions assigned to this user',
-        related_name='users'
+        related_name='users',
     )
 
     objects = EbekUserManager()
