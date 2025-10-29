@@ -46,7 +46,7 @@ firebase_database = os.getenv('FIREBASE_DATABASE')
 
 db = firestore.client(database_id=firebase_database)
 
-def parse_excel_to_json(dataframe, procedure_name):
+def parse_excel_to_json(dataframe, procedure_name,category):
     """Parse the uploaded Excel file to JSON."""
     procedure_json = {
         "procedure_name": procedure_name,  # Procedure Name passed as an argument
@@ -78,7 +78,8 @@ def parse_excel_to_json(dataframe, procedure_name):
                 "answer_scored": 0,
                 "sub_section_questions_present": False,
                 "sub_section_questions": [],
-                "category": row["Category"] if pd.isna(row["Indicators"]) and not pd.isna(row["Category"]) else "",
+                "category": category,
+                # "category": row["Category"] if pd.isna(row["Indicators"]) and not pd.isna(row["Category"]) else "",
                 "critical": row["Critical"] == True if not pd.isna(row["Critical"]) else False  # Add critical flag
             }
 
@@ -88,7 +89,9 @@ def parse_excel_to_json(dataframe, procedure_name):
                 "question": row["Indicators"],  # Indicators column
                 "right_marks_for_question": float(row["Marks"]) if not pd.isna(row["Marks"]) else 0,
                 "answer_scored": 0,
-                "category": row["Category"] if not pd.isna(row["Category"]) else "",
+                "category": category,
+
+                # "category": row["Category"] if not pd.isna(row["Category"]) else "",
                 "critical": row["Critical"] == True if not pd.isna(row["Critical"]) else False  # Add critical flag
             })
 
@@ -5159,58 +5162,6 @@ def update_test_status(request, test_id, status):
         if not status:
             return JsonResponse({'error': 'Status is required'}, status=400)
 
-# @csrf_exempt
-# def fetch_assessments(request):
-#     """API endpoint to fetch all assessments (procedures), with optional offset/limit and search filter."""
-#     try:
-#         # Pagination and filter parameters
-#         offset = int(request.GET.get('offset', 0))
-#         limit = int(request.GET.get('limit', 10))
-#         search = request.GET.get('search', '').strip().lower()
-
-#         # Reference to Firestore collection
-#         procedures_ref = db.collection('ProcedureTable')
-#         all_docs = list(procedures_ref.stream())
-
-#         filtered_docs = []
-
-#         # Filter and format data
-#         for doc in all_docs:
-#             data = doc.to_dict()
-#             name = data.get('procedureName', 'N/A')
-#             examMetaData = data.get("examMetaData", [])
-
-#             # Calculate question count safely
-#             question_count = 0
-#             if examMetaData and isinstance(examMetaData, list) and "section_questions" in examMetaData[0]:
-#                 question_count = len(examMetaData[0]["section_questions"])
-
-#             active = data.get("active", True)
-
-#             # Search filter
-#             if search and search not in name.lower():
-#                 continue
-
-#             filtered_docs.append({
-#                 'id': doc.id,
-#                 'name': name,
-#                 'questions': question_count,
-#                 'active': active
-#             })
-
-#         # Pagination (lazy loading)
-#         total_items = len(filtered_docs)
-#         paginated = filtered_docs[offset:offset + limit]
-#         all_loaded = offset + limit >= total_items
-
-#         return JsonResponse({
-#             'assessments': paginated,
-#             'all_loaded': all_loaded,
-#             'total_count': total_items
-#         }, status=200)
-
-#     except Exception as e:
-#         return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
 def fetch_assessments(request):
@@ -5232,10 +5183,20 @@ def fetch_assessments(request):
         # Filter and format data
         for doc in all_docs:
             data = doc.to_dict()
+            # print(data)
             name = data.get('procedureName', 'N/A')
             examMetaData = data.get("examMetaData", [])
             active = data.get("active", True)
             status = 'active' if active else 'inactive'
+
+            category = 'N/A'
+            if examMetaData:
+                section = examMetaData[0]
+                section_questions = section.get("section_questions", [])
+                if section_questions:
+                    category = section_questions[0].get("category", "N/A")
+
+            print(f"Procedure: {name}, Category: {category}, Status: {status}")
 
             # Search filter
             if search and search not in name.lower():
@@ -5255,6 +5216,7 @@ def fetch_assessments(request):
                 'name': name,
                 'questions': question_count,
                 'active': active,
+                'category':category,
                 'status': status
             })
 
@@ -5325,14 +5287,14 @@ def upload_preview(request):
             else:
                 parameters_seen.add(param)
 
-            # Indicators required
-            if str(row.get('Indicators')).strip() == '':
-                errors.append({'row': row_number, 'message': 'Indicators is required'})
+            # # Indicators required
+            # if str(row.get('Indicators')).strip() == '':
+            #     errors.append({'row': row_number, 'message': 'Indicators is required'})
 
-            # Category must be C/K/D
-            category = str(row.get('Category (i.e C for Communication, K for Knowledge and D for Documentation)')).strip()
-            if category not in ['C', 'K', 'D']:
-                errors.append({'row': row_number, 'message': 'Category must be one of C, K, D'})
+            # # Category must be C/K/D
+            # category = str(row.get('Category (i.e C for Communication, K for Knowledge and D for Documentation)')).strip()
+            # if category not in ['C', 'K', 'D']:
+            #     errors.append({'row': row_number, 'message': 'Category must be one of C, K, D'})
 
             # Marks must be int
             marks = row.get('Marks')
@@ -5362,6 +5324,9 @@ def upload_preview(request):
 @require_POST
 def upload_excel(request):
     file = request.FILES.get('file')
+    procedure_name = request.POST.get('procedure_name')
+    category = request.POST.get('category')
+
     if not file:
         return JsonResponse({'status': 'error', 'message': 'No file uploaded'})
 
@@ -5381,8 +5346,7 @@ def upload_excel(request):
         # --- Your existing processing logic ---
         df.columns = df.columns.str.strip()
         required_columns = [
-            'Section', 'Parameters', 'Indicators',
-            'Category (i.e C for Communication, K for Knowledge and D for Documentation)',
+            'Section', 'Parameters',
             'Marks', 'Critical'
         ]
         missing_cols = [col for col in required_columns if col not in df.columns]
@@ -5397,26 +5361,6 @@ def upload_excel(request):
         df[['Section', 'Parameters', 'Indicators', 'Category (i.e C for Communication, K for Knowledge and D for Documentation)']] = \
             df[['Section', 'Parameters', 'Indicators', 'Category (i.e C for Communication, K for Knowledge and D for Documentation)']].fillna('')
 
-        # df[['Section', 'Parameters', 'Indicators',
-        #     'Category (i.e C for Communication, K for Knowledge and D for Documentation)']] = (
-        #     df[['Section', 'Parameters', 'Indicators',
-        #         'Category (i.e C for Communication, K for Knowledge and D for Documentation)']]
-        #     .fillna('')
-        # )
-
-        # Validate Category column
-        # category_col = 'Category (i.e C for Communication, K for Knowledge and D for Documentation)'
-        # invalid_categories = df[
-        #     ~df[category_col].isin(['C', 'K', 'D']) | (df[category_col].astype(str).str.strip() == '')
-        # ]
-
-        # if not invalid_categories.empty:
-        #     invalid_rows = (invalid_categories.index + 2).tolist()  # Excel rows start from 2 (header row is 1)
-        #     return JsonResponse({
-        #         'status': 'error',
-        #         'message': f"Invalid or missing 'Category' values in rows: {', '.join(map(str, invalid_rows))}. "
-        #                    "Allowed values are only 'C', 'K', or 'D'."
-        #     })
 
         # Validate unique Parameters
         if df['Parameters'].duplicated().any():
@@ -5429,17 +5373,18 @@ def upload_excel(request):
 
         # Note add code to add it to the firebase database
 
-        # df_data = pd.read_excel(file_path, skiprows=3, header=None, names=["Section", "Parameters", "Indicators", "Category","Marks","Critical"])
-        # parsed_json = parse_excel_to_json(df_data, procedure_name)
+        df_data = pd.read_excel(file_path)
+        parsed_json = parse_excel_to_json(df_data, procedure_name,category)
 
-        # # Upload to Firebase
-        # procedure_ref = db.collection('ProcedureTable').document()
-        # procedure_ref.set({
-        #     "procedureName": parsed_json['procedure_name'],
-        #     "examMetaData": parsed_json['exammetadata'],
-        #     "notes": parsed_json['notes'],
-        #     "active": True
-        # })
+        # Upload to Firebase
+        procedure_ref = db.collection('ProcedureTable').document()
+        procedure_ref.set({
+            "procedureName": parsed_json['procedure_name'],
+            "examMetaData": parsed_json['exammetadata'],
+            "notes": parsed_json['notes'],
+            "active": True
+        })
+        print(f"File uploaded successfully - {procedure_ref.id}")
 
         # logger.info(f"File uploaded successfully - {procedure_ref.id}")
 

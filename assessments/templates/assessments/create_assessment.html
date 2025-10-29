@@ -49,6 +49,7 @@
                 <tr>
                     <th>Procedure</th>
                     <th>Questions</th>
+                    <th>Category</th>
                     <th>Active</th>
                     <th>Actions</th>
                 </tr>
@@ -180,6 +181,32 @@
             </div>
             <form id="uploadForm" method="post" enctype="multipart/form-data">
                 {% csrf_token %}
+
+            <div class="form-group" style="margin-bottom: 15px;">
+            <label for="procedureName"><strong>Procedure Name</strong></label>
+            <input type="text" id="procedureName" name="procedure_name" class="form-control" 
+                   placeholder="Enter procedure name" required>
+            </div>
+
+            <!-- 🔹 NEW: Category Dropdown -->
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label for="category"><strong>Category</strong></label>
+                <select id="category" name="category" class="form-control" required>
+                    <option value="" disabled selected>Select a category</option>
+                    <option value="Core Skills">Core Skills</option>
+                    <option value="Infection Control">Infection Control</option>
+                    <option value="Documentation">Documentation</option>
+                    <option value="Pre-Procedure">Pre-Procedure</option>
+                    <option value="Critical Thinking">Critical Thinking</option>
+                </select>
+            </div>
+
+
+
+
+
+
+
                 <div class="upload-zone" id="uploadZone">
                     <div class="upload-placeholder">
                         <div class="upload-icon">
@@ -408,8 +435,20 @@ document.addEventListener('DOMContentLoaded', () => {
     uploadButton.addEventListener('click', async () => {
         if (!selectedFile) return alert('Please select a file first');
 
+        const procedureName = document.getElementById('procedureName').value.trim();
+        const category = document.getElementById('category').value;
+
+        console.log(procedureName)
+        console.log(category)
+
+        // Basic validation
+        if (!procedureName) return alert('Please enter a procedure name.');
+        if (!category) return alert('Please select a category.');
+
         const formData = new FormData();
         formData.append('file', selectedFile);
+        formData.append('procedure_name', procedureName);
+        formData.append('category', category);
 
         try {
             const res = await fetch('/upload-excel/', {
@@ -732,6 +771,7 @@ function renderProcedureRow(proc) {
     row.innerHTML = `
         <td>${proc.name}</td>
         <td>${proc.questions}</td>
+        <td>${proc.category}</td>
         <td>
             <label class="switch">
                 <input type="checkbox" ${proc.active ? 'checked' : ''} onchange="toggleActive('${proc.id}', this)">
