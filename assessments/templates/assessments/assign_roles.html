@@ -293,6 +293,13 @@
     border-color: #e55a59;
 }
 
+.btn-primary:disabled {
+    background: #f8a5a4;
+    border-color: #f8a5a4;
+    cursor: not-allowed;
+    opacity: 1;
+}
+
 /* Role assignment specific styles */
 .roles-container {
     border: 1px solid #e2e8f0;
@@ -938,10 +945,13 @@ let prefillRoleId = null;
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     loadUsers();
-    // Dropdown toggle and outside click (like assignments)
-    document.addEventListener('click', function(){
-        document.querySelectorAll('.dropdown-list').forEach(l=> l.classList.remove('show'));
-        document.querySelectorAll('.dropdown-search').forEach(s=> s.classList.remove('show'));
+    // FIXED: Close dropdowns only when clicking outside
+    document.addEventListener('click', function(e){
+        const clickedInsideDropdown = e.target.closest('.dropdown-container');
+        if (!clickedInsideDropdown) {
+            document.querySelectorAll('.dropdown-list').forEach(l => l.classList.remove('show'));
+            document.querySelectorAll('.dropdown-search').forEach(s => s.classList.remove('show'));
+        }
     });
     ['institution','hospital','skillathon'].forEach(prefix => {
         const btn = document.getElementById(prefix+'DropdownBtn');
@@ -963,23 +973,36 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             // Dedicated list click handler to ensure selection works
             list.addEventListener('click', function(e){
-                e.preventDefault();
                 e.stopPropagation();
                 const li = e.target.closest('li');
                 if(!li) return;
                 if(prefix==='institution'){
                     addChip('institutionChips', li.dataset.id, li.dataset.value);
+                    handleInstitutionChange();
                 } else if(prefix==='hospital'){
                     addChip('hospitalChips', li.dataset.id, li.dataset.value);
+                    handleHospitalChange();
                 } else if(prefix==='skillathon'){
                     addChip('skillathonChips', li.dataset.id, li.dataset.value);
                 }
-                list.classList.remove('show');
-                if(searchContainer){ searchContainer.classList.remove('show'); }
+                // Dropdown stays open for multi-select
+                // Uncomment below to close after each selection:
+                // list.classList.remove('show');
+                // if(searchContainer){ searchContainer.classList.remove('show'); }
             });
+            // Prevent dropdown from closing when typing in search
+            if(searchContainer){
+                searchContainer.addEventListener('click', function(e){
+                    e.stopPropagation();
+                });
+            }
+            
             if(searchInput){
                 searchInput.addEventListener('keyup', function(){
                     filterDropdownItems(prefix, this.value.trim().toLowerCase());
+                });
+                searchInput.addEventListener('click', function(e){
+                    e.stopPropagation();
                 });
             }
         }
@@ -1110,11 +1133,119 @@ function validateStep1Fields() {
 function addChip(containerId, id, label) {
     if ($(`#${containerId} .chip[data-id="${id}"]`).length) return;
     $(`#${containerId}`).append(`<span class="chip" data-id="${id}" data-value="${label}">${label}<span class="remove">&times;</span></span>`);
+    
+    // Update display after adding
+    const prefix = containerId.replace('Chips', '').toLowerCase();
+    updateChipDisplay(containerId, prefix);
 }
+
 function removeChip(containerId, id){
     $(`#${containerId} .chip[data-id="${id}"]`).remove();
+    
+    // Update display after removing
+    const prefix = containerId.replace('Chips', '').toLowerCase();
+    updateChipDisplay(containerId, prefix);
 }
+
 function clearChips(containerId){ $(`#${containerId}`).empty(); }
+
+// Function to update chip display based on count
+function updateChipDisplay(containerId, prefix) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    container.style.display = 'flex';
+    
+    // Get all chips (excluding summary chip)
+    const allChips = Array.from(container.querySelectorAll('.chip:not(.summary-chip)'));
+    const chipCount = allChips.length;
+    
+    // If no chips, return
+    if (chipCount === 0) {
+        // Remove summary chip if exists
+        const summaryChip = container.querySelector('.summary-chip');
+        if (summaryChip) summaryChip.remove();
+        return;
+    }
+    
+    const categoryName = prefix === 'institution' ? 'Institutes' : 
+                       prefix === 'hospital' ? 'Hospitals' : 'Skillathons';
+    
+    // If more than 5, show summary
+    if (chipCount > 5) {
+        // Hide all individual chips
+        allChips.forEach(chip => chip.style.display = 'none');
+        
+        // Check if summary already exists
+        let summaryChip = container.querySelector('.summary-chip');
+        if (!summaryChip) {
+            summaryChip = document.createElement('span');
+            summaryChip.className = 'chip summary-chip';
+            summaryChip.innerHTML = `${categoryName} Selected (${chipCount})<span class="remove">&times;</span>`;
+            
+            // Add click handler for the remove button
+            summaryChip.querySelector('.remove').addEventListener('click', function(e) {
+                e.stopPropagation();
+                deselectAllInCategory(containerId, prefix);
+            });
+            
+            container.appendChild(summaryChip);
+        } else {
+            summaryChip.innerHTML = `${categoryName} Selected (${chipCount})<span class="remove">&times;</span>`;
+            
+            // Re-add click handler for the remove button
+            summaryChip.querySelector('.remove').addEventListener('click', function(e) {
+                e.stopPropagation();
+                deselectAllInCategory(containerId, prefix);
+            });
+        }
+        summaryChip.style.display = 'inline-flex';
+    } else {
+        // Show individual chips (5 or less)
+        allChips.forEach(chip => chip.style.display = 'inline-flex');
+        
+        // Hide summary chip
+        const summaryChip = container.querySelector('.summary-chip');
+        if (summaryChip) {
+            summaryChip.style.display = 'none';
+        }
+    }
+}
+
+// Function to deselect all items in a category
+function deselectAllInCategory(containerId, prefix) {
+    // Get all chips in the container
+    const allChips = Array.from(document.querySelectorAll(`#${containerId} .chip:not(.summary-chip)`));
+    
+    // Get the dropdown list
+    const listId = `${prefix}DropdownList`;
+    
+    // Uncheck all checkboxes and remove all chips
+    allChips.forEach(chip => {
+        const chipId = chip.dataset.id;
+        
+        // Uncheck the checkbox in dropdown
+        const checkbox = document.querySelector(`#${listId} input[type="checkbox"][value="${chipId}"]`);
+        if (checkbox) {
+            checkbox.checked = false;
+        }
+        
+        // Remove the chip
+        chip.remove();
+    });
+    
+    // Remove summary chip
+    const summaryChip = document.querySelector(`#${containerId} .summary-chip`);
+    if (summaryChip) {
+        summaryChip.remove();
+    }
+    
+    // Uncheck "Access to all" checkbox if it exists
+    uncheckFullAccessOverride(prefix);
+    
+    // Update display
+    updateChipDisplay(containerId, prefix);
+}
 
 function uncheckDropdownCheckbox(containerId, id){
     let listId = null;
@@ -1360,48 +1491,46 @@ function handleAccessTypeChange() {
 }
 
 /// Toggle institution selection visibility
+/// Toggle institution selection visibility
 function toggleInstitutionVisibility(isFullAccess) {
     const chipContainer = document.getElementById('institutionChips');
     
     if (isFullAccess) {
-        // Hide chips but keep dropdown visible
-        chipContainer.style.display = 'none';
         // Select all institutions in the dropdown
         selectAllInDropdown('institutionDropdownList', 'institutionChips');
-    } else {
-        // Show chips
-        chipContainer.style.display = 'flex';
     }
+    // When unchecked, keep all selections as is, just update display
+    
+    // Update display
+    updateChipDisplay('institutionChips', 'institution');
 }
 
+// Toggle hospital selection visibility
 // Toggle hospital selection visibility
 function toggleHospitalVisibility(isFullAccess) {
     const chipContainer = document.getElementById('hospitalChips');
     
     if (isFullAccess) {
-        // Hide chips but keep dropdown visible
-        chipContainer.style.display = 'none';
-        // Select all hospitals in the dropdown
         selectAllInDropdown('hospitalDropdownList', 'hospitalChips');
-    } else {
-        // Show chips
-        chipContainer.style.display = 'flex';
     }
+    // When unchecked, keep all selections as is, just update display
+    
+    // Update display
+    updateChipDisplay('hospitalChips', 'hospital');
 }
 
+// Toggle skillathon selection visibility
 // Toggle skillathon selection visibility
 function toggleSkillathonVisibility(isFullAccess) {
     const chipContainer = document.getElementById('skillathonChips');
     
     if (isFullAccess) {
-        // Hide chips but keep dropdown visible
-        chipContainer.style.display = 'none';
-        // Select all skillathons in the dropdown
         selectAllInDropdown('skillathonDropdownList', 'skillathonChips');
-    } else {
-        // Show chips
-        chipContainer.style.display = 'flex';
     }
+    // When unchecked, keep all selections as is, just update display
+    
+    // Update display
+    updateChipDisplay('skillathonChips', 'skillathon');
 }
 
 // Helper function to select all items in a dropdown
@@ -1863,9 +1992,14 @@ async function openEditUser(userId){
         if(!data.user){ showError('Failed to load user'); return; }
         window.__editingUserId = userId;
         toggleCreateUserPanel();
-        document.getElementById('createUserTitle').innerHTML = 'Edit User <span class="spinner-border spinner-border-sm" role="status"></span>';
-        document.getElementById('submitButtonText').innerHTML = "Save";
-        document.getElementById('submitBtn').disabled = true;
+        document.getElementById('createUserTitle').textContent = 'Edit User';
+        document.getElementById('submitButtonText').textContent = "Save";
+
+        // Disable Next button and show loading
+        const nextBtn = document.getElementById('nextBtn');
+        const nextBtnOriginalText = nextBtn.innerHTML;
+        nextBtn.disabled = true;
+        nextBtn.innerHTML = 'Loading...';
         
 
         const u = data.user;
@@ -1912,7 +2046,10 @@ async function openEditUser(userId){
         console.log(prefillRoleId)
         await loadRoles();
         document.getElementById('createUserTitle').textContent = 'Edit User';
-        document.getElementById('submitBtn').disabled = false;
+
+        // Re-enable Next button
+        nextBtn.disabled = false;
+        nextBtn.innerHTML = nextBtnOriginalText;
 
     }catch(e){
         console.error(e); showError('Error opening user');

@@ -488,6 +488,10 @@
     border-color: #F16564;
 }
 
+.multiselect-input:hover {
+    border-color: #cbd5e0;
+}
+
 .placeholder {
     color: #a0aec0;
 }
@@ -571,6 +575,11 @@
     border-radius: 4px;
     outline: none;
     box-sizing: border-box;
+}
+
+.search-input:focus {
+    border-color: #F16564;
+    box-shadow: 0 0 0 2px rgba(241, 101, 100, 0.1);
 }
 
 .options-container {
@@ -1511,12 +1520,10 @@ function filterProcedures(searchText) {
 function updateSelectedProcedures() {
     const checkboxes = document.querySelectorAll('#proceduresOptions input[type="checkbox"]:checked');
     const selectedTags = document.getElementById('selectedTags');
-    const placeholder = document.querySelector('.placeholder');
     
     selectedTags.innerHTML = '';
     
     if (checkboxes.length > 0) {
-        placeholder.style.display = 'none';
         checkboxes.forEach(checkbox => {
             const optionText = checkbox.closest('.option-item').querySelector('span').textContent;
             const tag = document.createElement('div');
@@ -1527,9 +1534,10 @@ function updateSelectedProcedures() {
             `;
             selectedTags.appendChild(tag);
         });
-    } else {
-        placeholder.style.display = 'block';
-    }
+    } 
+    // else {
+       // placeholder.style.display = 'block';
+   // }
 }
 
 function removeTag(value) {
@@ -1734,7 +1742,6 @@ function submitForm() {
 function resetForm() {
     document.getElementById('courseForm').reset();
     document.getElementById('selectedTags').innerHTML = '';
-    document.querySelector('.placeholder').style.display = 'block';
     document.getElementById('verificationField').style.display = 'none';
     clearAllErrors();
     
