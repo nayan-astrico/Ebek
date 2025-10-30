@@ -102,12 +102,15 @@
                 <div class="filter-type active" data-filter="status" onclick="switchProcedureFilter('status')">
                     <span>Status</span>
                 </div>
+                <div class="filter-type" data-filter="category" onclick="switchProcedureFilter('category')">
+                    <span>Category</span>
+                </div>
             </div>
 
             <div class="filter-content-wrapper">
                 <div class="filter-content active" id="procedure-status-content">
                     <div class="filter-search">
-                        <input type="text" placeholder="Search status" id="procedureFilterStatusSearch" oninput="filterProcedureStatusOptions(this.value)">
+                        <input type="text" placeholder="Search status" id="procedureFilterStatusSearch" oninput="filterStatusOptions(this.value)">
                         <div class="selection-count" id="procedureStatusSelectionCount">0 Status selected</div>
                     </div>
                     <div class="options-list" id="procedureFilterStatusOptions">
@@ -118,6 +121,39 @@
                         <label class="option-item">
                             <input type="checkbox" name="status" value="inactive" onchange="updateProcedureStatusSelectionCount()">
                             <span>Inactive</span>
+                        </label>
+                    </div>
+                </div>
+
+             <div class="filter-content" id="procedure-category-content">
+                    <div class="filter-search">
+                        <input type="text" placeholder="Search category" id="procedureFilterCategorySearch" oninput="filterProcedureCategoryOptions(this.value)">
+                        <div class="selection-count" id="procedureCategorySelectionCount">0 Categories selected</div>
+                    </div>
+                    <div class="options-list" id="procedureFilterCategoryOptions">
+                        <label class="option-item">
+                            <input type="checkbox" name="category" value="Core Skills" onchange="updateProcedureCategorySelectionCount()">
+                            <span>Core Skills</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="category" value="Infection Control" onchange="updateProcedureCategorySelectionCount()">
+                            <span>Infection Control</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="category" value="Communication" onchange="updateProcedureCategorySelectionCount()">
+                            <span>Communication</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="category" value="Documentation" onchange="updateProcedureCategorySelectionCount()">
+                            <span>Documentation</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="category" value="Pre-Procedure" onchange="updateProcedureCategorySelectionCount()">
+                            <span>Pre-Procedure</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="category" value="Critical Thinking" onchange="updateProcedureCategorySelectionCount()">
+                            <span>Critical Thinking</span>
                         </label>
                     </div>
                 </div>
@@ -457,6 +493,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: formData
             });
             const data = await res.json();
+            // ✅ Close sidebar no matter what
+            const panel = document.getElementById('uploadPanel');
+            if (panel && panel.classList.contains('active')) {
+                panel.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+
+            // Reset fields
+            resetUploadPanel();
             alert(data.status === 'success' ? 'Upload successful ✅' : 'Upload failed ❌');
         } catch (err) {
             alert('Error uploading file.');
@@ -472,11 +517,84 @@ document.addEventListener('DOMContentLoaded', () => {
 
 </script>
 
-<script>
- // Current selected procedure filters
-let currentProcedureFilters = { status: [] };
 
-// Toggle panel
+<script>
+console.log("🚀 Script Loaded — Filters object check:", window.currentProcedureFilters);
+window.currentProcedureFilters = { status: [], category: [] };
+
+// ==================== APPLY FILTERS ====================
+function applyProcedureFilters() {
+    console.log("💡 APPLY FILTERS CALLED");
+
+    // 🟢 Capture Status
+    window.currentProcedureFilters.status = Array.from(
+        document.querySelectorAll('#procedureFilterStatusOptions input[type="checkbox"]:checked')
+    ).map(cb => cb.value);
+
+    // 🟣 Capture Category
+    window.currentProcedureFilters.category = Array.from(
+        document.querySelectorAll('#procedureFilterCategoryOptions input[type="checkbox"]:checked')
+    ).map(cb => cb.value);
+
+    console.log("🟢 Status Filters:", window.currentProcedureFilters.status);
+    console.log("🟣 Category Filters:", window.currentProcedureFilters.category);
+
+    const searchText = document.getElementById('procedureSearchInput')?.value || '';
+    console.log("🚀 Calling filterProcedures NOW...");
+    filterProcedures(searchText);
+    console.log("✅ filterProcedures() CALL DONE");
+
+    toggleProcedureFilterPanel();
+
+    const totalFilters =
+        window.currentProcedureFilters.status.length + window.currentProcedureFilters.category.length;
+    if (totalFilters > 0) {
+        if (typeof showSuccess === "function") {
+            showSuccess(`${totalFilters} filter(s) applied successfully!`);
+        } else {
+            console.log("✅ Filter applied successfully!");
+        }
+    }
+}
+
+function filterProcedures(searchText = '') {
+    const params = new URLSearchParams();
+    params.append('offset', 0);
+    params.append('limit', 10);
+    if (searchText) params.append('search', searchText);
+    window.currentProcedureFilters.status.forEach(status => params.append('status', status));
+    window.currentProcedureFilters.category.forEach(category => params.append('category', category));
+
+    console.log(params);
+
+    fetch(`/fetch-assessments/?${params.toString()}`)
+        .then(res => res.json())
+        .then(data => {
+            console.log('Filtered Procedures:', data);
+            // TODO: Update your procedure table/list here
+        });
+}
+
+
+
+// ==================== SEARCH HELPERS ====================
+function filterStatusOptions(searchText) {
+    const options = document.querySelectorAll('#procedureFilterStatusOptions .option-item');
+    options.forEach(option => {
+        const text = option.textContent.toLowerCase();
+        option.style.display = text.includes(searchText.toLowerCase()) ? 'flex' : 'none';
+    });
+}
+
+function filterProcedureCategoryOptions(searchText) {
+    const options = document.querySelectorAll('#procedureFilterCategoryOptions .option-item');
+    options.forEach(option => {
+        const text = option.textContent.toLowerCase();
+        option.style.display = text.includes(searchText.toLowerCase()) ? 'flex' : 'none';
+    });
+}
+
+// ==================== PANEL TOGGLE ====================
 function toggleProcedureFilterPanel() {
     const panel = document.getElementById('procedureFilterPanel');
     const overlayClass = 'procedure-filter-overlay';
@@ -497,7 +615,7 @@ function toggleProcedureFilterPanel() {
     }
 }
 
-// Switch filter tab (only status now)
+// ==================== SWITCH FILTER TABS ====================
 function switchProcedureFilter(filterType) {
     document.querySelectorAll('.filter-type').forEach(type => type.classList.remove('active'));
     document.querySelectorAll('.filter-content').forEach(content => content.classList.remove('active'));
@@ -506,37 +624,27 @@ function switchProcedureFilter(filterType) {
     document.getElementById(`procedure-${filterType}-content`).classList.add('active');
 }
 
-// Update status selection count
+// ==================== STATUS FILTER ====================
 function updateProcedureStatusSelectionCount() {
     const checkedStatuses = document.querySelectorAll('#procedureFilterStatusOptions input[type="checkbox"]:checked');
     document.getElementById('procedureStatusSelectionCount').textContent = `${checkedStatuses.length} Status selected`;
 }
 
-// Apply procedure filters
-function applyProcedureFilters() {
-    currentProcedureFilters.status = Array.from(
-        document.querySelectorAll('#procedureFilterStatusOptions input[type="checkbox"]:checked')
-    ).map(cb => cb.value);
-
-    // Reload procedures with selected filters
-    const searchText = document.getElementById('procedureSearchInput')?.value || '';
-    filterProcedures(searchText);
-
-    // Close panel
-    toggleProcedureFilterPanel();
-
-    if (currentProcedureFilters.status.length > 0) {
-        showSuccess(`${currentProcedureFilters.status.length} filter(s) applied successfully!`);
-    }
+// ==================== CATEGORY FILTER ====================
+function updateProcedureCategorySelectionCount() {
+    const checkedCategories = document.querySelectorAll('#procedureFilterCategoryOptions input[type="checkbox"]:checked');
+    document.getElementById('procedureCategorySelectionCount').textContent = `${checkedCategories.length} Categories selected`;
 }
-
-// Clear all filters
+// ==================== CLEAR FILTERS ====================
 function clearAllProcedureFilters() {
     document.querySelectorAll('#procedureFilterStatusOptions input[type="checkbox"]').forEach(cb => cb.checked = false);
-    updateProcedureStatusSelectionCount();
-    currentProcedureFilters.status = [];
+    document.querySelectorAll('#procedureFilterCategoryOptions input[type="checkbox"]').forEach(cb => cb.checked = false);
 
-    // Reapply search without filters
+    updateProcedureStatusSelectionCount();
+    updateProcedureCategorySelectionCount();
+
+    window.currentProcedureFilters = { status: [], category: [] };
+
     const searchText = document.getElementById('procedureSearchInput')?.value || '';
     filterProcedures(searchText);
 
@@ -544,31 +652,32 @@ function clearAllProcedureFilters() {
     showSuccess('All filters cleared!');
 }
 
-// Filter function (to call your API with offset/limit & filters)
-function filterProcedures(searchText = '') {
-    const params = new URLSearchParams();
-    params.append('offset', 0);
-    params.append('limit', 10);
-    if (searchText) params.append('search', searchText);
-    currentProcedureFilters.status.forEach(status => params.append('status', status));
 
-    fetch(`/fetch_assessments/?${params.toString()}`)
-        .then(res => res.json())
-        .then(data => {
-            console.log('Filtered Procedures:', data);
-            // TODO: Update your procedure table/list here
-        });
+
+function showSuccess(message) {
+    // Create a simple notification
+    const notification = $(`
+        <div class="alert alert-success alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-check-circle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    
+    $('body').append(notification);
+    
+    // Auto remove after 5 seconds
+    setTimeout(function() {
+        notification.alert('close');
+    }, 2000);
 }
-
-
 
 </script>
 
+
 <script>
-    // function applyFilter() {
-    //     const query = document.getElementById('searchInput').value;
-    //     window.location.href = `?query=${query}`;
-    // }
 
 
     function toggleActive(procedureId) {
@@ -765,9 +874,11 @@ let allProceduresLoaded = false;
 let firstProcedureLoad = true;
 let currentProcedureSearch = '';
 
+
+
 function renderProcedureRow(proc) {
     const row = document.createElement('tr');
-    row.className = 'procedure-row';
+    row.className = 'procedure-row clickable';
     row.innerHTML = `
         <td>${proc.name}</td>
         <td>${proc.questions}</td>
@@ -786,23 +897,55 @@ function renderProcedureRow(proc) {
                 <button class="btn-icon" onclick="event.stopPropagation(); downloadProcedure('${proc.id}')">
                     <i class="fas fa-download"></i>
                 </button>
-                <button class="btn-icon" onclick="event.stopPropagation(); viewProcedure('${proc.id}')">
-                    <i class="fas fa-eye"></i>
-                </button>
             </div>
         </td>
     `;
+
+    // Make the whole row clickable
+    row.addEventListener('click', (e) => {
+        // Prevent click if it originated from buttons or checkbox
+        if (
+            e.target.closest('button') ||
+            e.target.closest('input[type="checkbox"]') ||
+            e.target.closest('.actions')
+        ) return;
+
+        viewProcedure(proc.id);
+    });
+
     return row;
 }
 
 function buildProcedureQueryParams() {
     const params = new URLSearchParams();
+
+    // Pagination
     params.append('offset', procedureOffset);
     params.append('limit', procedureLimit);
-    if (currentProcedureSearch) params.append('search', currentProcedureSearch);
-    currentProcedureFilters.status.forEach(status => params.append('status', status));
-    return params.toString();
+
+    // Search text
+    if (currentProcedureSearch) {
+        params.append('search', currentProcedureSearch.trim());
+    }
+
+    // Status filters
+    if (currentProcedureFilters.status && currentProcedureFilters.status.length > 0) {
+        currentProcedureFilters.status.forEach(status => {
+            params.append('status', status);
+        });
+    }
+
+    // Category filters
+    if (currentProcedureFilters.category && currentProcedureFilters.category.length > 0) {
+        currentProcedureFilters.category.forEach(cat => {
+            params.append('category', cat);
+        });
+    }
+
+    const queryString = params.toString();
+    return queryString;
 }
+
 
 function loadMoreProcedures() {
     if (proceduresLoading || allProceduresLoaded) return;

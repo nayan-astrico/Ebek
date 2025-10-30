@@ -5210,32 +5210,34 @@ def update_test_status(request, test_id, status):
             return JsonResponse({'error': 'Status is required'}, status=400)
 
 
+
 @csrf_exempt
 def fetch_assessments(request):
-    """API endpoint to fetch all assessments (procedures), with optional offset/limit, search, and status filter."""
+    """API endpoint to fetch all assessments (procedures) with pagination, search, status, and category filters."""
     try:
-        # Pagination and filter parameters
+        # --- Query Parameters ---
         offset = int(request.GET.get('offset', 0))
         limit = int(request.GET.get('limit', 10))
         search = request.GET.get('search', '').strip().lower()
         status_filters = request.GET.getlist('status')
         status_filters = [s.lower() for s in status_filters if s]
+        category_filters = request.GET.getlist('category')  # <-- Add this line
+        category_filters = [c.lower() for c in category_filters if c]
 
-        # Reference to Firestore collection
+        # --- Fetch Data from Firestore ---
         procedures_ref = db.collection('ProcedureTable')
         all_docs = list(procedures_ref.stream())
 
         filtered_docs = []
 
-        # Filter and format data
         for doc in all_docs:
             data = doc.to_dict()
-            # print(data)
             name = data.get('procedureName', 'N/A')
             examMetaData = data.get("examMetaData", [])
             active = data.get("active", True)
             status = 'active' if active else 'inactive'
 
+            # Extract Category
             category = 'N/A'
             if examMetaData:
                 section = examMetaData[0]
@@ -5243,31 +5245,28 @@ def fetch_assessments(request):
                 if section_questions:
                     category = section_questions[0].get("category", "N/A")
 
-            print(f"Procedure: {name}, Category: {category}, Status: {status}")
-
-            # Search filter
+            # --- Apply Filters ---
             if search and search not in name.lower():
                 continue
-
-            # Status filter
             if status_filters and status not in status_filters:
                 continue
+            if category_filters and category.lower() not in category_filters:
+                continue
 
-            # Calculate question count safely
-            question_count = 0
-            if examMetaData and isinstance(examMetaData, list):
-                question_count = sum(len(section.get("section_questions", [])) for section in examMetaData)
+            # --- Count Questions ---
+            question_count = sum(len(section.get("section_questions", []))
+                                 for section in examMetaData if isinstance(section, dict))
 
             filtered_docs.append({
                 'id': doc.id,
                 'name': name,
                 'questions': question_count,
                 'active': active,
-                'category':category,
+                'category': category,
                 'status': status
             })
 
-        # Pagination (lazy loading)
+        # --- Pagination ---
         total_items = len(filtered_docs)
         paginated = filtered_docs[offset:offset + limit]
         all_loaded = offset + limit >= total_items
@@ -5280,6 +5279,7 @@ def fetch_assessments(request):
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
 
 import pandas as pd
 from django.http import JsonResponse
@@ -5333,15 +5333,6 @@ def upload_preview(request):
                 errors.append({'row': row_number, 'message': f'Duplicate Parameters: {param}'})
             else:
                 parameters_seen.add(param)
-
-            # # Indicators required
-            # if str(row.get('Indicators')).strip() == '':
-            #     errors.append({'row': row_number, 'message': 'Indicators is required'})
-
-            # # Category must be C/K/D
-            # category = str(row.get('Category (i.e C for Communication, K for Knowledge and D for Documentation)')).strip()
-            # if category not in ['C', 'K', 'D']:
-            #     errors.append({'row': row_number, 'message': 'Category must be one of C, K, D'})
 
             # Marks must be int
             marks = row.get('Marks')
