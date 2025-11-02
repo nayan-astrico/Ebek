@@ -882,48 +882,221 @@ def create_procedure_assignment_and_test(request):
     return JsonResponse({'error': 'Invalid request method.'}, status=405)
 
 def assign_assessment(request):
-    # Initialize Firestore client
 
-    # Fetch data from the 'Test' collection
     test_data = []
-    tests_ref = db.collection('Test')
-    tests = tests_ref.stream()
-
-    for test in tests:
-        test_doc = test.to_dict()
-        skillathon = test_doc.get('skillathon', None)
-        procedure_assignments = []
-        for proc_ref in test_doc.get('procedureAssignments', []):
-            proc_doc = proc_ref.get()
-            if proc_doc.exists:
-                proc_data = proc_doc.to_dict()
-                procedure_ref = proc_data.get('procedure')
+    
+    # FETCH B2C ASSESSMENTS FROM 'Test' 
+    try:
+        tests_ref = db.collection('Test')
+        tests = tests_ref.limit(100).stream()
+        
+        for test in tests:
+            try:
+                test_doc = test.to_dict()
+                test_type = test_doc.get('type', 'B2C')
+                skillathon = test_doc.get('skillathon', None)
+                batch_name = test_doc.get('batchname', '')
+                
+                # Get procedures
+                procedure_assignments = []
+                assessors_list = []
+                
+                for proc_ref in test_doc.get('procedureAssignments', [])[:10]:
+                    try:
+                        proc_doc = proc_ref.get()
+                        if proc_doc.exists:
+                            proc_data = proc_doc.to_dict()
+                            procedure_ref = proc_data.get('procedure')
+                            procedure_name = "Unknown"
+                            if procedure_ref:
+                                try:
+                                    procedure_doc = procedure_ref.get()
+                                    if procedure_doc.exists:
+                                        procedure_name = procedure_doc.to_dict().get('procedureName', 'Unknown')
+                                except Exception:
+                                    pass
+                            
+                            procedure_assignments.append({
+                                'id': proc_ref.id,
+                                'procedure_name': procedure_name,
+                                'status': proc_data.get('status', 'Unknown'),
+                            })
+                            
+                            # Get assessors for this procedure
+                            if 'supervisors' in proc_data and isinstance(proc_data['supervisors'], list):
+                                for sup_ref in proc_data['supervisors']:
+                                    try:
+                                        sup_doc = sup_ref.get()
+                                        if sup_doc.exists:
+                                            sup_data = sup_doc.to_dict()
+                                            assessor_name = sup_data.get('name', sup_data.get('username', 'Assessor'))
+                                            if assessor_name not in assessors_list:
+                                                assessors_list.append(assessor_name)
+                                    except Exception:
+                                        pass
+                    except Exception as e:
+                        logger.error(f"Error loading procedure: {e}")
+                        continue
+                
+                # Determine entity based on type
+                entity = "-"
+                if test_type == "B2C":
+                    entity = skillathon or "Skillathon"
+                else:
+                    entity = test_doc.get('institution_name', batch_name or 'Institution')
+                
+                # Assessment name
+                assessment_name = (
+                    f"{batch_name or skillathon or 'Unknown'} - "
+                    f"{test_doc.get('testdate').strftime('%d %b %Y') if test_doc.get('testdate') else ''}"
+                )
+                
+                test_data.append({
+                    'id': test.id,
+                    'assessment_name': assessment_name,
+                    'type': test_type,
+                    'mode': test_doc.get('examType', 'Skillathon' if test_type == 'B2C' else 'Final OSCE'),
+                    'entity': entity,
+                    'batch': batch_name or '-',
+                    'skillathon': skillathon,
+                    'procedure_assignments': procedure_assignments,
+                    'assessors': ', '.join(assessors_list) if assessors_list else '-',
+                    'status': test_doc.get('status', 'Not Available'),
+                    'testdate': test_doc.get('testdate'),
+                })
+            except Exception as e:
+                logger.error(f"Error processing test: {e}")
+                continue
+                
+    except Exception as e:
+        logger.error(f"Error fetching B2C tests: {e}")
+    
+    # FETCH B2B ASSESSMENTS FROM 'BatchAssignment' 
+    try:
+        batch_assignments_ref = db.collection('BatchAssignment')
+        batch_assignments = batch_assignments_ref.limit(100).stream()
+        
+        for ba in batch_assignments:
+            try:
+                ba_doc = ba.to_dict()
+                
+                # Get batch information
+                batch_ref = ba_doc.get('batch')
+                batch_name = '-'
+                if batch_ref:
+                    try:
+                        batch_doc = batch_ref.get()
+                        if batch_doc.exists:
+                            batch_name = batch_doc.to_dict().get('batchName', '-')
+                    except Exception:
+                        pass
+                
+                # Get unit (institution/hospital) information
+                entity = ba_doc.get('unit_name', '-')
+                unit_type = ba_doc.get('unitType', 'institution')
+                
+                # Get procedure information
+                procedure_ref = ba_doc.get('procedure')
                 procedure_name = "Unknown"
                 if procedure_ref:
-                    procedure_doc = procedure_ref.get()
-                    if procedure_doc.exists:
-                        procedure_name = procedure_doc.to_dict().get('procedureName', 'Unknown')
-                procedure_assignments.append({
-                    'id': proc_ref.id,
+                    try:
+                        procedure_doc = procedure_ref.get()
+                        if procedure_doc.exists:
+                            procedure_name = procedure_doc.to_dict().get('procedureName', 'Unknown')
+                    except Exception:
+                        pass
+                
+                procedure_assignments = [{
+                    'id': ba.id,
                     'procedure_name': procedure_name,
-                    'status': proc_data.get('status', 'Unknown'),
+                    'status': ba_doc.get('status', 'Pending'),
+                }]
+                
+                # Get assessors
+                assessors_list = []
+                assessor_refs = ba_doc.get('assessorlist', [])
+                for assessor_ref in assessor_refs:
+                    try:
+                        assessor_doc = assessor_ref.get()
+                        if assessor_doc.exists:
+                            assessor_data = assessor_doc.to_dict()
+                            # Try multiple possible field names for assessor name
+                            assessor_name = (
+                                assessor_data.get('full_name') or 
+                                assessor_data.get('name') or 
+                                assessor_data.get('username', 'Assessor')
+                            )
+                            if assessor_name not in assessors_list:
+                                assessors_list.append(assessor_name)
+                    except Exception as e:
+                        logger.error(f"Error fetching assessor: {e}")
+                        pass
+                
+                # Get exam type
+                exam_type = ba_doc.get('examType', 'Final')
+                
+                # Get test date
+                test_date = ba_doc.get('testDate')
+                
+                # Assessment name
+                assessment_name = (
+                    f"{batch_name} - {procedure_name} - "
+                    f"{test_date.strftime('%d %b %Y') if test_date else ''}"
+                )
+                
+                test_data.append({
+                    'id': ba.id,
+                    'assessment_name': assessment_name,
+                    'type': 'B2B',
+                    'mode': exam_type,
+                    'entity': entity,
+                    'batch': batch_name,
+                    'skillathon': None,
+                    'procedure_assignments': procedure_assignments,
+                    'assessors': ', '.join(assessors_list) if assessors_list else '-',
+                    'status': ba_doc.get('status', 'Pending'),
+                    'testdate': test_date,
                 })
-        test_data.append({
-            'id': test.id,
-            'assessment_name': (
-                f"{test_doc.get('batchname', skillathon or 'Unknown')} - "
-                f"{test_doc.get('testdate').strftime('%d %b') if test_doc.get('testdate') else ''}"
-            ),
-            'skillathon': skillathon,
-            'procedure_assignments': procedure_assignments,
-            'status': test_doc.get('status', 'Not Available'),
-        })
-
+            except Exception as e:
+                logger.error(f"Error processing batch assignment: {e}")
+                continue
+                
+    except Exception as e:
+        logger.error(f"Error fetching B2B batch assignments: {e}")
+    
+    # Sort by test date (most recent first)
+    # Handle timezone-aware and timezone-naive datetime comparison
+    def get_comparable_date(test_item):
+        test_date = test_item.get('testdate')
+        if test_date is None:
+            return datetime.min
+        # Convert timezone-aware datetime to naive for comparison
+        if hasattr(test_date, 'tzinfo') and test_date.tzinfo is not None:
+            return test_date.replace(tzinfo=None)
+        return test_date
+    
+    try:
+        test_data.sort(key=get_comparable_date, reverse=True)
+    except Exception as e:
+        logger.error(f"Error sorting test data: {e}")
+        # If sorting fails, just keep the original order
+        pass
+    
     # Pagination
     paginator = Paginator(test_data, 10)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
-
+    
+    return render(request, 'assessments/assign_assessment.html', {
+        "page_obj": page_obj,
+        "query": request.GET.get("query", ""),
+    })
+    
+    # Pagination
+    paginator = Paginator(test_data, 10)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+    
     return render(request, 'assessments/assign_assessment.html', {
         "page_obj": page_obj,
         "query": request.GET.get("query", ""),
@@ -3320,6 +3493,42 @@ def fetch_batches(request):
                 for doc in query.stream():
                     batches.append((doc.id, doc.to_dict()))
 
+
+        # Filter batches by unitName if provided
+        unit_name_param = request.GET.get('unitName', '').strip()
+        if unit_name_param:
+            print(f"Filtering batches by unitName: {unit_name_param}")
+            filtered_batches = []
+            
+            for doc_id, batch_data in batches:
+                # Get the unit reference and fetch its names
+                batch_unit_ref = batch_data.get('unit')
+                if batch_unit_ref:
+                    try:
+                        batch_unit_doc = batch_unit_ref.get()
+                        if batch_unit_doc.exists:
+                            batch_unit_data = batch_unit_doc.to_dict()
+                            
+                            # Get the unit name based on unit type
+                            batch_unit_type = batch_data.get('unitType', '')
+                            if batch_unit_type == 'institution':
+                                batch_unit_name = batch_unit_data.get('instituteName', '')
+                            else:  # hospital
+                                batch_unit_name = batch_unit_data.get('hospitalName', '')
+                            
+                            print(f"Batch '{batch_data.get('batchName')}' belongs to: {batch_unit_name}")
+                            
+                            # Compare names (case-insensitive)
+                            if batch_unit_name.lower() == unit_name_param.lower():
+                                filtered_batches.append((doc_id, batch_data))
+                                print(f"  ✓ Match! Including this batch")
+                            else:
+                                print(f"  ✗ No match (expected: {unit_name_param})")
+                    except Exception as e:
+                        print(f"Error checking batch unit: {e}")
+            
+            print(f"Batches before filter: {len(batches)}, after filter: {len(filtered_batches)}")
+            batches = filtered_batches
 
         # Transform and filter
         formatted_batches = []

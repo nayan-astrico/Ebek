@@ -126,4 +126,5 @@ urlpatterns = [
     path('api/users/<int:user_id>/toggle-active/', views.toggle_user_active, name='toggle_user_active'),
     path('onboarding/learners/get-institutions-by-skillathon/', views.get_institutions_by_skillathon, name='get_institutions_by_skillathon'),
     path('onboarding/learners/get-hospitals-by-skillathon/', views.get_hospitals_by_skillathon, name='get_hospitals_by_skillathon'),
+    path('api/courses/<str:course_id>/procedures/', views.fetch_course_procedures, name='fetch_course_procedures'),
 ]

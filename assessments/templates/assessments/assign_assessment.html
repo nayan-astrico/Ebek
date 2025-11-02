@@ -21,88 +21,259 @@
 </div>
 
 <!-- Search and Filter Bar -->
-<!-- <div class="search-filter-bar">
+<div class="search-filter-bar">
     <div class="search-box">
         <i class="fas fa-search"></i>
-        <input type="text" id="searchInput" placeholder="Search assessments..." value="{{ query }}">
+        <input type="text" id="searchInput" placeholder="Search assessments..." oninput="filterAssessments(this.value)">
     </div>
-    <button class="btn-filter" onclick="applyFilter()">
+    <button class="btn-filter" onclick="toggleFilterPanel()" id="filterBtn">
         <i class="fas fa-filter"></i>
         Filters
+        <span class="filter-badge" id="filterBadge" style="display: none;">0</span>
     </button>
-</div> -->
+</div>
+
+<!-- Filter Side Panel -->
+<div class="filter-panel" id="filterPanel">
+    <div class="filter-header">
+        <h3>Filter Assessments</h3>
+        <button type="button" class="close" onclick="toggleFilterPanel()">
+            <span>&times;</span>
+        </button>
+    </div>
+    
+    <form class="filter-form">
+        <div class="filter-layout">
+            <!-- Main Filter Types (30%) -->
+            <div class="filter-types">
+                <div class="filter-type active" data-filter="type" onclick="switchFilter('type')">
+                    <span>Type</span>
+                </div>
+                <div class="filter-type" data-filter="mode" onclick="switchFilter('mode')">
+                    <span>Mode / Exam Type</span>
+                </div>
+                <div class="filter-type" data-filter="entity" onclick="switchFilter('entity')">
+                    <span>Entity</span>
+                </div>
+                <div class="filter-type" data-filter="batch" onclick="switchFilter('batch')">
+                    <span>Batch</span>
+                </div>
+                <div class="filter-type" data-filter="assessor" onclick="switchFilter('assessor')">
+                    <span>Assessor</span>
+                </div>
+                <div class="filter-type" data-filter="date" onclick="switchFilter('date')">
+                    <span>Date Range</span>
+                </div>
+                <div class="filter-type" data-filter="status" onclick="switchFilter('status')">
+                    <span>Status</span>
+                </div>
+            </div>
+
+            <!-- Filter Content (70%) -->
+            <div class="filter-content-wrapper">
+                <!-- Type Content -->
+                <div class="filter-content active" id="type-content">
+                    <div class="filter-search">
+                        <div class="selection-count" id="typeSelectionCount">0 Type selected</div>
+                    </div>
+                    <div class="options-list" id="filterTypeOptions">
+                        <label class="option-item">
+                            <input type="checkbox" name="type" value="B2B" onchange="updateTypeSelectionCount()">
+                            <span>B2B</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="type" value="B2C" onchange="updateTypeSelectionCount()">
+                            <span>B2C</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Mode Content -->
+                <div class="filter-content" id="mode-content">
+                    <div class="filter-search">
+                        <div class="selection-count" id="modeSelectionCount">0 Mode selected</div>
+                    </div>
+                    <div class="options-list" id="filterModeOptions">
+                        <label class="option-item">
+                            <input type="checkbox" name="mode" value="Classroom" onchange="updateModeSelectionCount()">
+                            <span>Classroom</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="mode" value="Mock" onchange="updateModeSelectionCount()">
+                            <span>Mock</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="mode" value="Final" onchange="updateModeSelectionCount()">
+                            <span>Final</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="mode" value="Skillathon" onchange="updateModeSelectionCount()">
+                            <span>Skillathon</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Entity Content -->
+                <div class="filter-content" id="entity-content">
+                    <div class="filter-search">
+                        <input type="text" placeholder="Search entity" id="filterEntitySearch" oninput="filterEntityOptions(this.value)">
+                        <div class="selection-count" id="entitySelectionCount">0 Entity selected</div>
+                    </div>
+                    <div class="options-list" id="filterEntityOptions">
+                        <label class="option-item">
+                            <input type="checkbox" name="entity" value="Skillathon" onchange="updateEntitySelectionCount()">
+                            <span>Skillathon</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="entity" value="Institution" onchange="updateEntitySelectionCount()">
+                            <span>Institution</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="entity" value="Hospital" onchange="updateEntitySelectionCount()">
+                            <span>Hospital</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Batch Content -->
+                <div class="filter-content" id="batch-content">
+                    <div class="filter-search">
+                        <input type="text" placeholder="Search batch" id="filterBatchSearch" oninput="filterBatchOptions(this.value)">
+                        <div class="selection-count" id="batchSelectionCount">0 Batch selected</div>
+                    </div>
+                    <div class="options-list" id="filterBatchOptions">
+                        <!-- Dynamic batches will be loaded here -->
+                    </div>
+                </div>
+
+                <!-- Assessor Content -->
+                <div class="filter-content" id="assessor-content">
+                    <div class="filter-search">
+                        <input type="text" placeholder="Search assessor" id="filterAssessorSearch" oninput="filterAssessorOptions(this.value)">
+                        <div class="selection-count" id="assessorSelectionCount">0 Assessor selected</div>
+                    </div>
+                    <div class="options-list" id="filterAssessorOptions">
+                        <!-- Dynamic assessors will be loaded here -->
+                    </div>
+                </div>
+
+                <!-- Date Range Content -->
+                <div class="filter-content" id="date-content">
+                    <div class="date-range-inputs">
+                        <div class="form-group">
+                            <label>From Date</label>
+                            <input type="date" id="filterDateFrom" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>To Date</label>
+                            <input type="date" id="filterDateTo" class="form-control">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Status Content -->
+                <div class="filter-content" id="status-content">
+                    <div class="filter-search">
+                        <div class="selection-count" id="statusSelectionCount">0 Status selected</div>
+                    </div>
+                    <div class="options-list" id="filterStatusOptions">
+                        <label class="option-item">
+                            <input type="checkbox" name="status" value="Active" onchange="updateStatusSelectionCount()">
+                            <span>Active</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="status" value="Completed" onchange="updateStatusSelectionCount()">
+                            <span>Completed</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="status" value="Scheduled" onchange="updateStatusSelectionCount()">
+                            <span>Scheduled</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Actions -->
+        <div class="filter-actions">
+            <button type="button" class="btn btn-light" onclick="clearAllFilters()">Clear All</button>
+            <button type="button" class="btn btn-light" onclick="toggleFilterPanel()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="applyFilters()">Apply Filter</button>
+        </div>
+    </form>
+</div>
+
+<!-- Filter Overlay -->
+<div class="filter-overlay" id="filterOverlay" onclick="toggleFilterPanel()"></div>
 
 <!-- Table -->
 <div class="card">
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Assessment Name</th>
-                <th>Skillathon</th>
-                <th>Procedures</th>
-                <th style="width: 15%;">Status</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for test in page_obj %}
-            <tr>
-                <td>
-                    <div class="institution">
-                        <span>{{ test.assessment_name }}</span>
-                    </div>
-                </td>
-                <td>{{ test.skillathon|default:"-" }}</td>
-                <td>
-                    {% for proc in test.procedure_assignments %}
-                        <span class="badge badge-info">{{ proc.procedure_name }}</span>
-                    {% empty %}
-                        <span>-</span>
-                    {% endfor %}
-                </td>
-                <td>
-                    {% if test.status == 'In Progress' or test.status == 'Not Completed' %}
-                    <span class="badge badge-info">In Progress</span>
-                    {% elif test.status == 'Completed' %}
-                    <span class="badge badge-info">Completed</span>
-                    {% else %}
-                    <span class="badge badge-info">{{ test.status }}</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <div class="actions">
-                        {% if test.status == 'Completed' %}
-                        <input type="checkbox" class="test-status-toggle" data-test-id="{{ test.id }}" data-status="{{ test.status }}" onchange="updateTestStatus(this, '{{ test.id }}')" checked>
-                        {% else %}
-                        <input type="checkbox" class="test-status-toggle" data-test-id="{{ test.id }}" data-status="{{ test.status }}" onchange="updateTestStatus(this, '{{ test.id }}')">
-                        {% endif %}
-                    </div>
-                </td>
-                
-                <!-- <td>
-                    <div class="actions">
-                        {% if "edit_assignment" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                        <button class="btn-icon" onclick="openEditTestPanel('{{ test.id }}')" title="Edit">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        {% endif %}
-                        {% if "delete_assignment" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                        <button class="btn-icon btn-danger" onclick="deleteTest(this, '{{ test.id }}')" title="Delete">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                        {% endif %}
-                    </div>
-                </td> -->
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="5" class="empty">
-                    <p>No assessments found</p>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-wrapper">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Assessment Name</th>
+                    <th>Type</th>
+                    <th>Mode</th>
+                    <th>Batch</th>
+                    <th>Procedures</th>
+                    <th>Assessors</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="assessmentsTableBody">
+                {% for test in page_obj %}
+                <tr class="assessment-row">
+                    <td>
+                        <div class="assessment-name">
+                            <span>{{ test.assessment_name }}</span>
+                        </div>
+                    </td>
+                    <td>{{ test.type|default:"B2C" }}</td>
+                    <td>{{ test.mode|default:"Skillathon" }}</td>
+                    <td>{{ test.batch|default:"-" }}</td>
+                    <td>
+                        <div class="procedures-list" data-count="{{ test.procedure_assignments|length }}">
+                            {% if test.procedure_assignments|length > 5 %}
+                                <span class="badge badge-procedure collective-badge">Procedures Selected ({{ test.procedure_assignments|length }})</span>
+                            {% else %}
+                                {% for proc in test.procedure_assignments %}
+                                    <span class="badge badge-procedure">{{ proc.procedure_name }}</span>
+                                {% empty %}
+                                    <span>-</span>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>{{ test.assessors|default:"-" }}</td>
+                    <td>
+                        <span class="date-text">{{ test.testdate|date:"d M Y"|default:"-" }}</span>
+                    </td>
+                    <td>
+                        <div class="actions">
+                            <button class="btn-icon" onclick="openEditTestPanel('{{ test.id }}')" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn-icon btn-icon-delete" onclick="confirmDeleteTest('{{ test.id }}')" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="empty">
+                        <div class="empty-state">
+                            <i class="fas fa-clipboard-list"></i>
+                            <p>No assessments found</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <!-- Pagination (reuse from learner_list.html) -->
@@ -140,7 +311,7 @@
         {% csrf_token %}
         <div class="assign-content">
             <div class="form-group">
-                <label for="type" class="form-label">Select Type</label>
+                <label for="type" class="form-label">Type</label>
                 <div class="dropdown-container">
                     <button class="dropdown-btn" id="typeDropdownBtn">Select Type</button>
                     <ul class="dropdown-list" id="typeDropdownList">
@@ -152,50 +323,56 @@
 
             <div id="internal-assessment-container" style="display: none;">
                 <div class="form-group">
-                    <label for="skillathon" class="form-label">Select Skillathon</label>
+                    <label for="skillathon" class="form-label">Skillathon</label>
                     <div class="dropdown-container">
                         <button class="dropdown-btn" id="skillathonDropdownBtn">Select Skillathon</button>
                         <ul class="dropdown-list" id="skillathonDropdownList"></ul>
                     </div>
+                    <div id="skillathonChipsContainer" class="chip-container"></div>
                 </div>
             </div>
 
             <div id="external-assessment-container" style="display: none;">
                 <div class="form-group">
-                    <label for="institute" class="form-label">Select Institute/Hospital</label>
+                    <label for="institute" class="form-label">Institute/Hospital</label>
                     <div class="dropdown-container">
-                        <button class="dropdown-btn" id="instituteDropdownBtn">Select Institute/Hospital</button>
-                        <ul class="dropdown-list" id="instituteDropdownList"></ul>
+                        <button class="dropdown-btn" id="institutionDropdownBtn">Select Institution</button>
+                        <div class="dropdown-search" id="institutionSearchContainer">
+                            <input type="text" id="institutionSearch" placeholder="Search institution">
+                        </div>
+                        <ul class="dropdown-list" id="institutionDropdownList"></ul>
                     </div>
+                    <div id="institutionChipsContainer" class="chip-container"></div>
                 </div>
         
                 <!-- Select Batch -->
                 <div class="form-group">
-                    <label for="batch" class="form-label">Select Batch</label>
-                    <div id="batchChipsContainer" class="chip-container"></div>
+                    <label for="batch" class="form-label">Batch</label>
                     <div class="dropdown-container">
                         <button class="dropdown-btn" id="batchDropdownBtn">Select Batch</button>
                         <ul class="dropdown-list" id="batchDropdownList"></ul>
                     </div>
+                    <div id="batchChipsContainer" class="chip-container"></div>
                 </div>
 
                 <!-- Select Course -->
                 <div class="form-group">
-                    <label for="course" class="form-label">Select Course</label>
+                    <label for="course" class="form-label">Course</label>
                     <div class="dropdown-container">
                         <button class="dropdown-btn" id="courseDropdownBtn">Select Course</button>
                         <ul class="dropdown-list" id="courseDropdownList"></ul>
                     </div>
+                    <div id="courseChipsContainer" class="chip-container"></div>
                 </div>
             </div>
 
             <div class="form-group">
-                <label for="procedure" class="form-label">Select Procedure</label>
-                <div id="procedureChipsContainer" class="chip-container"></div>
+                <label for="procedure" class="form-label">Procedure</label>
                 <div class="dropdown-container">
                     <button class="dropdown-btn" id="procedureDropdownBtn">Select Procedure</button>
                     <ul class="dropdown-list" id="procedureDropdownList"></ul>
                 </div>
+                <div id="procedureChipsContainer" class="chip-container"></div>
             </div>
 
             <!-- Selected Procedures with their Assessors (B2B only) -->
@@ -207,18 +384,18 @@
             <!-- Select Assessor (B2C only) -->
             <div id="assessorSelectionContainer">
                 <div class="form-group">
-                    <label for="assessor" class="form-label">Select Assessor</label>
-                    <div id="assessorChipsContainer" class="chip-container"></div>
+                    <label for="assessor" class="form-label">Assessor</label>
                     <div class="dropdown-container">
                         <button class="dropdown-btn" id="assessorDropdownBtn">Select Assessor</button>
                         <ul class="dropdown-list" id="assessorDropdownList"></ul>
                     </div>
+                    <div id="assessorChipsContainer" class="chip-container"></div>
                 </div>
             </div>
 
             <!-- Select Exam Type (Mock/Final) -->
             <div class="form-group" id="examTypeContainer" style="display: none;">
-                <label for="examType" class="form-label">Select Exam Type</label>
+                <label for="examType" class="form-label">Exam Type</label>
                 <div class="dropdown-container">
                     <button class="dropdown-btn" id="examTypeDropdownBtn">Select Exam Type</button>
                     <ul class="dropdown-list" id="examTypeDropdownList">
@@ -392,71 +569,189 @@
     }
 
     .dropdown-container {
-        position: relative;
+    position: relative;
     }
 
     .dropdown-btn {
         width: 100%;
-        padding: 10px;
+        min-height: 38px;
+        padding: 8px 12px;
         font-size: 14px;
         color: #333;
-        background-color: #f8f9fa;
-        border: 1px solid #ced4da;
-        border-radius: 5px;
+        background-color: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
         text-align: left;
         cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transition: all 0.2s;
+        position: relative;
+        z-index: 1;
     }
 
     .dropdown-btn:hover {
-        background-color: #e9ecef;
+        border-color: #cbd5e0;
     }
 
-    .dropdown-list {
+    .dropdown-btn.active {
+        border-color: #F16564;
+    }
+
+    /* Dropdown Search */
+    .dropdown-search {
         position: absolute;
-        width: 100%;
-        background-color: white;
-        border: 1px solid #ced4da;
-        border-radius: 5px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        max-height: 200px;
-        overflow-y: auto;
-        margin-top: 5px;
+        top: 100%;
+        left: 0;
+        right: 0;
+        padding: 8px;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-top: none;
+        border-radius: 0;
         display: none;
-        z-index: 2000; /* ensure visible over side panel */
+        z-index: 2001;
     }
 
-    .dropdown-list.show {
+    .dropdown-search.show {
         display: block;
     }
 
+    .dropdown-search input {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #e2e8f0;
+        border-radius: 4px;
+        outline: none;
+        box-sizing: border-box;
+    }
+
+    .dropdown-search input:focus {
+        border-color: #F16564;
+        box-shadow: 0 0 0 2px rgba(241, 101, 100, 0.1);
+    }
+
+    /* Dropdown List */
+    .dropdown-list {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        width: 100%;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        margin-top: 4px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        max-height: 280px;
+        overflow-y: auto;
+        display: none;
+        z-index: 99999;
+        list-style: none;
+        padding: 0;
+    }
+    
+    .dropdown-list.show {
+        display: block !important;
+    }
+
+    /* Custom Scrollbar */
+    .dropdown-list::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .dropdown-list::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+    }
+
+    .dropdown-list::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 4px;
+    }
+
+    .dropdown-list::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
+    }
+
     .dropdown-list li {
-        padding: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
         cursor: pointer;
         list-style: none;
     }
 
     .dropdown-list li:hover {
-        background-color: #f1f3f4;
+        background: #f7fafc;
     }
 
+    .dropdown-list li label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+        width: 100%;
+        cursor: pointer;
+    }
+
+    .dropdown-list li input[type="checkbox"] {
+        margin: 0;
+        margin-right: 10px;
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+        accent-color: #F16564;
+    }
+
+    /* Chip Container */
     .chip-container {
-        margin-bottom: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 12px;
     }
 
+    .chip-container:empty {
+        display: none;
+    }
+
+    /* Chip/Tag Styles */
     .chip {
-        display: inline-block;
-        background-color: #F16564;
-        color: white;
+        background: #F16564;
+        color: #fff;
+        border: none;
+        border-radius: 14px;
         padding: 5px 10px;
-        margin: 2px;
-        border-radius: 15px;
         font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .chip:hover {
+        background: #e45857;
     }
 
     .chip .remove {
-        margin-left: 5px;
-        font-weight: bold;
         cursor: pointer;
+        color: #fff;
+        font-weight: 700;
+        opacity: 0.9;
+    }
+
+    .chip .remove:hover {
+        opacity: 1;
+    }
+
+    /* Collective Chip - for "X Selected" style */
+    .chip.collective {
+        background-color: #F16564;
+        color: #fff;
+        font-weight: 500;
+        padding: 6px 14px;
     }
 
     .form-control {
@@ -476,25 +771,71 @@
         overflow: hidden;
     }
 
+    /* Table Enhancements */
     .table {
         width: 100%;
         border-collapse: collapse;
     }
 
-    .table th {
+    .table thead {
         background: #f8fafc;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .table th {
         padding: 12px 16px;
         text-align: left;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 600;
         color: #4a5568;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.5px;
+    }
+
+    .table tbody tr {
+        border-bottom: 1px solid #e2e8f0;
+        transition: background 0.2s;
+    }
+
+    .table tbody tr:hover {
+        background: #f8fafc;
     }
 
     .table td {
-        padding: 16px;
-        border-top: 1px solid #e2e8f0;
+        padding: 14px 16px;
+        font-size: 14px;
+        color: #2d3748;
+        vertical-align: middle;
+    }
+    
+    /* Procedures List Container */
+    .procedures-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        align-items: center;
+    }
+    
+    /* Assessment Name Bold */
+    .assessment-name span {
+        font-weight: 500;
+        color: #1a202c;
+    }
+    
+    /* Regular text columns */
+    .table tbody td {
+        color: #4a5568;
+    }
+    
+    /* Date styling */
+    .date-text {
+        color: #4a5568;
+        font-size: 13px;
+    }
+    
+    /* Remove list styles from assessors */
+    .assessors-list {
+        color: #4a5568;
     }
 
     .institution {
@@ -503,11 +844,303 @@
         gap: 12px;
     }
 
-    .badge {
-        padding: 4px 12px;
-        border-radius: 12px;
+    /* Filter Button */
+    .btn-filter {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 20px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        color: #374151;
+        transition: all 0.2s;
+        position: relative;
+        white-space: nowrap;
+    }
+
+    .btn-filter:hover {
+        background: #f9fafb;
+        border-color: #d1d5db;
+    }
+
+    .btn-filter i {
+        font-size: 14px;
+        color: #6b7280;
+    }
+
+    .filter-badge {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        background: #F16564;
+        color: white;
+        border-radius: 10px;
+        padding: 2px 6px;
+        font-size: 10px;
+        font-weight: 600;
+        min-width: 18px;
+        text-align: center;
+    }
+
+    /* Filter Panel */
+    .filter-panel {
+        position: fixed;
+        right: -500px;
+        top: 0;
+        width: 500px;
+        height: 100vh;
+        background: white;
+        box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+        transition: right 0.3s ease;
+        z-index: 1050;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .filter-panel.active {
+        right: 0;
+    }
+
+    .filter-header {
+        padding: 20px;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .filter-header h3 {
+        margin: 0;
+        font-size: 18px;
+        color: #1a202c;
+    }
+
+    .filter-header .close {
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: #718096;
+        padding: 0;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .filter-form {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .filter-layout {
+        flex: 1;
+        display: flex;
+        overflow: hidden;
+    }
+
+    /* Filter Types (Left Side - 30%) */
+    .filter-types {
+        width: 40%;
+        border-right: 1px solid #e2e8f0;
+        overflow-y: auto;
+        background: #f8fafc;
+    }
+
+    .filter-type {
+        padding: 14px 20px;
+        cursor: pointer;
+        border-left: 3px solid transparent;
+        transition: all 0.2s;
+        font-size: 14px;
+        color: #4a5568;
+    }
+
+    .filter-type:hover {
+        background: #edf2f7;
+    }
+
+    .filter-type.active {
+        background: white;
+        border-left-color: #F16564;
+        color: #F16564;
+        font-weight: 500;
+    }
+
+    /* Filter Content (Right Side - 70%) */
+    .filter-content-wrapper {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+    }
+
+    .filter-content {
+        display: none;
+    }
+
+    .filter-content.active {
+        display: block;
+    }
+
+    .filter-search {
+        margin-bottom: 16px;
+    }
+
+    .filter-search input {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        margin-bottom: 8px;
+    }
+
+    .selection-count {
+        font-size: 12px;
+        color: #718096;
+        margin-top: 8px;
+    }
+
+    .options-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .option-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        background: #f8fafc;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .option-item:hover {
+        background: #edf2f7;
+    }
+
+    .option-item input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+        accent-color: #F16564;
+    }
+
+    .option-item span {
+        font-size: 14px;
+        color: #2d3748;
+    }
+
+    /* Date Range Inputs */
+    .date-range-inputs {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .date-range-inputs .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .date-range-inputs label {
+        font-size: 13px;
+        font-weight: 500;
+        color: #4a5568;
+    }
+
+    .date-range-inputs .form-control {
+        padding: 8px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+
+    /* Filter Actions */
+    .filter-actions {
+        padding: 16px 20px;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+    }
+
+    /* Filter Overlay */
+    .filter-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.3);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        z-index: 1049;
+        pointer-events: none;
+    }
+
+    .filter-overlay.active {
+        opacity: 1;
+        pointer-events: all;
+    }
+
+    /* Scrollbar for filter types */
+    .filter-types::-webkit-scrollbar,
+    .filter-content-wrapper::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .filter-types::-webkit-scrollbar-track,
+    .filter-content-wrapper::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+
+    .filter-types::-webkit-scrollbar-thumb,
+    .filter-content-wrapper::-webkit-scrollbar-thumb {
+        background: #cbd5e0;
+        border-radius: 3px;
+    }
+
+    /* Badge Styles */
+    .badge-procedure {
+        display: inline-block;
+        padding: 5px 10px;
+        border-radius: 14px;
         font-size: 12px;
         font-weight: 500;
+        background: #F16564;
+        color: #fff;
+        margin-right: 4px;
+        margin-bottom: 4px;
+    }
+
+    .badge-procedure:hover {
+        background: #e45857;
+    }
+
+    .collective-badge {
+        background: #F16564;
+        color: #fff;
+        font-weight: 500;
+        padding: 6px 14px;
+        cursor: pointer;
+    }
+
+    .badge-type,
+    .badge-assessor,
+    .badge-info {
+        display: none;
     }
 
     .badge.active {
@@ -519,9 +1152,7 @@
         background: #fed7d7;
         color: #c53030;
     }
-    .badge-info{
-        background-color: #1aa09a;
-    }
+
     .status-select {
         width: 100%;
         padding: 8px 12px;
@@ -540,9 +1171,62 @@
         box-shadow: 0 0 0 3px rgba(241, 101, 100, 0.15);
     }
 
+    /* Actions Column */
     .actions {
         display: flex;
         gap: 8px;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .btn-icon {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f3f4f6;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        color: #6b7280;
+    }
+
+    .btn-icon:hover {
+        background: #e5e7eb;
+        color: #374151;
+    }
+
+    .btn-icon i {
+        font-size: 14px;
+    }
+
+    .btn-icon-delete {
+        color: #ef4444;
+    }
+
+    .btn-icon-delete:hover {
+        background: #fee2e2;
+        color: #dc2626;
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+    }
+
+    .empty-state i {
+        font-size: 48px;
+        color: #cbd5e0;
+        margin-bottom: 16px;
+    }
+
+    .empty-state p {
+        color: #718096;
+        font-size: 16px;
+        margin: 0;
     }
 
     .btn-primary {
@@ -593,42 +1277,46 @@
         gap: 10px;
     }
 
+    /* Search Bar Styling */
     .search-filter-bar {
         display: flex;
-        gap: 10px;
-        margin-bottom: 18px;
+        gap: 16px;
+        margin-bottom: 24px;
     }
-
+    
     .search-box {
         flex: 1;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 12px;
         background: white;
         border: 1px solid #e2e8f0;
         border-radius: 8px;
-        padding: 8px 14px;
+        padding: 8px 16px;
+    }
+    
+    .search-box i {
+        color: #718096;
         font-size: 14px;
     }
-
-    .search-box i {
-        color: #4a5568;
-        font-size: 16px;
-    }
-
+    
     .search-box input {
         border: none;
         outline: none;
         width: 100%;
         font-size: 14px;
         background: transparent;
-        padding: 0;
     }
-
+    
+    .search-box input::placeholder {
+        color: #a0aec0;
+    }
+    
+    /* Filter Button */
     .btn-filter {
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 8px;
         padding: 8px 16px;
         background: white;
         border: 1px solid #e2e8f0;
@@ -636,27 +1324,45 @@
         font-size: 14px;
         color: #4a5568;
         cursor: pointer;
+        position: relative;
         transition: all 0.2s;
-        font-weight: 500;
     }
-
+    
     .btn-filter:hover {
         background: #f7fafc;
-        color: #222;
+    }
+    
+    .btn-filter i {
+        font-size: 14px;
+    }
+    
+    .filter-badge {
+        background: #F16564;
+        color: white;
+        border-radius: 50%;
+        width: 18px;
+        height: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 600;
+        position: absolute;
+        top: -5px;
+        right: -5px;
     }
 
     .assign-panel {
         position: fixed;
-        top: 0;
         right: -600px;
-        width: 480px;
+        top: 0;
+        width: 600px;
         height: 100vh;
         background: white;
-        box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+        box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
         transition: right 0.3s ease;
-        z-index: 1100;
-        display: flex;
-        flex-direction: column;
+        z-index: 1050;
+        overflow-y: auto;
     }
 
     .assign-panel.active {
@@ -722,7 +1428,7 @@
         background: rgba(0, 0, 0, 0.3);
         opacity: 0;
         transition: opacity 0.3s ease;
-        z-index: 1099;
+        z-index: 1040;
         pointer-events: none;
     }
     .overlay.active {
@@ -827,6 +1533,47 @@
     .assessor-dropdown-list li:hover {
         background-color: #f1f3f4;
     }
+
+    /* Table Container with Scrollbar */
+    .card {
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        overflow: hidden;
+    }
+
+    .table-wrapper {
+        overflow-x: auto;
+        overflow-y: auto;
+        max-height: calc(100vh - 250px);
+    }
+
+    /* Custom Scrollbar */
+    .table-wrapper::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    .table-wrapper::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+    }
+
+    .table-wrapper::-webkit-scrollbar-thumb {
+        background: #cbd5e0;
+        border-radius: 4px;
+    }
+
+    .table-wrapper::-webkit-scrollbar-thumb:hover {
+        background: #a0aec0;
+    }
+
+    /* Table Styles */
+    .table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1200px; /* Ensures horizontal scroll on smaller screens */
+    }
 </style>
 
 <script>
@@ -838,23 +1585,26 @@
 
 
     $(document).ready(function () {
-        // Load procedures/assessors for edit dropdowns when buttons clicked
+        // Load procedures/assessors for edit dropdowns
         $('#editProcedureDropdownBtn').off('click').on('click', function(e){
-            e.preventDefault(); e.stopPropagation();
+            e.preventDefault(); 
+            e.stopPropagation();
             $.get('/fetch-procedures/', function(res){
                 populateDropdown('editProcedureDropdownList', res.procedures, 'name');
                 $('#editProcedureDropdownList').show();
             });
         });
+        
         $('#editAssessorDropdownBtn').off('click').on('click', function(e){
-            e.preventDefault(); e.stopPropagation();
+            e.preventDefault(); 
+            e.stopPropagation();
             $.get('/fetch-assessors/', function(res){
                 populateDropdown('editAssessorDropdownList', res.assessors, 'name');
                 $('#editAssessorDropdownList').show();
             });
         });
-
-        // Add to chips in edit panel (match assign: close after select)
+    
+        // Add to chips in edit panel
         $('#editProcedureDropdownList, #editAssessorDropdownList').off('click').on('click', 'li', function (e) {
             e.preventDefault();
             const value = $(this).data('value');
@@ -866,24 +1616,69 @@
             }
             $(this).closest('.dropdown-list').hide();
         });
+        
         // Remove chips in edit panel
-        $('#editProcedures, #editAssessors').on('click', '.chip .remove', function(){ $(this).parent().remove(); });
-        // Handle dropdown toggle and auto-closing logic (match assign)
-        $('.dropdown-btn').off('click').on('click', function (e) {
+        $('#editProcedures, #editAssessors').on('click', '.chip .remove', function(){ 
+            $(this).parent().remove(); 
+        });
+    
+        // UNIVERSAL DROPDOWN HANDLER - FIXED VERSION
+        $(document).on('click', '.dropdown-btn', function(e) {
             e.preventDefault();
             e.stopPropagation();
-            const dropdownList = $(this).next('.dropdown-list');
-            $('.dropdown-list').not(dropdownList).hide();
-            dropdownList.toggle();
+            
+            const $btn = $(this);
+            const $container = $btn.closest('.dropdown-container');
+            const $list = $container.find('.dropdown-list');
+            const $search = $container.find('.dropdown-search');
+            
+            console.log('Dropdown clicked:', $btn.attr('id'));
+            console.log('List found:', $list.length, 'Search found:', $search.length);
+            
+            // Close all other dropdowns
+            $('.dropdown-list').not($list).hide().removeClass('show');
+            $('.dropdown-search').not($search).hide().removeClass('show');
+            $('.dropdown-btn').not($btn).removeClass('active');
+            
+            // Toggle current dropdown
+            const isVisible = $list.is(':visible');
+            
+            if (isVisible) {
+                $list.hide().removeClass('show');
+                $search.hide().removeClass('show');
+                $btn.removeClass('active');
+            } else {
+                $list.show().addClass('show');
+                $search.show().addClass('show');
+                $btn.addClass('active');
+            }
         });
-
-        $('#typeDropdownList li').click(function (e) {
+    
+        // Close when clicking outside
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('.dropdown-container').length) {
+                $('.dropdown-list').hide().removeClass('show');
+                $('.dropdown-search').hide().removeClass('show');
+                $('.dropdown-btn').removeClass('active');
+            }
+        });
+    
+        // Prevent dropdown from closing when clicking inside
+        $(document).on('click', '.dropdown-list', function(e) {
+            e.stopPropagation();
+        });
+    
+        // Type selection - FIXED
+        $(document).on('click', '#typeDropdownList li', function(e) {
             e.preventDefault();
+            e.stopPropagation();
+            
             const type = $(this).data('value');
             $('#typeDropdownBtn').text(type);
-            $('#typeDropdownList').hide();
+            $('#typeDropdownList').hide().removeClass('show');
+            $('#typeDropdownBtn').removeClass('active');
             
-            // Clear all previous selections
+            // Clear selections
             $('#batchChipsContainer').empty();
             $('#procedureChipsContainer').empty();
             $('#assessorChipsContainer').empty();
@@ -892,33 +1687,52 @@
             $('#courseDropdownList').empty();
             $('#procedureDropdownList').empty();
             $('#assessorDropdownList').empty();
-            $('#examTypeDropdownBtn').text('Select Exam Type');
-
-            $('#internal-assessment-container').show();
-            $('#external-assessment-container').hide();
-            $('#selectedProceduresContainer').hide();
-            $('#assessorSelectionContainer').show();
-            
+    
             if (type === 'B2C') {
                 $('#internal-assessment-container').show();
                 $('#external-assessment-container').hide();
                 $('#selectedProceduresContainer').hide();
                 $('#assessorSelectionContainer').show();
                 $('#examTypeContainer').hide();
-                fetchSkillathons();
-                // Fetch procedures dynamically on page load
+            
+                // Fetch skillathons - THIS IS THE MISSING CODE
+                $.ajax({
+                    url: '/fetch-skillathons/',  // Adjust this URL to match your backend endpoint
+                    type: 'GET',
+                    success: function (response) {
+                        console.log('Fetched skillathons:', response);
+                        populateDropdown('skillathonDropdownList', response.skillathons, 'name');
+                    },
+                    error: function () {
+                        console.error('Failed to fetch skillathons');
+                    }
+                });
+            
+                // Fetch procedures
                 $.ajax({
                     url: '/fetch-procedures/',
                     type: 'GET',
                     success: function (response) {
-                        console.log(response);
-                        populateDropdown('procedureDropdownList', response.procedures, 'name');
+                        populateProcedureDropdownWithCheckboxes(response.procedures);
                     },
                     error: function () {
-                        console.error('Failed to fetch procedures.');
-                    },
+                        console.error('Failed to fetch procedures');
+                    }
                 });
-            } else {
+            
+                // Fetch assessors
+                $.ajax({
+                    url: '/fetch-assessors/',
+                    type: 'GET',
+                    success: function (response) {
+                        populateDropdown('assessorDropdownList', response.assessors, 'name');
+                    },
+                    error: function () {
+                        console.error('Failed to fetch assessors');
+                    }
+                });
+    
+            } else if (type === 'B2B') {
                 $('#internal-assessment-container').hide();
                 $('#external-assessment-container').show();
                 $('#selectedProceduresContainer').show();
@@ -927,17 +1741,6 @@
                 fetchB2BInstitutesAndHospitals();
             }
         });
-
-        // Handle exam type selection
-        $('#examTypeDropdownList li').click(function (e) {
-            e.preventDefault();
-            const examType = $(this).data('value');
-            $('#examTypeDropdownBtn').text(examType);
-            $('#examTypeDropdownList').hide();
-        });
-
-        // Close dropdown when clicking outside
-        $(document).off('click').on('click', function() { $('.dropdown-list').hide(); });
 
         // Fetch institutes and hospitals with B2B onboarding type
         function fetchB2BInstitutesAndHospitals() {
@@ -951,314 +1754,538 @@
                         name: inst.instituteName,
                         type: inst.type || 'institution'
                     }));
-                    populateDropdown('instituteDropdownList', institutes, 'name');
+                    populateDropdown('institutionDropdownList', institutes, 'name');
                 },
                 error: function () {
                     console.error('Failed to fetch B2B institutions and hospitals.');
-                },
+                }
             });
         }
 
-        // Fetch batches when an institute/hospital is selected (B2B)
-        $('#instituteDropdownList').on('click', 'li', function () {
-            const instituteName = $(this).data('value');
-            const instituteId = $(this).data('id');
-            const instituteType = $(this).data('type');
-            $('#instituteDropdownBtn').text(instituteName);
-            $('#instituteDropdownList').hide();
 
+        // Skillathon selection 
+        $(document).on('click', '#skillathonDropdownList li', function(e) {
+            e.preventDefault();
+            const value = $(this).data('value');
+            const id = $(this).data('id');
+            
+            // Store both text and ID
+            $('#skillathonDropdownBtn').text(value).attr('data-skillathon-id', id);
+            $('#skillathonDropdownList').hide();
+            
+            console.log('Skillathon selected:', value, 'ID:', id); // For debugging
+        });
+    
+    
+        // Institution selection
+        $(document).on('click', '#institutionDropdownList li', function(e) {
+            e.preventDefault();
+            const institutionName = $(this).data('value');
+            const institutionId = $(this).data('id');
+            const institutionType = $(this).data('type');
+            
+            // Store both text and ID on the button
+            $('#institutionDropdownBtn').text(institutionName).attr('data-institution-id', institutionId);
+            $('#institutionDropdownList').hide();
+            $('#institutionSearchContainer').hide();
+
+            console.log('Institution selected:', institutionName, 'ID:', institutionId);
+            
             // Clear previous selections
+            $('#batchDropdownList').empty();
             $('#batchChipsContainer').empty();
-            $('#courseDropdownBtn').text('Select Course');
             $('#courseDropdownList').empty();
+            $('#courseDropdownBtn').text('Select Course');
+            $('#procedureDropdownList').empty();
+            $('#procedureChipsContainer').empty();
 
-            // Fetch batches for the selected institute/hospital
+            // Fetch batches
             $.ajax({
                 url: '/api/batches/',
                 type: 'GET',
                 data: { 
-                    unitType: instituteType,
-                    unitName: instituteName
+                    unitType: institutionType,
+                    unitName: institutionName
                 },
                 success: function (response) {
-                    if (response.success) {
+                    console.log('Batches response:', response);
+                    
+                    if (response.success && response.batches) {
                         const batches = response.batches.map(batch => ({
                             id: batch.id,
                             name: batch.batchName
                         }));
-                        populateDropdown('batchDropdownList', batches, 'name');
+                        populateBatchDropdownWithCheckboxes(batches);
+                    } else {
+                        $('#batchDropdownList').append('<li style="color:#888; cursor:default; padding: 8px 12px;">No batches available</li>');
                     }
                 },
-                error: function () {
-                    console.error('Failed to fetch batches.');
-                },
-            });
-        });
-
-        // Function to fetch skillathons
-        function fetchSkillathons() {
-            $.ajax({
-                url: '/fetch-skillathons/',
-                type: 'GET',
-                success: function(response) {
-                    populateDropdown('skillathonDropdownList', response.skillathons, 'name');
-                },
-                error: function() {
-                    console.error('Failed to fetch skillathons.');
+                error: function (xhr) {
+                    console.error('Failed to fetch batches:', xhr);
+                    console.error('Error details:', xhr.responseText);
+                    $('#batchDropdownList').append('<li style="color:#888; cursor:default; padding: 8px 12px;">Error loading batches</li>');
                 }
             });
-        }
-
-        // Handle skillathon selection
-        $('#skillathonDropdownList').on('click', 'li', function(e) {
-            e.preventDefault();
-            $('#skillathonDropdownList li').removeClass('selected');
-            $(this).addClass('selected');
-            const value = $(this).data('value');
-            $('#skillathonDropdownBtn').text(value);
-            $('#skillathonDropdownList').hide();
         });
-
-        // Fetch assessors dynamically
-        // Fetching all assessors for now, will be filtered based on type later and institution later.
-        $('#assessorDropdownBtn').click(function () {
-            $.ajax({
-                url: '/fetch-assessors/',
-                type: 'GET',
-                success: function (response) {
-                    populateDropdown('assessorDropdownList', response.assessors, 'name');
-                },
-                error: function () {
-                    console.error('Failed to fetch assessors.');
-                },
+    
+        // Institution search
+        $('#institutionSearch').on('input', function() {
+            const searchTerm = $(this).val().toLowerCase();
+            $('#institutionDropdownList li').each(function() {
+                const text = $(this).text().toLowerCase();
+                $(this).toggle(text.includes(searchTerm));
             });
         });
-
-        
-
-        // Handle batch selection (single select for B2B)
-        $('#batchDropdownList').on('click', 'li', function (e) {
+    
+        // Batch selection - Handle both checkbox changes and li clicks
+        $(document).on('click', '#batchDropdownList li', function(e) {
             e.preventDefault();
-            const value = $(this).data('value');
-            const id = $(this).data('id');
+            e.stopPropagation();
             
-            // Clear previous batch selection
-            $('#batchChipsContainer').empty();
-            $('#courseDropdownBtn').text('Select Course');
-            $('#courseDropdownList').empty();
+            const li = $(this);
+            const checkbox = li.find('input[type="checkbox"]');
+            const value = li.data('value');
+            const id = li.data('id');
             
-            // Add selected batch
-            $('#batchChipsContainer').append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
-            $(this).closest('.dropdown-list').hide();
+            // Toggle checkbox
+            checkbox.prop('checked', !checkbox.prop('checked'));
             
-            // Fetch courses for the selected batch
-            $.ajax({
-                url: `/api/batches/${id}/courses/`,
-                type: 'GET',
-                success: function (response) {
-                    if (response.success) {
-                        const courses = response.courses.map(course => ({
-                            id: course.id,
-                            name: course.name
-                        }));
-                        populateDropdown('courseDropdownList', courses, 'name');
+            if (checkbox.is(':checked')) {
+                if ($(`#batchChipsContainer .chip[data-id="${id}"]`).length === 0) {
+                    $('#batchChipsContainer').append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
+                }
+                
+                // Fetch courses for selected batch
+                $.ajax({
+                    url: `/api/batches/${id}/courses/`,
+                    type: 'GET',
+                    success: function (response) {
+                        console.log('Courses response:', response);
+                        if (response.success) {
+                            // Clear previous courses first
+                            $('#courseDropdownList').empty();
+                            $('#courseDropdownBtn').text('Select Course');
+
+                            const courses = response.courses.map(course => ({
+                                id: course.id,
+                                name: course.courseName || course.name
+                            }));
+                            console.log('Mapped courses:', courses); // Debug
+                            populateDropdown('courseDropdownList', courses, 'name');
+                        } else {
+                            $('#courseDropdownList').empty().append('<li style="color:#888; cursor:default; padding: 8px 12px;">No courses available</li>');
+                        }
+                    },
+                    error: function () {
+                        console.error('Failed to fetch courses');
+                        $('#courseDropdownList').empty().append('<li style="color:#888; cursor:default; padding: 8px 12px;">Error loading courses</li>');
                     }
-                },
-                error: function () {
-                    console.error('Failed to fetch courses for batch.');
-                },
-            });
+                });
+            } else {
+                $(`#batchChipsContainer .chip[data-id="${id}"]`).remove();
+            }
         });
-
-        // Handle course selection (single select for B2B)
-        $('#courseDropdownList').on('click', 'li', function (e) {
+        
+        // Also handle direct checkbox clicks
+        $(document).on('change', '#batchDropdownList input[type="checkbox"]', function(e) {
+            e.stopPropagation();
+            $(this).closest('li').trigger('click');
+        });
+    
+        // Course selection - Handle li clicks
+        $(document).on('click', '#courseDropdownList li', function(e) {
             e.preventDefault();
-            const value = $(this).data('value');
-            const id = $(this).data('id');
+            e.stopPropagation();
             
-            $('#courseDropdownBtn').text(value);
-            $(this).closest('.dropdown-list').hide();
+            const courseName = $(this).data('value');
+            const courseId = $(this).data('id');
             
-            // Fetch procedures for the selected course
+            console.log('=== COURSE SELECTION DEBUG ===');
+            console.log('Course Name:', courseName);
+            console.log('Course ID:', courseId);
+            console.log('Course ID type:', typeof courseId);
+            console.log('LI element:', $(this));
+            console.log('LI data:', $(this).data());
+            
+            // Store both text and ID on the button
+            $('#courseDropdownBtn').text(courseName).attr('data-course-id', courseId);
+            $('#courseDropdownList').hide().removeClass('show');
+            $('#courseDropdownBtn').removeClass('active');
+            
+            console.log('Stored course ID:', $('#courseDropdownBtn').attr('data-course-id'));
+            
+            // Construct the URL
+            const proceduresUrl = `/api/courses/${courseId}/procedures/`;
+            console.log('Procedures URL:', proceduresUrl);
+            
+            // Fetch procedures for course
             $.ajax({
-                url: `/fetch-course-procedures/${id}/`,
+                url: `/api/courses/${courseId}/procedures/`,
                 type: 'GET',
                 success: function (response) {
-                    if (response.success) {
+                    console.log('Procedures response:', response);
+                    
+                    if (response.success && response.procedures && response.procedures.length > 0) {
                         const procedures = response.procedures.map(proc => ({
                             id: proc.id,
                             name: proc.name
                         }));
-                        populateDropdown('procedureDropdownList', procedures, 'name');
+                        populateProcedureDropdownWithCheckboxes(procedures);
+                    } else {
+                        // Handle empty procedures
+                        $('#procedureDropdownList').empty().append(
+                            '<li style="color:#888; cursor:default; padding: 8px 12px;">No procedures available for this course</li>'
+                        );
                     }
                 },
-                error: function () {
-                    console.error('Failed to fetch procedures for course.');
+                error: function (xhr, status, error) {
+                    console.error('=== PROCEDURE FETCH ERROR ===');
+                    console.error('Status:', status);
+                    console.error('Error:', error);
+                    console.error('Status Code:', xhr.status);
+                    console.error('Response:', xhr.responseText);
+                    
+                    // Show user-friendly error message
+                    $('#procedureDropdownList').empty().append(
+                        '<li style="color:#888; cursor:default; padding: 8px 12px;">Error fetching procedures. Please try again.</li>'
+                    );
+                }
+            });
+        
+            // Fetch assessors
+            $.ajax({
+                url: '/fetch-assessors/',
+                type: 'GET',
+                success: function (response) {
+                    populateAssessorsForB2B(response.assessors);
                 },
+                error: function () {
+                    console.error('Failed to fetch assessors');
+                }
             });
         });
-
-        // Handle procedure selection based on test type
-        $('#procedureDropdownList').on('click', 'li', function (e) {
+    
+        // Procedure selection with checkboxes - Handle both checkbox and li clicks
+        $(document).on('click', '#procedureDropdownList li', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const li = $(this);
+            const checkbox = li.find('.procedure-checkbox');
+            const value = li.data('value');
+            const id = li.data('id');
+            
+            // Toggle checkbox
+            checkbox.prop('checked', !checkbox.prop('checked'));
+            
+            if (checkbox.is(':checked')) {
+                if ($(`#procedureChipsContainer .chip[data-id="${id}"]`).length === 0) {
+                    $('#procedureChipsContainer').append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
+                    
+                    updateChipDisplay('procedureChipsContainer', 'Procedures');
+                    
+                    const testType = $('#typeDropdownBtn').text().trim();
+                    if (testType === 'B2B') {
+                        addProcedureWithAssessorSelection(id, value);
+                    }
+                }
+            } else {
+                $(`#procedureChipsContainer .chip[data-id="${id}"]`).remove();
+                updateChipDisplay('procedureChipsContainer', 'Procedures');
+                
+                const testType = $('#typeDropdownBtn').text().trim();
+                if (testType === 'B2B') {
+                    removeProcedure(id);
+                }
+            }
+        });
+        
+        // Also handle direct checkbox clicks
+        $(document).on('change', '#procedureDropdownList .procedure-checkbox', function(e) {
+            e.stopPropagation();
+            // Trigger the li click handler
+            $(this).closest('li').trigger('click');
+        });
+    
+        // Assessor selection (B2C)
+        $(document).on('click', '#assessorDropdownList li', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
             
             const value = $(this).data('value');
             const id = $(this).data('id');
-            
-            // Check if procedure already selected
-            if ($(`#procedureChipsContainer .chip[data-value="${value}"]`).length === 0) {
-                // Add to procedure chips
-                $('#procedureChipsContainer').append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
-                
-                // For B2B, also add to selected procedures container with assessor selection
-                const testType = $('#typeDropdownBtn').text().trim();
-                if (testType === 'B2B') {
-                    addProcedureWithAssessorSelection(id, value);
-                }
+    
+            if ($(`#assessorChipsContainer .chip[data-id="${id}"]`).length === 0) {
+                $(`#assessorChipsContainer`).append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
+                updateChipDisplay('assessorChipsContainer', 'Assessors');
             }
-            $(this).closest('.dropdown-list').hide();
+            $(this).closest('.dropdown-list').hide().removeClass('show');
+            $('#assessorDropdownBtn').removeClass('active');
         });
-
-        // Handle assessor selection for specific procedures
+    
+        // Assessor dropdown for B2B procedures
         $(document).on('click', '.assessor-dropdown-btn', function(e) {
             e.preventDefault();
             e.stopPropagation();
             const procedureId = $(this).data('procedure-id');
             const dropdownList = $(this).next('.assessor-dropdown-list');
             
-            // Hide other dropdowns
             $('.assessor-dropdown-list').not(dropdownList).hide();
             dropdownList.toggle();
         });
-
-        // Handle assessor selection
-        $(document).on('click', '.assessor-dropdown-list li', function(e) {
-            e.preventDefault();
-            const assessorId = $(this).data('id');
-            const assessorName = $(this).data('value');
-            const procedureId = $(this).closest('.procedure-item').data('procedure-id');
+    
+        // Assessor selection for specific procedures (B2B)
+        $(document).on('change', '.assessor-dropdown-list input[type="checkbox"]', function(e) {
+            e.stopPropagation();
+            const checkbox = $(this);
+            const li = checkbox.closest('li');
+            const assessorId = li.data('id');
+            const assessorName = li.data('value');
+            const procedureId = li.closest('.procedure-item').data('procedure-id');
             
-            // Check if assessor already selected for this procedure
-            if ($(`.procedure-item[data-procedure-id="${procedureId}"] .assessor-chips .chip[data-id="${assessorId}"]`).length === 0) {
-                // Add assessor chip
-                $(`.procedure-item[data-procedure-id="${procedureId}"] .assessor-chips`).append(
-                    `<span class="chip" data-id="${assessorId}" data-value="${assessorName}">${assessorName}<span class="remove">&times;</span></span>`
-                );
+            if (checkbox.is(':checked')) {
+                if ($(`.procedure-item[data-procedure-id="${procedureId}"] .assessor-chips .chip[data-id="${assessorId}"]`).length === 0) {
+                    $(`.procedure-item[data-procedure-id="${procedureId}"] .assessor-chips`).append(
+                        `<span class="chip" data-id="${assessorId}" data-value="${assessorName}">${assessorName}<span class="remove">&times;</span></span>`
+                    );
+                }
+            } else {
+                $(`.procedure-item[data-procedure-id="${procedureId}"] .assessor-chips .chip[data-id="${assessorId}"]`).remove();
             }
-            $(this).closest('.assessor-dropdown-list').hide();
         });
-
-        // Remove assessor from specific procedure
+    
+        // Remove assessor chips (B2B)
         $(document).on('click', '.assessor-chips .chip .remove', function(e) {
             e.preventDefault();
             $(this).parent().remove();
         });
-
-        // Handle remove procedure button click
+    
+        // Remove procedure button (B2B)
         $(document).on('click', '.remove-procedure', function(e) {
             e.preventDefault();
             const procedureId = $(this).data('procedure-id');
             removeProcedure(procedureId);
         });
-
-        // Handle multi-select for assessors (B2C)
-        $('#assessorDropdownList').on('click', 'li', function (e) {
-            e.preventDefault();
-            const value = $(this).data('value');
-            const id = $(this).data('id');
-
-            // Check if already selected
-            if ($(`#assessorChipsContainer .chip[data-value="${value}"]`).length === 0) {
-                $(`#assessorChipsContainer`).append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
-            }
-            $(this).closest('.dropdown-list').hide();
-        });
-
-        // Remove chips when clicking the X
-        $('.chip-container').on('click', '.chip .remove', function () {
-            $(this).parent().remove();
-        });
-
-        // Function to remove procedure
-        function removeProcedure(procedureId) {
-            $(`.procedure-item[data-procedure-id="${procedureId}"]`).remove();
-            $(`#procedureChipsContainer .chip[data-id="${procedureId}"]`).remove();
+    
+        // Remove chips when clicking X
+        $('.chip-container').on('click', '.chip:not(.collective) .remove', function() {
+            const chip = $(this).parent();
+            const containerId = chip.closest('.chip-container').attr('id');
+            const chipId = chip.data('id');
             
-            // Hide container if no procedures left
-            if ($('#selectedProceduresList .procedure-item').length === 0) {
-                $('#selectedProceduresContainer').hide();
+            // Uncheck corresponding checkbox
+            if (containerId === 'procedureChipsContainer') {
+                $(`#procedureDropdownList li[data-id="${chipId}"] .procedure-checkbox`).prop('checked', false);
+                updateChipDisplay('procedureChipsContainer', 'Procedures');
+                
+                const testType = $('#typeDropdownBtn').text().trim();
+                if (testType === 'B2B') {
+                    removeProcedure(chipId);
+                }
+            } else if (containerId === 'assessorChipsContainer') {
+                $(`#assessorDropdownList li[data-id="${chipId}"] input[type="checkbox"]`).prop('checked', false);
+                updateChipDisplay('assessorChipsContainer', 'Assessors');
+            } else if (containerId === 'batchChipsContainer') {
+                $(`#batchDropdownList li[data-id="${chipId}"] input[type="checkbox"]`).prop('checked', false);
+                updateChipDisplay('batchChipsContainer', 'Batches');
             }
-        }
+            
+            chip.remove();
+        });
+    
+        // Exam type selection
+        $(document).on('click', '#examTypeDropdownList li', function(e) {
+            e.preventDefault();
+            const examType = $(this).data('value');
+            $('#examTypeDropdownBtn').text(examType);
+            $('#examTypeDropdownList').hide();
+        });
+    });
 
-        // Function to add procedure with assessor selection
-        function addProcedureWithAssessorSelection(procedureId, procedureName) {
-            const procedureItem = $(`
-                <div class="procedure-item" data-procedure-id="${procedureId}">
-                    <div class="procedure-header">
-                        <span class="procedure-name">${procedureName}</span>
-                        <button type="button" class="remove-procedure" data-procedure-id="${procedureId}">Remove</button>
+    function populateProcedureDropdownWithCheckboxes(items) {
+        const dropdown = $('#procedureDropdownList');
+        dropdown.empty();
+        if (!items || !items.length) {
+            dropdown.append('<li style="color:#888; cursor:default; padding: 8px 12px;">No options</li>');
+            return;
+        }
+        items.forEach(item => {
+            dropdown.append(`
+                <li data-value="${item.name}" data-id="${item.id}">
+                    <label style="display: flex; align-items: center; width: 100%; margin: 0; cursor: pointer;">
+                        <input type="checkbox" value="${item.id}" class="procedure-checkbox" style="margin-right: 8px;">
+                        <span>${item.name}</span>
+                    </label>
+                </li>
+            `);
+        });
+    }
+
+    // Helper function for batch dropdown with checkboxes
+    function populateBatchDropdownWithCheckboxes(items) {
+        const dropdown = $('#batchDropdownList');
+        dropdown.empty();
+        if (!items || !items.length) {
+            dropdown.append('<li style="color:#888; cursor:default; padding: 8px 12px;">No batches available</li>');
+            return;
+        }
+        items.forEach(item => {
+            dropdown.append(`
+                <li data-value="${item.name}" data-id="${item.id}">
+                    <label style="display: flex; align-items: center; width: 100%; margin: 0; cursor: pointer;">
+                        <input type="checkbox" value="${item.id}" style="margin-right: 8px;">
+                        <span>${item.name}</span>
+                    </label>
+                </li>
+            `);
+        });
+    }
+
+    // Helper function to populate regular dropdowns
+    function populateDropdown(listId, items, nameKey) {
+        const dropdown = $(`#${listId}`);
+        dropdown.empty();
+        
+        if (!items || !items.length) {
+            dropdown.append('<li style="color:#888; cursor:default; padding: 8px 12px;">No options available</li>');
+            return;
+        }
+        
+        items.forEach(item => {
+            const displayName = item[nameKey] || item.name || item;
+            const itemId = item.id || item;
+            dropdown.append(`
+                <li data-value="${displayName}" data-id="${itemId}">
+                    <span>${displayName}</span>
+                </li>
+            `);
+        });
+    }
+
+    // Update chip display to show collective badge if more than 5 chips
+    function updateChipDisplay(containerId, label) {
+        const container = $(`#${containerId}`);
+        const chips = container.find('.chip:not(.collective)');
+        const collectiveBadge = container.find('.chip.collective');
+        
+        if (chips.length > 5) {
+            chips.hide();
+            if (collectiveBadge.length === 0) {
+                container.append(`<span class="chip collective" data-count="${chips.length}">${label} Selected (${chips.length})<span class="remove">&times;</span></span>`);
+            } else {
+                collectiveBadge.text(`${label} Selected (${chips.length})`).attr('data-count', chips.length);
+                collectiveBadge.append('<span class="remove">&times;</span>');
+            }
+        } else {
+            chips.show();
+            collectiveBadge.remove();
+        }
+    }
+
+    // Add procedure with assessor selection for B2B
+    function addProcedureWithAssessorSelection(procedureId, procedureName) {
+        // Check if procedure already exists
+        if ($(`.procedure-item[data-procedure-id="${procedureId}"]`).length > 0) {
+            return;
+        }
+        
+        const procedureHtml = `
+            <div class="procedure-item" data-procedure-id="${procedureId}">
+                <div class="procedure-header">
+                    <span class="procedure-name">${procedureName}</span>
+                    <button type="button" class="remove-procedure" data-procedure-id="${procedureId}">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="assessor-selection">
+                    <label>Select Assessors for this procedure:</label>
+                    <div class="assessor-dropdown">
+                        <button type="button" class="assessor-dropdown-btn" data-procedure-id="${procedureId}">
+                            Select Assessors
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <ul class="assessor-dropdown-list" id="assessorList-${procedureId}">
+                            <!-- Will be populated with assessors -->
+                        </ul>
                     </div>
-                    <div class="assessor-selection">
-                        <label class="form-label" style="font-size: 12px; margin-bottom: 5px;">Select Assessors for this Procedure:</label>
-                        <div class="assessor-chips"></div>
-                        <div class="assessor-dropdown">
-                            <button class="assessor-dropdown-btn" data-procedure-id="${procedureId}">Select Assessor</button>
-                            <ul class="assessor-dropdown-list" id="assessorList_${procedureId}"></ul>
-                        </div>
+                    <div class="assessor-chips" data-procedure-id="${procedureId}">
+                        <!-- Selected assessor chips will appear here -->
                     </div>
                 </div>
-            `);
-            
-            $('#selectedProceduresList').append(procedureItem);
-            $('#selectedProceduresContainer').show();
-            
-            // Load assessors for this procedure's dropdown
-            loadAssessorsForProcedure(procedureId);
-        }
-
-        // Function to load assessors for a specific procedure
-        function loadAssessorsForProcedure(procedureId) {
-            const selectedInstitution = $('#instituteDropdownList li').filter(function() {
-                return $(this).text() === $('#instituteDropdownBtn').text();
-            });
-            if (selectedInstitution.length > 0) {
-                const institutionId = selectedInstitution.data('id');
-                console.log(institutionId);
-            
-            $.ajax({
-                url: '/fetch-assessors/',
-                data: { institution_id: institutionId },
-                type: 'GET',
-                success: function (response) {
-                    const assessorList = $(`#assessorList_${procedureId}`);
-                    assessorList.empty();
-                    response.assessors.forEach(assessor => {
-                        assessorList.append(`<li data-id="${assessor.id}" data-value="${assessor.name}">${assessor.name}</li>`);
-                    });
-                },
-                error: function () {
-                    console.error('Failed to fetch assessors for procedure.');
-                },
-            });
-        } else {
-            alert('Please select an institution first.');
-        }
-        }
-
+            </div>
+        `;
         
-
-        // Populate dropdown
-        function populateDropdown(dropdownId, items, property) {
-            const dropdown = $(`#${dropdownId}`);
-            dropdown.empty();
-            if (!items || !items.length) {
-                dropdown.append('<li style="color:#888; cursor:default;">No options</li>');
-                return;
+        $('#selectedProceduresList').append(procedureHtml);
+        
+        // Populate assessor list for this procedure
+        $.ajax({
+            url: '/fetch-assessors/',
+            type: 'GET',
+            success: function(response) {
+                populateAssessorsForProcedure(procedureId, response.assessors);
+            },
+            error: function() {
+                console.error('Failed to fetch assessors for procedure');
             }
-            items.forEach(item => {
-                dropdown.append(`<li data-value="${item[property]}" data-id="${item['id']}">${item[property]}</li>`);
-            });
+        });
+    }
+
+    // Populate assessors for a specific procedure (B2B)
+    function populateAssessorsForProcedure(procedureId, assessors) {
+        const assessorList = $(`#assessorList-${procedureId}`);
+        assessorList.empty();
+        
+        if (!assessors || assessors.length === 0) {
+            assessorList.append('<li style="color:#888; padding:8px 12px;">No assessors available</li>');
+            return;
         }
-    });
+        
+        assessors.forEach(assessor => {
+            assessorList.append(`
+                <li data-id="${assessor.id}" data-value="${assessor.name}">
+                    <label style="display: flex; align-items: center; width: 100%; margin: 0; cursor: pointer; padding: 8px 12px;">
+                        <input type="checkbox" value="${assessor.id}" style="margin-right: 8px;">
+                        <span>${assessor.name}</span>
+                    </label>
+                </li>
+            `);
+        });
+    }
+
+    // Populate assessors for B2B (all procedures)
+    function populateAssessorsForB2B(assessors) {
+        // This populates the global assessor list that can be used for all procedures
+        const assessorList = $('#assessorDropdownList');
+        assessorList.empty();
+        
+        if (!assessors || assessors.length === 0) {
+            assessorList.append('<li style="color:#888; padding:8px 12px;">No assessors available</li>');
+            return;
+        }
+        
+        assessors.forEach(assessor => {
+            assessorList.append(`
+                <li data-id="${assessor.id}" data-value="${assessor.name}">
+                    <span>${assessor.name}</span>
+                </li>
+            `);
+        });
+    }
+
+    // Remove procedure from B2B selection
+    function removeProcedure(procedureId) {
+        // Remove from UI
+        $(`.procedure-item[data-procedure-id="${procedureId}"]`).remove();
+        
+        // Uncheck the checkbox
+        $(`#procedureDropdownList li[data-id="${procedureId}"] .procedure-checkbox`).prop('checked', false);
+        
+        // Remove chip
+        $(`#procedureChipsContainer .chip[data-id="${procedureId}"]`).remove();
+        
+        // Update display
+        updateChipDisplay('procedureChipsContainer', 'Procedures');
+    }
 
     function updateTestStatus(select, testId) {
         const status = select.checked;
@@ -1287,45 +2314,90 @@
 
     $('#assignForm').on('submit', function (e) {
         e.preventDefault();
-
+    
         const testDate = $('#date').val();
         const button = $('.assign-btn'); 
         const spinner = button.find('.spinner-border'); 
-
+    
         // Get test type
         const testType = $('#typeDropdownBtn').text().trim();
-
+    
+        // Validation: Check if type is selected
+        if (testType === 'Select Type' || !testType) {
+            alert('Please select a Type (B2C or B2B)');
+            return false;
+        }
+    
+        // Check if date is selected
+        if (!testDate) {
+            alert('Please select a test date');
+            return false;
+        }
+    
         // Get skillathon id (for B2C)
         let skillathonId = null;
         if (testType === 'B2C') {
-            // Find the selected skillathon chip or dropdown item
-            skillathonId = $('#skillathonDropdownList .selected').data('id') ||
-                $('#skillathonDropdownList li').filter(function() {
-                    return $(this).text() === $('#skillathonDropdownBtn').text();
-                }).data('id');
+            // Get the skillathon ID from the button's data attribute
+            skillathonId = $('#skillathonDropdownBtn').attr('data-skillathon-id');
+            
+            // Validation: Check if skillathon is selected
+            if (!skillathonId || skillathonId === 'undefined') {
+                alert('Please select a Skillathon');
+                return false;
+            }
+            
+            console.log('B2C - Skillathon ID:', skillathonId);
         }
-
+    
         // Gather selected batch IDs from the chip container (for B2B)
         let batchIds = [];
         let courseId = null;
         let examType = null;
+        let institutionId = null;
+        
         if (testType === 'B2B') {
             batchIds = $('#batchChipsContainer .chip').map(function () {
                 return $(this).data('id');
             }).get();
             
-            // Get selected course ID
-            const selectedCourse = $('#courseDropdownList li').filter(function() {
-                return $(this).text() === $('#courseDropdownBtn').text();
-            });
-            if (selectedCourse.length > 0) {
-                courseId = selectedCourse.data('id');
+            // Validation: Check if batches are selected
+            if (batchIds.length === 0) {
+                alert('Please select at least one batch');
+                return false;
             }
             
+            // Get selected course ID
+            courseId = $('#courseDropdownBtn').attr('data-course-id');
+
+            console.log('=== COURSE ID DEBUG ===');
+            console.log('Course ID:', courseId);
+            console.log('Course button text:', $('#courseDropdownBtn').text());
+            console.log('Course button:', $('#courseDropdownBtn'));
+
+            // Validation: Check if course is selected
+            if (!courseId || courseId === 'undefined' || courseId === 'Select Course') {
+                alert('Please select a Course');
+                return false;
+            }
+
             // Get exam type
             examType = $('#examTypeDropdownBtn').text().trim();
-        }
+            if (examType === 'Select Exam Type') {
+                examType = null;
+            }
 
+            // Get institution ID from button's data attribute
+            institutionId = $('#institutionDropdownBtn').attr('data-institution-id');
+
+            // Validation: Check if institution is selected
+            if (!institutionId || institutionId === 'undefined') {
+                alert('Please select an Institution/Hospital');
+                return false;
+            }
+            
+            console.log('B2B - Batch IDs:', batchIds, 'Institution:', institutionId);
+        }
+    
         // Gather data based on test type
         let procedureAssessorMappings = [];
         let procedures = [];
@@ -1347,60 +2419,85 @@
                 });
             });
             
+            // Validation: Check if procedures are selected
+            if (procedureAssessorMappings.length === 0) {
+                alert('Please select at least one procedure');
+                return false;
+            }
+            
             // For B2B, also gather all assessors for backward compatibility
             const allAssessors = [];
             procedureAssessorMappings.forEach(mapping => {
                 allAssessors.push(...mapping.assessorIds);
             });
             assessors = [...new Set(allAssessors)];
+            
+            console.log('B2B - Procedures:', procedureAssessorMappings);
         } else {
             // B2C: Use original logic
-            procedures = $('#procedureChipsContainer .chip').map(function () {
+            procedures = $('#procedureChipsContainer .chip:not(.collective)').map(function () {
                 return $(this).data('id');
             }).get();
             
-            assessors = $('#assessorChipsContainer .chip').map(function () {
+            assessors = $('#assessorChipsContainer .chip:not(.collective)').map(function () {
                 return $(this).data('id');
             }).get();
+            
+            // Validation: Check if procedures are selected
+            if (procedures.length === 0) {
+                alert('Please select at least one procedure');
+                return false;
+            }
+            
+            // Validation: Check if assessors are selected
+            if (assessors.length === 0) {
+                alert('Please select at least one assessor');
+                return false;
+            }
+            
+            console.log('B2C - Procedures:', procedures, 'Assessors:', assessors);
         }
-
+    
         button.prop('disabled', true);
         spinner.show();
         button.contents().filter(function () {
             return this.nodeType === 3;
         }).first().replaceWith('Assigning...');
-
-        let institutionId = null;
-        const selectedInstitution = $('#instituteDropdownList li').filter(function() {
-                return $(this).text() === $('#instituteDropdownBtn').text();
-            });
-            if (selectedInstitution.length > 0) {
-                institutionId = selectedInstitution.data('id');
-            }
-
-        console.log(institutionId);
-
+    
         // AJAX request to create tests for multiple batches
         const requestData = {
             test_type: testType,
-            batch_ids: batchIds,
             test_date: testDate,
-            skillathon_id: skillathonId,
-            course_id: courseId,
-            exam_type: examType,
             csrfmiddlewaretoken: $('[name="csrfmiddlewaretoken"]').val(),
-            institution_id: institutionId,
         };
         
         if (testType === 'B2B') {
-            // B2B: Send procedure-assessor mappings
+
+            if (!courseId) {
+                alert('Please select a Course');
+                button.prop('disabled', false);
+                spinner.hide();
+                button.contents().filter(function () {
+                    return this.nodeType === 3;
+                }).first().replaceWith('Assign Assessment');
+                return false;
+            }
+
+            // B2B: Send procedure-assessor mappings and related data
+            requestData.batch_ids = batchIds;
+            requestData.institution_id = institutionId;
+            requestData.course_id = courseId;
+            requestData.exam_type = examType;
             requestData.procedure_assessor_mappings = JSON.stringify(procedureAssessorMappings);
             requestData.assessor_ids = assessors;
         } else {
-            // B2C: Send original procedure_ids and assessor_ids
+            // B2C: Send skillathon and procedure/assessor data
+            requestData.skillathon_id = skillathonId;
             requestData.procedure_ids = procedures;
             requestData.assessor_ids = assessors;
         }
+        
+        console.log('Request Data:', requestData);
         
         $.ajax({
             url: '/create-procedure-assignment-and-test/',
@@ -1408,13 +2505,18 @@
             data: requestData,
             traditional: true,
             success: function (response) {
-                alert('Tests and assignments created successfully.');
+                console.log('Success:', response);
                 toggleAssignPanel();
                 window.location.reload();
             },
             error: function (xhr) {
-                console.error(xhr.responseJSON.error);
-                alert('Failed to create tests and assignments.');
+                console.error('Error Response:', xhr);
+                console.error('Error Details:', xhr.responseJSON);
+                let errorMsg = 'Failed to create tests and assignments.';
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    errorMsg += '\n' + xhr.responseJSON.error;
+                }
+                alert(errorMsg);
             },
             complete: function () {
                 spinner.hide();
@@ -1433,22 +2535,44 @@
         overlay.classList.toggle('active');
         document.body.style.overflow = panel.classList.contains('active') ? 'hidden' : '';
     }
-    function deleteTest(btn, testId){
-        const $btn = $(btn);
-        const originalHtml = $btn.html();
-        $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
-        $.ajax({
-            url: `/api/tests/${testId}/delete/`,
-            method: 'POST',
-            headers: { 'X-CSRFToken': $('[name="csrfmiddlewaretoken"]').val() },
-        }).done(function(){
-            window.location.reload();
-        }).fail(function(xhr){
-            alert(xhr.responseJSON?.error || 'Failed to delete');
-        }).always(function(){
-            $btn.prop('disabled', false).html(originalHtml);
-        });
+    // Show confirmation modal
+    function confirmDeleteTest(testId) {
+        document.getElementById('deleteTestId').value = testId;
+        $('#deleteTestModal').modal('show');
     }
+
+    // Actually delete after confirmation
+    document.addEventListener('DOMContentLoaded', function() {
+        const confirmBtn = document.getElementById('confirmDeleteBtn');
+        
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', function() {
+                const testId = document.getElementById('deleteTestId').value;
+                const btn = this;
+                const originalText = btn.textContent;
+                
+                // Disable button and show loading
+                btn.disabled = true;
+                btn.textContent = 'Deleting...';
+                
+                // Make AJAX call to delete
+                $.ajax({
+                    url: `/api/tests/${testId}/delete/`,
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': $('[name="csrfmiddlewaretoken"]').val() },
+                }).done(function(){
+                    // Success - close modal and reload page
+                    $('#deleteTestModal').modal('hide');
+                    window.location.reload();
+                }).fail(function(xhr){
+                    // Error - show message
+                    alert(xhr.responseJSON?.error || 'Failed to delete');
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                });
+            });
+        }
+    });
 
     let __editingTestId = null;
     function openEditTestPanel(testId){
@@ -1513,6 +2637,224 @@
         }).catch(() => alert('Update failed'))
         .finally(() => { spinner.hide(); button.prop('disabled', false); });
     });
+
+    // Search/Filter Assessments
+    function filterAssessments(searchTerm) {
+        const rows = document.querySelectorAll('.assessment-row');
+        const term = searchTerm.toLowerCase();
+        
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            if (text.includes(term)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    // Toggle Filter Panel
+    function toggleFilterPanel() {
+        const panel = document.getElementById('filterPanel');
+        const overlay = document.getElementById('filterOverlay');
+        panel.classList.toggle('active');
+        overlay.classList.toggle('active');
+    }
+
+    // Switch Filter Type
+    function switchFilter(filterType) {
+        // Update active filter type
+        document.querySelectorAll('.filter-type').forEach(type => {
+            type.classList.remove('active');
+        });
+        document.querySelector(`.filter-type[data-filter="${filterType}"]`).classList.add('active');
+        
+        // Show corresponding content
+        document.querySelectorAll('.filter-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.getElementById(`${filterType}-content`).classList.add('active');
+    }
+
+    // Update Selection Counts
+    function updateTypeSelectionCount() {
+        const count = document.querySelectorAll('input[name="type"]:checked').length;
+        document.getElementById('typeSelectionCount').textContent = `${count} Type selected`;
+        updateFilterBadge();
+    }
+
+    function updateModeSelectionCount() {
+        const count = document.querySelectorAll('input[name="mode"]:checked').length;
+        document.getElementById('modeSelectionCount').textContent = `${count} Mode selected`;
+        updateFilterBadge();
+    }
+
+    function updateEntitySelectionCount() {
+        const count = document.querySelectorAll('input[name="entity"]:checked').length;
+        document.getElementById('entitySelectionCount').textContent = `${count} Entity selected`;
+        updateFilterBadge();
+    }
+
+    function updateBatchSelectionCount() {
+        const count = document.querySelectorAll('input[name="batch"]:checked').length;
+        document.getElementById('batchSelectionCount').textContent = `${count} Batch selected`;
+        updateFilterBadge();
+    }
+
+    function updateAssessorSelectionCount() {
+        const count = document.querySelectorAll('input[name="assessor"]:checked').length;
+        document.getElementById('assessorSelectionCount').textContent = `${count} Assessor selected`;
+        updateFilterBadge();
+    }
+
+    function updateStatusSelectionCount() {
+        const count = document.querySelectorAll('input[name="status"]:checked').length;
+        document.getElementById('statusSelectionCount').textContent = `${count} Status selected`;
+        updateFilterBadge();
+    }
+
+    // Update Filter Badge
+    function updateFilterBadge() {
+        const totalFilters = 
+            document.querySelectorAll('input[name="type"]:checked').length +
+            document.querySelectorAll('input[name="mode"]:checked').length +
+            document.querySelectorAll('input[name="entity"]:checked').length +
+            document.querySelectorAll('input[name="batch"]:checked').length +
+            document.querySelectorAll('input[name="assessor"]:checked').length +
+            document.querySelectorAll('input[name="status"]:checked').length +
+            (document.getElementById('filterDateFrom').value ? 1 : 0) +
+            (document.getElementById('filterDateTo').value ? 1 : 0);
+        
+        const badge = document.getElementById('filterBadge');
+        if (totalFilters > 0) {
+            badge.textContent = totalFilters;
+            badge.style.display = 'block';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+
+    // Clear All Filters
+    function clearAllFilters() {
+        document.querySelectorAll('.filter-form input[type="checkbox"]').forEach(cb => cb.checked = false);
+        document.getElementById('filterDateFrom').value = '';
+        document.getElementById('filterDateTo').value = '';
+        updateTypeSelectionCount();
+        updateModeSelectionCount();
+        updateEntitySelectionCount();
+        updateBatchSelectionCount();
+        updateAssessorSelectionCount();
+        updateStatusSelectionCount();
+        updateFilterBadge();
+    }
+
+    // Apply Filters
+    function applyFilters() {
+        const filters = {
+            types: Array.from(document.querySelectorAll('input[name="type"]:checked')).map(cb => cb.value),
+            modes: Array.from(document.querySelectorAll('input[name="mode"]:checked')).map(cb => cb.value),
+            entities: Array.from(document.querySelectorAll('input[name="entity"]:checked')).map(cb => cb.value),
+            batches: Array.from(document.querySelectorAll('input[name="batch"]:checked')).map(cb => cb.value),
+            assessors: Array.from(document.querySelectorAll('input[name="assessor"]:checked')).map(cb => cb.value),
+            statuses: Array.from(document.querySelectorAll('input[name="status"]:checked')).map(cb => cb.value),
+            dateFrom: document.getElementById('filterDateFrom').value,
+            dateTo: document.getElementById('filterDateTo').value
+        };
+        
+        const rows = document.querySelectorAll('.assessment-row');
+        
+        rows.forEach(row => {
+            let show = true;
+            
+            // Type filter
+            if (filters.types.length > 0) {
+                const typeText = row.querySelector('.badge-type')?.textContent.trim();
+                if (!filters.types.includes(typeText)) show = false;
+            }
+            
+            // Mode filter
+            if (filters.modes.length > 0) {
+                const modeText = row.cells[2]?.textContent.trim();
+                if (!filters.modes.some(mode => modeText.includes(mode))) show = false;
+            }
+            
+            // Status filter
+            if (filters.statuses.length > 0) {
+                // You'll need to add status data to your table row
+                // const statusText = row.dataset.status;
+                // if (!filters.statuses.includes(statusText)) show = false;
+            }
+            
+            // Date filter
+            if (filters.dateFrom || filters.dateTo) {
+                const dateText = row.querySelector('.date-text')?.textContent.trim();
+                // Add date comparison logic here
+            }
+            
+            row.style.display = show ? '' : 'none';
+        });
+        
+        toggleFilterPanel();
+    }
+
+    // Filter search functions
+    function filterEntityOptions(searchTerm) {
+        const options = document.querySelectorAll('#filterEntityOptions .option-item');
+        options.forEach(option => {
+            const text = option.textContent.toLowerCase();
+            option.style.display = text.includes(searchTerm.toLowerCase()) ? '' : 'none';
+        });
+    }
+
+    function filterBatchOptions(searchTerm) {
+        const options = document.querySelectorAll('#filterBatchOptions .option-item');
+        options.forEach(option => {
+            const text = option.textContent.toLowerCase();
+            option.style.display = text.includes(searchTerm.toLowerCase()) ? '' : 'none';
+        });
+    }
+
+    function filterAssessorOptions(searchTerm) {
+        const options = document.querySelectorAll('#filterAssessorOptions .option-item');
+        options.forEach(option => {
+            const text = option.textContent.toLowerCase();
+            option.style.display = text.includes(searchTerm.toLowerCase()) ? '' : 'none';
+        });
+    }
+
+    // Click collective badge to show all procedures
+    $(document).on('click', '.collective-badge', function() {
+        const proceduresList = $(this).parent();
+        const count = proceduresList.data('count');
+        
+        // You can implement a modal or tooltip to show all procedures
+        alert(`This assessment has ${count} procedures. Click edit to see details.`);
+    });
 </script>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteTestModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5>Delete Assessment</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this assessment?</p>
+                <p class="text-muted">This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<input type="hidden" id="deleteTestId" value="">
 
 {% endblock %}
