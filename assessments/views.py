@@ -3238,7 +3238,9 @@ def batch_detail(request, batch_id):
             'courses': courses,
             'course_count': len(courses),
             'status': batch_data.get('status', 'active'),
-            'created_at': batch_data.get('createdAt')
+            'created_at': batch_data.get('createdAt'),
+            'year_of_batch': batch_data.get('yearOfBatch', ''),
+            'semester': batch_data.get('semester', '')
         }
         
         return render(request, 'assessments/batch_detail.html', {'batch': batch_context})
@@ -3699,7 +3701,9 @@ def fetch_batches(request):
                 'unitName': unit_name,
                 'learnerCount': learner_count,
                 'status': batch_data.get('status', 'active'),
-                'createdAt': batch_data.get('createdAt')
+                'createdAt': batch_data.get('createdAt'),
+                'yearOfBatch': batch_data.get('yearOfBatch', ''),
+                'semester': batch_data.get('semester', '')
             })
 
         print(formatted_batches)
@@ -3734,6 +3738,8 @@ def create_batch(request):
             unit_type = data.get('unitType')
             unit_id = data.get('unitId')
             learner_ids = data.get('learnerIds', [])
+            year_of_batch = data.get('yearOfBatch', '').strip()
+            semester = data.get('semester', '').strip()
             
             if not batch_name:
                 return JsonResponse({'error': 'Batch name is required'}, status=400)
@@ -3785,6 +3791,12 @@ def create_batch(request):
                 'status': 'active',
                 'createdAt': firestore.SERVER_TIMESTAMP
             }
+            
+            # Add year and semester if provided
+            if year_of_batch:
+                new_batch['yearOfBatch'] = year_of_batch
+            if semester:
+                new_batch['semester'] = semester
             
             # Add to Firebase
             batch_ref = db.collection('Batches').add(new_batch)
@@ -3913,7 +3925,9 @@ def fetch_batch_details(request, batch_id):
             'learners': learners,
             'learnerCount': len(learners),
             'status': batch_data.get('status', 'active'),
-            'createdAt': batch_data.get('createdAt')
+            'createdAt': batch_data.get('createdAt'),
+            'yearOfBatch': batch_data.get('yearOfBatch', ''),
+            'semester': batch_data.get('semester', '')
         }
         
         return JsonResponse({'success': True, 'batch': batch_details}, status=200)
@@ -3932,14 +3946,20 @@ def update_batch(request, batch_id):
             unit_id = data.get('unitId', None)
             learner_ids = data.get('learnerIds', [])
 
-            if data.get('updateOnlyBatchName', True):
+            # Check if only updating batch name, year, or semester
+            if data.get('updateOnlyBatchName', False):
                 batch_ref = db.collection('Batches').document(batch_id)
-                batch_ref.update({
-                    'batchName': batch_name
-                })
+                update_data = {'batchName': batch_name}
+                year_of_batch = data.get('yearOfBatch', '').strip()
+                semester = data.get('semester', '').strip()
+                if year_of_batch:
+                    update_data['yearOfBatch'] = year_of_batch
+                if semester:
+                    update_data['semester'] = semester
+                batch_ref.update(update_data)
                 return JsonResponse({
                     'success': True,
-                    'message': 'Batch name updated successfully'
+                    'message': 'Batch updated successfully'
                 }, status=200)
             
             
@@ -4000,6 +4020,14 @@ def update_batch(request, batch_id):
                 'learners': learner_refs,
                 'updatedAt': firestore.SERVER_TIMESTAMP
             }
+            
+            # Add year and semester if provided
+            year_of_batch = data.get('yearOfBatch', '').strip()
+            semester = data.get('semester', '').strip()
+            if year_of_batch:
+                update_data['yearOfBatch'] = year_of_batch
+            if semester:
+                update_data['semester'] = semester
             
             batch_ref.update(update_data)
             
