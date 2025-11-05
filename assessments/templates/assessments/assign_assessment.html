@@ -31,6 +31,9 @@
         Filters
         <span class="filter-badge" id="filterBadge" style="display: none;">0</span>
     </button>
+    <button type="button" id="bulkDeleteAssessmentsBtn" class="btn btn-danger" disabled>
+        <i class="fas fa-trash"></i> Delete Selected (0)
+    </button>
 </div>
 
 <!-- Filter Side Panel -->
@@ -41,6 +44,7 @@
             <span>&times;</span>
         </button>
     </div>
+    
     
     <form class="filter-form">
         <div class="filter-layout">
@@ -212,6 +216,7 @@
         <table class="table">
             <thead>
                 <tr>
+                    <th style="width:36px;"><input type="checkbox" id="selectAllAssessments"></th>
                     <th>Assessment Name</th>
                     <th>Type</th>
                     <th>Mode</th>
@@ -224,7 +229,8 @@
             </thead>
             <tbody id="assessmentsTableBody">
                 {% for test in page_obj %}
-                <tr class="assessment-row">
+                <tr class="assessment-row" data-type="{{ test.type|default:'B2C' }}" data-mode="{{ test.mode|default:'Skillathon' }}">
+                    <td><input type="checkbox" class="assessment-row-select" data-id="{{ test.id }}" data-type="{{ test.type|default:'B2C' }}"></td>
                     <td>
                         <div class="assessment-name">
                             <span>{{ test.assessment_name }}</span>
@@ -255,7 +261,7 @@
                             <button class="btn-icon" onclick="openEditTestPanel('{{ test.id }}')" title="Edit">
                                 <i class="fas fa-edit"></i>
                             </button>
-                            <button class="btn-icon btn-icon-delete" onclick="confirmDeleteTest('{{ test.id }}')" title="Delete">
+                            <button class="btn-icon btn-icon-delete" onclick="confirmDeleteTest('{{ test.id }}','{{ test.type|default:"B2C" }}')" title="Delete">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </div>
@@ -272,7 +278,7 @@
                 </tr>
                 {% endfor %}
             </tbody>
-        </table>
+        </table>        
     </div>
 </div>
 
@@ -373,12 +379,10 @@
                     <ul class="dropdown-list" id="procedureDropdownList"></ul>
                 </div>
                 <div id="procedureChipsContainer" class="chip-container"></div>
-            </div>
-
-            <!-- Selected Procedures with their Assessors (B2B only) -->
-            <div id="selectedProceduresContainer" class="selected-procedures-container" style="display: none;">
-                <label class="form-label">Selected Procedures & Assessors</label>
-                <div id="selectedProceduresList"></div>
+                <!-- Inline Procedures & Assessors (B2B only) -->
+                <div id="selectedProceduresContainer" style="display: none;">
+                    <div id="selectedProceduresList"></div>
+                </div>
             </div>
 
             <!-- Select Assessor (B2C only) -->
@@ -695,6 +699,16 @@
         margin: 0;
         width: 100%;
         cursor: pointer;
+    }
+
+    /* Ensure dropdown item text uses 16px font and 24px line-height,
+       with span sized to 263.23px x 24px as requested */
+    .dropdown-list li label span {
+        display: inline-block;
+        width: 263.23px;
+        height: 24px;
+        font-size: 16px;
+        line-height: 24px;
     }
 
     .dropdown-list li input[type="checkbox"] {
@@ -1352,6 +1366,93 @@
         right: -5px;
     }
 
+    /* Active Filters Display */
+    .active-filters-display {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px 16px;
+        background: #f7fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        flex: 1;
+    }
+
+    .filter-count-text {
+        font-size: 14px;
+        font-weight: 600;
+        color: #4a5568;
+    }
+
+    .active-filters-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .filter-tag {
+        display: inline-block;
+        padding: 4px 10px;
+        background: white;
+        border: 1px solid #cbd5e0;
+        border-radius: 4px;
+        font-size: 12px;
+        color: #4a5568;
+    }
+
+    /* Applied Filters Section in Panel */
+    .applied-filters-section {
+        padding: 16px 24px;
+        border-bottom: 1px solid #e2e8f0;
+        background: #f7fafc;
+    }
+
+    .applied-filters-header {
+        margin-bottom: 12px;
+        font-size: 14px;
+        color: #4a5568;
+    }
+
+    .applied-filters-content {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .applied-filter-item {
+        padding: 8px 12px;
+        background: white;
+        border: 1px solid #cbd5e0;
+        border-radius: 4px;
+        font-size: 13px;
+        color: #4a5568;
+    }
+
+    /* Badge against individual filter types (left sidebar) */
+    .filter-type {
+        position: relative;
+        padding-right: 28px; /* room for badge on the right */
+    }
+    .filter-type .filter-type-badge {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        min-width: 18px;
+        height: 18px;
+        line-height: 18px;
+        padding: 0 6px;
+        border-radius: 9px;
+        background: #F16564;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+    }
+
     .assign-panel {
         position: fixed;
         right: -600px;
@@ -1735,7 +1836,7 @@
             } else if (type === 'B2B') {
                 $('#internal-assessment-container').hide();
                 $('#external-assessment-container').show();
-                $('#selectedProceduresContainer').show();
+                $('#selectedProceduresContainer').hide();
                 $('#assessorSelectionContainer').hide();
                 $('#examTypeContainer').show();
                 fetchB2BInstitutesAndHospitals();
@@ -1854,42 +1955,37 @@
                 if ($(`#batchChipsContainer .chip[data-id="${id}"]`).length === 0) {
                     $('#batchChipsContainer').append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
                 }
-                
-                // Fetch courses for selected batch
-                $.ajax({
-                    url: `/api/batches/${id}/courses/`,
-                    type: 'GET',
-                    success: function (response) {
-                        console.log('Courses response:', response);
-                        if (response.success) {
-                            // Clear previous courses first
-                            $('#courseDropdownList').empty();
-                            $('#courseDropdownBtn').text('Select Course');
-
-                            const courses = response.courses.map(course => ({
-                                id: course.id,
-                                name: course.courseName || course.name
-                            }));
-                            console.log('Mapped courses:', courses); // Debug
-                            populateDropdown('courseDropdownList', courses, 'name');
-                        } else {
-                            $('#courseDropdownList').empty().append('<li style="color:#888; cursor:default; padding: 8px 12px;">No courses available</li>');
-                        }
-                    },
-                    error: function () {
-                        console.error('Failed to fetch courses');
-                        $('#courseDropdownList').empty().append('<li style="color:#888; cursor:default; padding: 8px 12px;">Error loading courses</li>');
-                    }
-                });
             } else {
                 $(`#batchChipsContainer .chip[data-id="${id}"]`).remove();
             }
+            
+            // Update courses based on all selected batches
+            updateCoursesForSelectedBatches();
         });
         
-        // Also handle direct checkbox clicks
+        // Prevent li click toggle when clicking directly on batch checkbox
+        $(document).on('click', '#batchDropdownList input[type="checkbox"]', function(e) {
+            e.stopPropagation();
+        });
+
+        // Also handle direct checkbox clicks (without re-triggering li click)
         $(document).on('change', '#batchDropdownList input[type="checkbox"]', function(e) {
             e.stopPropagation();
-            $(this).closest('li').trigger('click');
+            const checkbox = $(this);
+            const li = checkbox.closest('li');
+            const value = li.data('value');
+            const id = li.data('id');
+
+            if (checkbox.is(':checked')) {
+                if ($(`#batchChipsContainer .chip[data-id="${id}"]`).length === 0) {
+                    $('#batchChipsContainer').append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
+                }
+            } else {
+                $(`#batchChipsContainer .chip[data-id="${id}"]`).remove();
+            }
+
+            // Update dependent courses based on selected batches
+            updateCoursesForSelectedBatches();
         });
     
         // Course selection - Handle li clicks
@@ -2000,11 +2096,41 @@
             }
         });
         
-        // Also handle direct checkbox clicks
+        // Prevent li click toggle when clicking directly on procedure checkbox
+        $(document).on('click', '#procedureDropdownList .procedure-checkbox', function(e) {
+            e.stopPropagation();
+        });
+
+        // Also handle direct checkbox clicks (without re-triggering li click)
         $(document).on('change', '#procedureDropdownList .procedure-checkbox', function(e) {
             e.stopPropagation();
-            // Trigger the li click handler
-            $(this).closest('li').trigger('click');
+            const checkbox = $(this);
+            const li = checkbox.closest('li');
+            const value = li.data('value');
+            const id = li.data('id');
+
+            if (checkbox.is(':checked')) {
+                if ($(`#procedureChipsContainer .chip[data-id="${id}"]`).length === 0) {
+                    $('#procedureChipsContainer').append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
+                    updateChipDisplay('procedureChipsContainer', 'Procedures');
+                    const testType = $('#typeDropdownBtn').text().trim();
+                    if (testType === 'B2B') {
+                        addProcedureWithAssessorSelection(id, value);
+                    }
+                }
+            } else {
+                $(`#procedureChipsContainer .chip[data-id="${id}"]`).remove();
+                updateChipDisplay('procedureChipsContainer', 'Procedures');
+                const testType = $('#typeDropdownBtn').text().trim();
+                if (testType === 'B2B') {
+                    removeProcedure(id);
+                }
+            }
+        });
+
+        // Safety: if any future course list contains checkboxes, prevent li handler from double-toggling
+        $(document).on('click', '#courseDropdownList input[type="checkbox"]', function(e) {
+            e.stopPropagation();
         });
     
         // Assessor selection (B2C)
@@ -2015,12 +2141,25 @@
             const value = $(this).data('value');
             const id = $(this).data('id');
     
+            // Toggle checkbox if present
+            const checkbox = $(this).find('input[type="checkbox"]');
+            if (checkbox.length) {
+                checkbox.prop('checked', !checkbox.prop('checked'));
+            }
+
             if ($(`#assessorChipsContainer .chip[data-id="${id}"]`).length === 0) {
                 $(`#assessorChipsContainer`).append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
                 updateChipDisplay('assessorChipsContainer', 'Assessors');
             }
             $(this).closest('.dropdown-list').hide().removeClass('show');
             $('#assessorDropdownBtn').removeClass('active');
+        });
+
+        // Prevent double toggle when clicking the checkbox directly in B2C assessor dropdown
+        $(document).on('click', '#assessorDropdownList input[type="checkbox"]', function(e) {
+            e.stopPropagation();
+            // Trigger parent li click to reuse chip logic
+            $(this).closest('li').trigger('click');
         });
     
         // Assessor dropdown for B2B procedures
@@ -2041,23 +2180,50 @@
             const li = checkbox.closest('li');
             const assessorId = li.data('id');
             const assessorName = li.data('value');
-            const procedureId = li.closest('.procedure-item').data('procedure-id');
+            const procedureId = li.closest('[data-procedure-id]').data('procedure-id');
             
             if (checkbox.is(':checked')) {
-                if ($(`.procedure-item[data-procedure-id="${procedureId}"] .assessor-chips .chip[data-id="${assessorId}"]`).length === 0) {
-                    $(`.procedure-item[data-procedure-id="${procedureId}"] .assessor-chips`).append(
+                if ($(`.assessor-selection-row[data-procedure-id="${procedureId}"] .assessor-chips .chip[data-id="${assessorId}"]`).length === 0) {
+                    $(`.assessor-selection-row[data-procedure-id="${procedureId}"] .assessor-chips`).append(
                         `<span class="chip" data-id="${assessorId}" data-value="${assessorName}">${assessorName}<span class="remove">&times;</span></span>`
                     );
                 }
             } else {
-                $(`.procedure-item[data-procedure-id="${procedureId}"] .assessor-chips .chip[data-id="${assessorId}"]`).remove();
+                $(`.assessor-selection-row[data-procedure-id="${procedureId}"] .assessor-chips .chip[data-id="${assessorId}"]`).remove();
+            }
+
+            // Update collective chip display for this procedure's assessor chips
+            updateChipDisplay(`assessorChips-${procedureId}`, 'Assessors');
+        });
+
+        // Make entire assessor row clickable to toggle its checkbox (B2B per-procedure assessor lists)
+        $(document).on('click', '.assessor-dropdown-list li', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const checkbox = $(this).find('input[type="checkbox"]');
+            if (checkbox.length) {
+                checkbox.prop('checked', !checkbox.prop('checked')).trigger('change');
             }
         });
+
+        // Prevent double toggle when clicking directly on assessor checkbox
+        $(document).on('click', '.assessor-dropdown-list input[type="checkbox"]', function(e) {
+            e.stopPropagation();
+        });
     
-        // Remove assessor chips (B2B)
+        // Remove assessor chips (B2B) and uncheck corresponding checkbox
         $(document).on('click', '.assessor-chips .chip .remove', function(e) {
             e.preventDefault();
-            $(this).parent().remove();
+            const chip = $(this).parent();
+            const container = chip.closest('.assessor-chips');
+            const procedureId = container.closest('[data-procedure-id]').data('procedure-id');
+            const assessorId = chip.data('id');
+            // Uncheck checkbox in list
+            $(`#assessorList-${procedureId} li[data-id="${assessorId}"] input[type="checkbox"]`).prop('checked', false);
+            // Remove chip
+            chip.remove();
+            // Update collective display
+            updateChipDisplay(`assessorChips-${procedureId}`, 'Assessors');
         });
     
         // Remove procedure button (B2B)
@@ -2088,6 +2254,8 @@
             } else if (containerId === 'batchChipsContainer') {
                 $(`#batchDropdownList li[data-id="${chipId}"] input[type="checkbox"]`).prop('checked', false);
                 updateChipDisplay('batchChipsContainer', 'Batches');
+                // Update courses when batch is removed
+                updateCoursesForSelectedBatches();
             }
             
             chip.remove();
@@ -2151,14 +2319,121 @@
             return;
         }
         
-        items.forEach(item => {
-            const displayName = item[nameKey] || item.name || item;
-            const itemId = item.id || item;
-            dropdown.append(`
-                <li data-value="${displayName}" data-id="${itemId}">
-                    <span>${displayName}</span>
-                </li>
-            `);
+        // If this is the B2C assessor list, render with checkbox + label to match B2B styling
+        if (listId === 'assessorDropdownList') {
+            items.forEach(item => {
+                const displayName = item[nameKey] || item.name || item;
+                const itemId = item.id || item;
+                dropdown.append(`
+                    <li data-value="${displayName}" data-id="${itemId}">
+                        <label style="display: flex; align-items: center; width: 100%; margin: 0; cursor: pointer;">
+                            <input type="checkbox" value="${itemId}" style="margin-right: 8px;">
+                            <span>${displayName}</span>
+                        </label>
+                    </li>
+                `);
+            });
+        } else {
+            items.forEach(item => {
+                const displayName = item[nameKey] || item.name || item;
+                const itemId = item.id || item;
+                dropdown.append(`
+                    <li data-value="${displayName}" data-id="${itemId}">
+                        <span>${displayName}</span>
+                    </li>
+                `);
+            });
+        }
+    }
+
+    // Function to update courses based on all selected batches
+    function updateCoursesForSelectedBatches() {
+        // Get all selected batch IDs from chips
+        const selectedBatchIds = $('#batchChipsContainer .chip').map(function() {
+            return $(this).data('id');
+        }).get();
+        
+        // Clear course dropdown and reset button
+        $('#courseDropdownList').empty();
+        $('#courseDropdownBtn').text('Select Course').removeAttr('data-course-id');
+        
+        // If no batches selected, show empty message
+        if (selectedBatchIds.length === 0) {
+            $('#courseDropdownList').append('<li style="color:#888; cursor:default; padding: 8px 12px;">Please select at least one batch</li>');
+            return;
+        }
+        
+        // Fetch courses for all selected batches
+        const coursePromises = selectedBatchIds.map(batchId => {
+            return $.ajax({
+                url: `/api/batches/${batchId}/courses/`,
+                type: 'GET',
+                dataType: 'json'
+            });
+        });
+        
+        // Wait for all requests to complete using $.when
+        if (coursePromises.length === 0) {
+            $('#courseDropdownList').append('<li style="color:#888; cursor:default; padding: 8px 12px;">Please select at least one batch</li>');
+            return;
+        }
+        
+        $.when.apply($, coursePromises).done(function() {
+            console.log('All course responses received');
+            console.log('Arguments:', arguments);
+            
+            // $.when returns arguments in format: data1, data2, data3, ... or [data, status, xhr] for single
+            // Convert arguments to array
+            const responses = coursePromises.length === 1 ? [arguments[0]] : Array.from(arguments);
+            
+            // Extract course arrays from responses
+            const allCourseArrays = responses.map(function(response) {
+                // response is the data object: {success: true, courses: [...]}
+                console.log('Processing response:', response);
+                
+                if (response && response.success && Array.isArray(response.courses)) {
+                    return response.courses.map(course => ({
+                        id: course.id,
+                        name: course.name || course.courseName
+                    }));
+                }
+                console.warn('Unexpected response format:', response);
+                return [];
+            });
+            
+            console.log('All course arrays:', allCourseArrays);
+            
+            // Find intersection: courses that exist in ALL batches
+            let commonCourses = [];
+            if (allCourseArrays.length > 0) {
+                // Filter out empty arrays
+                const nonEmptyArrays = allCourseArrays.filter(arr => arr.length > 0);
+                
+                if (nonEmptyArrays.length > 0) {
+                    // Start with courses from first non-empty batch
+                    commonCourses = nonEmptyArrays[0];
+                    
+                    // Filter to keep only courses that exist in all other batches
+                    for (let i = 1; i < nonEmptyArrays.length; i++) {
+                        const currentBatchCourses = nonEmptyArrays[i];
+                        commonCourses = commonCourses.filter(course1 => 
+                            currentBatchCourses.some(course2 => course1.id === course2.id)
+                        );
+                    }
+                }
+            }
+            
+            console.log('Common courses:', commonCourses);
+            
+            // Populate dropdown with common courses
+            if (commonCourses.length > 0) {
+                populateDropdown('courseDropdownList', commonCourses, 'name');
+            } else {
+                $('#courseDropdownList').append('<li style="color:#888; cursor:default; padding: 8px 12px;">No common courses found for selected batches</li>');
+            }
+        }).fail(function() {
+            console.error('Failed to fetch courses for batches');
+            $('#courseDropdownList').append('<li style="color:#888; cursor:default; padding: 8px 12px;">Error loading courses</li>');
         });
     }
 
@@ -2185,33 +2460,26 @@
     // Add procedure with assessor selection for B2B
     function addProcedureWithAssessorSelection(procedureId, procedureName) {
         // Check if procedure already exists
-        if ($(`.procedure-item[data-procedure-id="${procedureId}"]`).length > 0) {
+        if ($(`.assessor-selection-row[data-procedure-id="${procedureId}"]`).length > 0) {
             return;
         }
         
+        // Ensure container is visible when at least one procedure is selected
+        $('#selectedProceduresContainer').show();
+        
         const procedureHtml = `
-            <div class="procedure-item" data-procedure-id="${procedureId}">
-                <div class="procedure-header">
-                    <span class="procedure-name">${procedureName}</span>
-                    <button type="button" class="remove-procedure" data-procedure-id="${procedureId}">
+            <div class="assessor-selection-row" data-procedure-id="${procedureId}" style="margin-top: 10px;">
+                <div style="display:flex; align-items:center; justify-content: space-between; gap: 12px;">
+                    <span class="procedure-name" style="font-weight: 600;">${procedureName}</span>
+                    <button type="button" class="remove-procedure" data-procedure-id="${procedureId}" title="Remove" style="background: none; border: none; cursor: pointer; color: #6c757d;">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <div class="assessor-selection">
-                    <label>Select Assessors for this procedure:</label>
-                    <div class="assessor-dropdown">
-                        <button type="button" class="assessor-dropdown-btn" data-procedure-id="${procedureId}">
-                            Select Assessors
-                            <i class="fas fa-chevron-down"></i>
-                        </button>
-                        <ul class="assessor-dropdown-list" id="assessorList-${procedureId}">
-                            <!-- Will be populated with assessors -->
-                        </ul>
-                    </div>
-                    <div class="assessor-chips" data-procedure-id="${procedureId}">
-                        <!-- Selected assessor chips will appear here -->
-                    </div>
+                <div class="dropdown-container" style="margin-top: 8px;">
+                    <button type="button" class="dropdown-btn assessor-dropdown-btn" data-procedure-id="${procedureId}">Select Assessors</button>
+                    <ul class="dropdown-list assessor-dropdown-list" id="assessorList-${procedureId}"></ul>
                 </div>
+                <div class="assessor-chips chip-container" id="assessorChips-${procedureId}" data-procedure-id="${procedureId}" style="margin-top: 8px;"></div>
             </div>
         `;
         
@@ -2243,7 +2511,7 @@
         assessors.forEach(assessor => {
             assessorList.append(`
                 <li data-id="${assessor.id}" data-value="${assessor.name}">
-                    <label style="display: flex; align-items: center; width: 100%; margin: 0; cursor: pointer; padding: 8px 12px;">
+                    <label style="display: flex; align-items: center; width: 100%; margin: 0; cursor: pointer;">
                         <input type="checkbox" value="${assessor.id}" style="margin-right: 8px;">
                         <span>${assessor.name}</span>
                     </label>
@@ -2275,7 +2543,7 @@
     // Remove procedure from B2B selection
     function removeProcedure(procedureId) {
         // Remove from UI
-        $(`.procedure-item[data-procedure-id="${procedureId}"]`).remove();
+        $(`.assessor-selection-row[data-procedure-id="${procedureId}"]`).remove();
         
         // Uncheck the checkbox
         $(`#procedureDropdownList li[data-id="${procedureId}"] .procedure-checkbox`).prop('checked', false);
@@ -2285,6 +2553,11 @@
         
         // Update display
         updateChipDisplay('procedureChipsContainer', 'Procedures');
+        
+        // Hide the container if no procedures remain
+        if ($('.procedure-item').length === 0) {
+            $('#selectedProceduresContainer').hide();
+        }
     }
 
     function updateTestStatus(select, testId) {
@@ -2404,13 +2677,28 @@
         let assessors = [];
         
         if (testType === 'B2B') {
-            // B2B: Use per-procedure assessor selection
-            $('#selectedProceduresList .procedure-item').each(function() {
-                const procedureId = $(this).data('procedure-id');
-                const procedureName = $(this).find('.procedure-name').text();
-                const assessorIds = $(this).find('.assessor-chips .chip').map(function() {
+            // B2B: Use per-procedure assessor selection (inline rows)
+            $('#selectedProceduresList [data-procedure-id]').each(function() {
+                const container = $(this);
+                const procedureId = container.data('procedure-id');
+                const procedureName = container.find('.procedure-name').text();
+                let assessorIds = container.find('.assessor-chips .chip').map(function() {
                     return $(this).data('id');
-                }).get();
+                }).get().filter(function(v){ return v !== undefined && v !== null && v !== ''; });
+
+                // Fallback 1: if no per-procedure assessor chips (e.g., collapsed into summary), read checked items from its dropdown list
+                if (assessorIds.length === 0) {
+                    assessorIds = $(`#assessorList-${procedureId} input[type="checkbox"]:checked`).map(function(){
+                        return $(this).val();
+                    }).get().filter(function(v){ return v !== undefined && v !== null && v !== ''; });
+                }
+
+                // Fallback 2: if still none, use global assessors (if any)
+                if (assessorIds.length === 0) {
+                    assessorIds = $('#assessorChipsContainer .chip:not(.collective)').map(function() {
+                        return $(this).data('id');
+                    }).get().filter(function(v){ return v !== undefined && v !== null && v !== ''; });
+                }
                 
                 procedureAssessorMappings.push({
                     procedureId: procedureId,
@@ -2422,6 +2710,24 @@
             // Validation: Check if procedures are selected
             if (procedureAssessorMappings.length === 0) {
                 alert('Please select at least one procedure');
+                return false;
+            }
+
+            // Ensure each selected procedure has at least one assessor; report names
+            const missing = procedureAssessorMappings
+                .filter(m => !m.assessorIds || m.assessorIds.length === 0)
+                .map(m => m.procedureName || ('Procedure ' + (m.procedureId || '')));
+            if (missing.length > 0) {
+                alert('Please select at least one assessor for: ' + missing.join(', '));
+                // Focus the first missing row
+                const firstMissing = missing[0];
+                const firstMissingRow = $('#selectedProceduresList [data-procedure-id]').filter(function(){
+                    const name = $(this).find('.procedure-name').text();
+                    return name === firstMissing;
+                }).get(0);
+                if (firstMissingRow) {
+                    firstMissingRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
                 return false;
             }
             
@@ -2536,8 +2842,10 @@
         document.body.style.overflow = panel.classList.contains('active') ? 'hidden' : '';
     }
     // Show confirmation modal
-    function confirmDeleteTest(testId) {
+    function confirmDeleteTest(testId, testType) {
         document.getElementById('deleteTestId').value = testId;
+        document.getElementById('deleteTestType').value = (testType || 'B2C');
+        document.getElementById('deleteTestId').dataset.bulk = 'false';
         $('#deleteTestModal').modal('show');
     }
 
@@ -2548,6 +2856,7 @@
         if (confirmBtn) {
             confirmBtn.addEventListener('click', function() {
                 const testId = document.getElementById('deleteTestId').value;
+                const testType = document.getElementById('deleteTestType').value || 'B2C';
                 const btn = this;
                 const originalText = btn.textContent;
                 
@@ -2555,21 +2864,38 @@
                 btn.disabled = true;
                 btn.textContent = 'Deleting...';
                 
-                // Make AJAX call to delete
-                $.ajax({
-                    url: `/api/tests/${testId}/delete/`,
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': $('[name="csrfmiddlewaretoken"]').val() },
-                }).done(function(){
-                    // Success - close modal and reload page
-                    $('#deleteTestModal').modal('hide');
-                    window.location.reload();
-                }).fail(function(xhr){
-                    // Error - show message
-                    alert(xhr.responseJSON?.error || 'Failed to delete');
-                    btn.disabled = false;
-                    btn.textContent = originalText;
-                });
+                const bulk = document.getElementById('deleteTestId').dataset.bulk === 'true';
+                const csrf = $('[name="csrfmiddlewaretoken"]').val();
+                const doDelete = (id, type) => {
+                    const url = (type === 'B2B') ? `/api/batch-assignments/${id}/delete/` : `/api/tests/${id}/delete/`;
+                    return $.ajax({ url, method: 'POST', headers: { 'X-CSRFToken': csrf } });
+                };
+                if (!bulk) {
+                    doDelete(testId, testType).done(function(){
+                        $('#deleteTestModal').modal('hide');
+                        window.location.reload();
+                    }).fail(function(xhr){
+                        alert(xhr.responseJSON?.error || 'Failed to delete');
+                        btn.disabled = false;
+                        btn.textContent = originalText;
+                    });
+                } else {
+                    // Bulk delete flow: iterate selected IDs
+                    const ids = Array.from(selectedAssessmentIds);
+                    const types = ids.map(id => selectedAssessmentTypes.get(id) || 'B2C');
+                    let seq = Promise.resolve();
+                    ids.forEach((id, idx) => {
+                        seq = seq.then(() => doDelete(id, types[idx]));
+                    });
+                    seq.then(() => {
+                        $('#deleteTestModal').modal('hide');
+                        window.location.reload();
+                    }).catch((err) => {
+                        alert('Failed to delete some items');
+                        btn.disabled = false;
+                        btn.textContent = originalText;
+                    });
+                }
             });
         }
     });
@@ -2657,9 +2983,75 @@
     function toggleFilterPanel() {
         const panel = document.getElementById('filterPanel');
         const overlay = document.getElementById('filterOverlay');
+        const isOpening = !panel.classList.contains('active');
         panel.classList.toggle('active');
         overlay.classList.toggle('active');
+        // Update active filters display when opening panel
+        if (isOpening) {
+            // Rebuild batch and assessor lists from current table contents
+            buildDynamicFilterLists();
+            updateActiveFiltersDisplay();
+        }
     }
+
+    // Bulk delete: track selections
+    let selectedAssessmentIds = new Set();
+    const selectedAssessmentTypes = new Map();
+
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.classList.contains('assessment-row-select')) {
+            const id = e.target.getAttribute('data-id');
+            const type = e.target.getAttribute('data-type') || 'B2C';
+            if (e.target.checked) {
+                selectedAssessmentIds.add(id);
+                selectedAssessmentTypes.set(id, type);
+            } else {
+                selectedAssessmentIds.delete(id);
+                selectedAssessmentTypes.delete(id);
+            }
+            updateBulkDeleteAssessmentsState();
+            // Sync header checkbox
+            const all = document.querySelectorAll('.assessment-row-select');
+            const master = document.getElementById('selectAllAssessments');
+            if (master) master.checked = (all.length > 0 && Array.from(all).every(cb => cb.checked));
+        }
+        if (e.target && e.target.id === 'selectAllAssessments') {
+            const checks = document.querySelectorAll('.assessment-row-select');
+            checks.forEach(cb => {
+                cb.checked = e.target.checked;
+                const id = cb.getAttribute('data-id');
+                const type = cb.getAttribute('data-type') || 'B2C';
+                if (e.target.checked) {
+                    selectedAssessmentIds.add(id);
+                    selectedAssessmentTypes.set(id, type);
+                } else {
+                    selectedAssessmentIds.delete(id);
+                    selectedAssessmentTypes.delete(id);
+                }
+            });
+            updateBulkDeleteAssessmentsState();
+        }
+    });
+
+    function updateBulkDeleteAssessmentsState() {
+        const btn = document.getElementById('bulkDeleteAssessmentsBtn');
+        if (!btn) return;
+        const count = selectedAssessmentIds.size;
+        btn.disabled = count === 0;
+        btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected (' + count + ')';
+    }
+
+    document.addEventListener('click', function(e) {
+        const target = e.target;
+        if (target && target.id === 'bulkDeleteAssessmentsBtn') {
+            if (selectedAssessmentIds.size === 0) return;
+            // Use existing modal
+            document.getElementById('deleteTestId').value = '';
+            document.getElementById('deleteTestType').value = '';
+            document.getElementById('deleteTestId').dataset.bulk = 'true';
+            $('#deleteTestModal').modal('show');
+        }
+    });
 
     // Switch Filter Type
     function switchFilter(filterType) {
@@ -2681,36 +3073,92 @@
         const count = document.querySelectorAll('input[name="type"]:checked').length;
         document.getElementById('typeSelectionCount').textContent = `${count} Type selected`;
         updateFilterBadge();
+        setFilterTypeBadge('type', count);
+    }
+
+    // Build Batch and Assessor filter lists from table rows
+    function buildDynamicFilterLists() {
+        const batchSet = new Set();
+        const assessorSet = new Set();
+
+        document.querySelectorAll('.assessment-row').forEach(row => {
+            // Batch is the 4th column (0-based index 3) per table header
+            const batchCell = row.cells && row.cells[3] ? row.cells[3].textContent.trim() : '';
+            if (batchCell && batchCell !== '-' && batchCell.toLowerCase() !== 'batch') {
+                batchSet.add(batchCell);
+            }
+            // Assessors is the 6th column (index 5)
+            const assessorCell = row.cells && row.cells[5] ? row.cells[5].textContent.trim() : '';
+            if (assessorCell && assessorCell !== '-' && assessorCell.toLowerCase() !== 'assessors') {
+                assessorCell.split(',').map(s => s.trim()).filter(Boolean).forEach(name => assessorSet.add(name));
+            }
+        });
+
+        const batchOptions = document.getElementById('filterBatchOptions');
+        const assessorOptions = document.getElementById('filterAssessorOptions');
+        if (batchOptions) {
+            batchOptions.innerHTML = Array.from(batchSet).sort().map(b => (
+                `<label class="option-item"><input type="checkbox" name="batch" value="${b}" onchange="updateBatchSelectionCount()"><span>${b}</span></label>`
+            )).join('');
+        }
+        if (assessorOptions) {
+            assessorOptions.innerHTML = Array.from(assessorSet).sort().map(a => (
+                `<label class="option-item"><input type="checkbox" name="assessor" value="${a}" onchange="updateAssessorSelectionCount()"><span>${a}</span></label>`
+            )).join('');
+        }
     }
 
     function updateModeSelectionCount() {
         const count = document.querySelectorAll('input[name="mode"]:checked').length;
         document.getElementById('modeSelectionCount').textContent = `${count} Mode selected`;
         updateFilterBadge();
+        setFilterTypeBadge('mode', count);
     }
 
     function updateEntitySelectionCount() {
         const count = document.querySelectorAll('input[name="entity"]:checked').length;
         document.getElementById('entitySelectionCount').textContent = `${count} Entity selected`;
         updateFilterBadge();
+        setFilterTypeBadge('entity', count);
     }
 
     function updateBatchSelectionCount() {
         const count = document.querySelectorAll('input[name="batch"]:checked').length;
         document.getElementById('batchSelectionCount').textContent = `${count} Batch selected`;
         updateFilterBadge();
+        setFilterTypeBadge('batch', count);
     }
 
     function updateAssessorSelectionCount() {
         const count = document.querySelectorAll('input[name="assessor"]:checked').length;
         document.getElementById('assessorSelectionCount').textContent = `${count} Assessor selected`;
         updateFilterBadge();
+        setFilterTypeBadge('assessor', count);
     }
 
     function updateStatusSelectionCount() {
         const count = document.querySelectorAll('input[name="status"]:checked').length;
         document.getElementById('statusSelectionCount').textContent = `${count} Status selected`;
         updateFilterBadge();
+        setFilterTypeBadge('status', count);
+    }
+
+    // Helper to show count badges against individual filter types in sidebar
+    function setFilterTypeBadge(category, count) {
+        const el = document.querySelector(`.filter-type[data-filter="${category}"]`);
+        if (!el) return;
+        let badge = el.querySelector('.filter-type-badge');
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'filter-type-badge';
+            el.appendChild(badge);
+        }
+        if (count > 0) {
+            badge.textContent = String(count);
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
     }
 
     // Update Filter Badge
@@ -2732,6 +3180,14 @@
         } else {
             badge.style.display = 'none';
         }
+
+        // Also ensure sidebar badges are updated for all categories
+        setFilterTypeBadge('type', document.querySelectorAll('input[name="type"]:checked').length);
+        setFilterTypeBadge('mode', document.querySelectorAll('input[name="mode"]:checked').length);
+        setFilterTypeBadge('entity', document.querySelectorAll('input[name="entity"]:checked').length);
+        setFilterTypeBadge('batch', document.querySelectorAll('input[name="batch"]:checked').length);
+        setFilterTypeBadge('assessor', document.querySelectorAll('input[name="assessor"]:checked').length);
+        setFilterTypeBadge('status', document.querySelectorAll('input[name="status"]:checked').length);
     }
 
     // Clear All Filters
@@ -2746,6 +3202,44 @@
         updateAssessorSelectionCount();
         updateStatusSelectionCount();
         updateFilterBadge();
+        updateActiveFiltersDisplay();
+        // Show all rows again
+        document.querySelectorAll('.assessment-row').forEach(row => row.style.display = '');
+    }
+
+    // Store active filters globally
+    let activeFilters = {
+        types: [],
+        modes: [],
+        entities: [],
+        batches: [],
+        assessors: [],
+        statuses: [],
+        dateFrom: '',
+        dateTo: ''
+    };
+
+    // Update active filters display (inside panel only)
+    function updateActiveFiltersDisplay() {
+        const filters = {
+            types: Array.from(document.querySelectorAll('input[name="type"]:checked')).map(cb => cb.value),
+            modes: Array.from(document.querySelectorAll('input[name="mode"]:checked')).map(cb => cb.value),
+            entities: Array.from(document.querySelectorAll('input[name="entity"]:checked')).map(cb => cb.value),
+            batches: Array.from(document.querySelectorAll('input[name="batch"]:checked')).map(cb => cb.value),
+            assessors: Array.from(document.querySelectorAll('input[name="assessor"]:checked')).map(cb => cb.value),
+            statuses: Array.from(document.querySelectorAll('input[name="status"]:checked')).map(cb => cb.value),
+            dateFrom: document.getElementById('filterDateFrom').value,
+            dateTo: document.getElementById('filterDateTo').value
+        };
+        
+        activeFilters = filters;
+        
+        // Count total filters
+        const totalFilters = filters.types.length + filters.modes.length + filters.entities.length + 
+                            filters.batches.length + filters.assessors.length + filters.statuses.length +
+                            (filters.dateFrom ? 1 : 0) + (filters.dateTo ? 1 : 0);
+
+        // No inside text summary required; badges indicate counts per category
     }
 
     // Apply Filters
@@ -2766,16 +3260,30 @@
         rows.forEach(row => {
             let show = true;
             
-            // Type filter
+            // Type filter (use data-type set on row)
             if (filters.types.length > 0) {
-                const typeText = row.querySelector('.badge-type')?.textContent.trim();
+                const typeText = (row.dataset.type || '').trim();
                 if (!filters.types.includes(typeText)) show = false;
             }
             
-            // Mode filter
+            // Mode filter (use data-mode set on row)
             if (filters.modes.length > 0) {
-                const modeText = row.cells[2]?.textContent.trim();
+                const modeText = (row.dataset.mode || '').trim();
                 if (!filters.modes.some(mode => modeText.includes(mode))) show = false;
+            }
+
+            // Batch filter (compare against Batch column text)
+            if (filters.batches.length > 0) {
+                const batchText = (row.cells && row.cells[3] ? row.cells[3].textContent.trim() : '');
+                if (!filters.batches.includes(batchText)) show = false;
+            }
+
+            // Assessor filter (match any of the selected assessors in the Assessors column)
+            if (filters.assessors.length > 0) {
+                const assessorText = (row.cells && row.cells[5] ? row.cells[5].textContent.trim() : '');
+                const assessorList = assessorText.split(',').map(s => s.trim()).filter(Boolean);
+                const hasAssessor = filters.assessors.some(a => assessorList.includes(a));
+                if (!hasAssessor) show = false;
             }
             
             // Status filter
@@ -2793,6 +3301,9 @@
             
             row.style.display = show ? '' : 'none';
         });
+        
+        // Update active filters display
+        updateActiveFiltersDisplay();
         
         toggleFilterPanel();
     }
@@ -2856,5 +3367,6 @@
     </div>
 </div>
 <input type="hidden" id="deleteTestId" value="">
+<input type="hidden" id="deleteTestType" value="">
 
 {% endblock %}

@@ -1243,6 +1243,41 @@ function populateProceduresDropdown() {
     const container = document.getElementById('proceduresOptions');
     container.innerHTML = '';
     
+    // Add "Select All" option at the top
+    const selectAllItem = document.createElement('div');
+    selectAllItem.className = 'option-item';
+    selectAllItem.setAttribute('data-value', 'select-all');
+    selectAllItem.style.display = 'flex';
+    selectAllItem.style.alignItems = 'center';
+    selectAllItem.style.cursor = 'pointer';
+    selectAllItem.style.borderBottom = '1px solid #e2e8f0';
+    selectAllItem.style.paddingBottom = '8px';
+    selectAllItem.style.marginBottom = '4px';
+    selectAllItem.innerHTML = `
+        <input type="checkbox" class="procedure-checkbox" id="procSelectAll" value="select-all" style="margin-right:10px;">
+        <span class="procedure-title" style="font-weight: 600;">Select All</span>
+    `;
+    container.appendChild(selectAllItem);
+    
+    // Make "Select All" row clickable
+    selectAllItem.addEventListener('click', function(e) {
+        // Only toggle if not clicking directly on the checkbox
+        if (e.target.tagName !== 'INPUT') {
+            const checkbox = selectAllItem.querySelector('input[type="checkbox"]');
+            checkbox.checked = !checkbox.checked;
+            handleSelectAllProcedures(checkbox.checked);
+            clearError('procedures');
+        }
+    });
+    
+    // Add event listener for "Select All" checkbox
+    const selectAllCheckbox = selectAllItem.querySelector('input[type="checkbox"]');
+    selectAllCheckbox.addEventListener('change', function(e) {
+        handleSelectAllProcedures(this.checked);
+        clearError('procedures');
+        e.stopPropagation();
+    });
+    
     allProcedures.forEach(procedure => {
         const optionItem = document.createElement('div');
         optionItem.className = 'option-item';
@@ -1262,6 +1297,7 @@ function populateProceduresDropdown() {
                 const checkbox = optionItem.querySelector('input[type="checkbox"]');
                 checkbox.checked = !checkbox.checked;
                 updateSelectedProcedures();
+                updateSelectAllState();
                 clearError('procedures');
             }
         });
@@ -1269,6 +1305,7 @@ function populateProceduresDropdown() {
         const checkbox = optionItem.querySelector('input[type="checkbox"]');
         checkbox.addEventListener('change', function(e) {
             updateSelectedProcedures();
+            updateSelectAllState();
             clearError('procedures');
             e.stopPropagation();
         });
@@ -1512,32 +1549,85 @@ function toggleVerificationField(checkbox) {
 function filterProcedures(searchText) {
     const options = document.querySelectorAll('#proceduresOptions .option-item');
     options.forEach(option => {
+        // Always show "Select All" option
+        if (option.getAttribute('data-value') === 'select-all') {
+            option.style.display = 'flex';
+            return;
+        }
+        
         const text = option.textContent.toLowerCase();
         option.style.display = text.includes(searchText.toLowerCase()) ? 'flex' : 'none';
     });
 }
 
 function updateSelectedProcedures() {
-    const checkboxes = document.querySelectorAll('#proceduresOptions input[type="checkbox"]:checked');
+    // Get all checkboxes except "Select All"
+    const checkboxes = document.querySelectorAll('#proceduresOptions input[type="checkbox"]:checked:not(#procSelectAll)');
     const selectedTags = document.getElementById('selectedTags');
     
     selectedTags.innerHTML = '';
     
     if (checkboxes.length > 0) {
-        checkboxes.forEach(checkbox => {
-            const optionText = checkbox.closest('.option-item').querySelector('span').textContent;
-            const tag = document.createElement('div');
-            tag.className = 'tag';
-            tag.innerHTML = `
-                ${optionText}
-                <span class="tag-remove" onclick="removeTag('${checkbox.value}')">&times;</span>
+        // If more than 5 procedures are selected, show collective tag
+        if (checkboxes.length > 5) {
+            const collectiveTag = document.createElement('div');
+            collectiveTag.className = 'tag';
+            collectiveTag.innerHTML = `
+                ${checkboxes.length} procedures selected
+                <span class="tag-remove" onclick="removeAllTags()">&times;</span>
             `;
-            selectedTags.appendChild(tag);
-        });
+            selectedTags.appendChild(collectiveTag);
+        } else {
+            // Show individual tags for 5 or fewer selections
+            checkboxes.forEach(checkbox => {
+                const optionText = checkbox.closest('.option-item').querySelector('span').textContent;
+                const tag = document.createElement('div');
+                tag.className = 'tag';
+                tag.innerHTML = `
+                    ${optionText}
+                    <span class="tag-remove" onclick="removeTag('${checkbox.value}')">&times;</span>
+                `;
+                selectedTags.appendChild(tag);
+            });
+        }
     } 
     // else {
        // placeholder.style.display = 'block';
    // }
+}
+
+function handleSelectAllProcedures(checked) {
+    // Get all procedure checkboxes (excluding "Select All")
+    const procedureCheckboxes = document.querySelectorAll('#proceduresOptions input[type="checkbox"]:not(#procSelectAll)');
+    
+    // Only select all if checking "Select All"
+    // If unchecking "Select All", don't deselect the options (per user requirement)
+    if (checked) {
+        procedureCheckboxes.forEach(checkbox => {
+            checkbox.checked = true;
+        });
+    }
+    // Note: When unchecking "Select All", we don't deselect all options
+    // The options remain selected, only the "Select All" checkbox gets unchecked
+    
+    // Update the selected tags display
+    updateSelectedProcedures();
+}
+
+function updateSelectAllState() {
+    const selectAllCheckbox = document.getElementById('procSelectAll');
+    if (!selectAllCheckbox) return;
+    
+    // Get all procedure checkboxes (excluding "Select All")
+    const procedureCheckboxes = document.querySelectorAll('#proceduresOptions input[type="checkbox"]:not(#procSelectAll)');
+    const allChecked = Array.from(procedureCheckboxes).every(checkbox => checkbox.checked);
+    
+    // Update "Select All" checkbox state
+    if (allChecked && procedureCheckboxes.length > 0) {
+        selectAllCheckbox.checked = true;
+    } else {
+        selectAllCheckbox.checked = false;
+    }
 }
 
 function removeTag(value) {
@@ -1545,7 +1635,28 @@ function removeTag(value) {
     if (checkbox) {
         checkbox.checked = false;
         updateSelectedProcedures();
+        updateSelectAllState();
     }
+}
+
+function removeAllTags() {
+    // Get all procedure checkboxes (excluding "Select All")
+    const procedureCheckboxes = document.querySelectorAll('#proceduresOptions input[type="checkbox"]:not(#procSelectAll)');
+    
+    // Deselect all checkboxes
+    procedureCheckboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    
+    // Update "Select All" checkbox state
+    const selectAllCheckbox = document.getElementById('procSelectAll');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = false;
+    }
+    
+    // Update the display
+    updateSelectedProcedures();
+    clearError('procedures');
 }
 
 function toggleFilterPanel() {
@@ -1646,7 +1757,7 @@ function validateForm() {
     }
     
     // Validate Procedures
-    const selectedProcedures = document.querySelectorAll('#proceduresOptions input[type="checkbox"]:checked');
+    const selectedProcedures = document.querySelectorAll('#proceduresOptions input[type="checkbox"]:checked:not(#procSelectAll)');
     if (selectedProcedures.length === 0) {
         showError('Please select at least one procedure');
         isValid = false;
@@ -1697,7 +1808,7 @@ function submitForm() {
     const formData = {
         courseName: document.getElementById('courseName').value.trim(),
         description: document.getElementById('description').value.trim(),
-        procedures: Array.from(document.querySelectorAll('#proceduresOptions input[type="checkbox"]:checked')).map(cb => cb.value),
+        procedures: Array.from(document.querySelectorAll('#proceduresOptions input[type="checkbox"]:checked:not(#procSelectAll)')).map(cb => cb.value),
         verificationRequired: document.getElementById('verification').checked
     };
     

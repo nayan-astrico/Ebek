@@ -313,14 +313,12 @@ def institution_create(request):
     if request.method == 'POST':
         form = InstitutionForm(request.POST)
         if form.is_valid():
-            
             institution_name = form.cleaned_data['name'].strip()
+            onboarding_type = str(form.cleaned_data.get('onboarding_type', '')).lower()
             user = None
-
-            existing_institute = db.collection('InstituteNames').where('instituteName', '==', institution_name).limit(1).stream()
-            
-            if list(existing_institute):
-                return JsonResponse({'error': 'An institution with this name already exists'}, status=400)
+            # Validate uniqueness by onboarding type and name (case-insensitive)
+            if Institution.objects.filter(name__iexact=institution_name, onboarding_type=onboarding_type).exists():
+                return JsonResponse({'error': 'Institution already exists for this onboarding type.'}, status=400)
             
             institution = form.save(commit=False)
             if request.POST.get('is_active') == 'on':
@@ -344,13 +342,11 @@ def institution_edit(request, pk):
     if request.method == 'POST':
         form = InstitutionForm(request.POST, instance=institution)
         if form.is_valid():
-            institution_name = form.cleaned_data['name']
-            
-            # Check if institution name is being changed and if it already exists in Firebase
-            if institution_old_name != institution_name:
-                existing_institute = db.collection('InstituteNames').where('instituteName', '==', institution_name).limit(1).stream()
-                if list(existing_institute):
-                    return JsonResponse({'error': 'An institution with this name already exists'}, status=400)
+            institution_name = form.cleaned_data['name'].strip()
+            onboarding_type = str(form.cleaned_data.get('onboarding_type', '')).lower()
+            # Enforce uniqueness within same onboarding type (exclude current)
+            if Institution.objects.filter(name__iexact=institution_name, onboarding_type=onboarding_type).exclude(pk=pk).exists():
+                return JsonResponse({'error': 'Institution already exists for this onboarding type.'}, status=400)
             
             if request.POST.get('is_active') == 'on':
                 institution.is_active = True
@@ -528,13 +524,11 @@ def hospital_create(request):
         form = HospitalForm(request.POST)
         if form.is_valid():
             hospital_name = form.cleaned_data['name'].strip()
+            onboarding_type = str(form.cleaned_data.get('onboarding_type', '')).lower()
             user = None
-            
-            # Check if hospital with same name already exists in Firebase
-            existing_hospital = db.collection('HospitalNames').where('hospitalName', '==', hospital_name).limit(1).stream()
-            
-            if list(existing_hospital):
-                return JsonResponse({'error': 'A hospital with this name already exists'}, status=400)
+            # Validate uniqueness by onboarding type and name (case-insensitive)
+            if Hospital.objects.filter(name__iexact=hospital_name, onboarding_type=onboarding_type).exists():
+                return JsonResponse({'error': 'Hospital already exists for this onboarding type.'}, status=400)
 
             hospital = form.save(commit=False)
             if request.POST.get('is_active') == 'on':
@@ -558,14 +552,11 @@ def hospital_edit(request, pk):
     if request.method == 'POST':
         form = HospitalForm(request.POST, instance=hospital)
         if form.is_valid():
-            
-            hospital_name = form.cleaned_data['name']
-            
-            # Check if hospital name is being changed and if it already exists in Firebase
-            if hospital_old_name != hospital_name:
-                existing_hospital = db.collection('HospitalNames').where('hospitalName', '==', hospital_name).limit(1).stream()
-                if list(existing_hospital):
-                    return JsonResponse({'error': 'A hospital with this name already exists'}, status=400)
+            hospital_name = form.cleaned_data['name'].strip()
+            onboarding_type = str(form.cleaned_data.get('onboarding_type', '')).lower()
+            # Enforce uniqueness within same onboarding type (exclude current)
+            if Hospital.objects.filter(name__iexact=hospital_name, onboarding_type=onboarding_type).exclude(pk=pk).exists():
+                return JsonResponse({'error': 'Hospital already exists for this onboarding type.'}, status=400)
             
             
             if request.POST.get('is_active') == 'on':
@@ -760,15 +751,39 @@ def learner_create(request):
     if request.method == 'POST':
         form = LearnerForm(request.POST)
         if form.is_valid():
-            # Enforce B2C requirements
-            onboarding_type = form.cleaned_data.get('onboarding_type', '')
-            if str(onboarding_type).lower() == 'b2c':
-                if not form.cleaned_data.get('skillathon_event') or not form.cleaned_data.get('college'):
-                    return JsonResponse({
-                        'error': 'For B2C onboarding, Skillathon Event and College are required.'
-                    }, status=400)
-            learner_name = form.cleaned_data['learner_name']
+            # Get form data
             learner_email = form.cleaned_data['learner_email']
+            onboarding_type = form.cleaned_data.get('onboarding_type', '').lower()
+            
+            # Check for duplicate email with same onboarding type
+            existing_learner = Learner.objects.filter(
+                learner_user__email=learner_email,
+                onboarding_type=onboarding_type
+            ).first()
+            
+            if existing_learner:
+                return JsonResponse({
+                    'error': f'A learner with email {learner_email} and onboarding type {onboarding_type.upper()} already exists.',
+                    'field': 'learner_email'
+                }, status=400)
+            
+            # Enforce B2C requirements by learner type
+            if str(onboarding_type).lower() == 'b2c':
+                learner_type = form.cleaned_data.get('learner_type', '').lower()
+                skillathon = form.cleaned_data.get('skillathon_event')
+                college = form.cleaned_data.get('college')
+                hospital = form.cleaned_data.get('hospital')
+                if learner_type == 'student':
+                    if not skillathon or not college:
+                        return JsonResponse({
+                            'error': 'For B2C Students, Skillathon Event and College are required.'
+                        }, status=400)
+                elif learner_type == 'nurse':
+                    if not skillathon or not hospital:
+                        return JsonResponse({
+                            'error': 'For B2C Working Nurses, Skillathon Event and Hospital are required.'
+                        }, status=400)
+            learner_name = form.cleaned_data['learner_name']
             learner_phone = form.cleaned_data['learner_phone']
 
             if learner_name == '' or learner_email == '' or learner_phone == '':
@@ -826,16 +841,40 @@ def learner_edit(request, pk):
     if request.method == 'POST':
         form = LearnerForm(request.POST, instance=learner)
         if form.is_valid():
-            # Enforce B2C requirements on update
-            print(form.cleaned_data)
-            onboarding_type = form.cleaned_data.get('onboarding_type', '')
-            if str(onboarding_type).lower() == 'b2c':
-                if not form.cleaned_data.get('skillathon_event') or not form.cleaned_data.get('college'):
-                    return JsonResponse({
-                        'error': 'For B2C onboarding, Skillathon Event and College are required.'
-                    }, status=400)
-            learner_name = form.cleaned_data['learner_name']
+            # Get form data
             learner_email = form.cleaned_data['learner_email']
+            onboarding_type = form.cleaned_data.get('onboarding_type', '').lower()
+            
+            # Check for duplicate email with same onboarding type (excluding current learner)
+            existing_learner = Learner.objects.filter(
+                learner_user__email=learner_email,
+                onboarding_type=onboarding_type
+            ).exclude(pk=pk).first()
+            
+            if existing_learner:
+                return JsonResponse({
+                    'error': f'A learner with email {learner_email} and onboarding type {onboarding_type.upper()} already exists.',
+                    'field': 'learner_email'
+                }, status=400)
+            
+            # Enforce B2C requirements on update by learner type
+            print(form.cleaned_data)
+            if str(onboarding_type).lower() == 'b2c':
+                learner_type = form.cleaned_data.get('learner_type', '').lower()
+                skillathon = form.cleaned_data.get('skillathon_event')
+                college = form.cleaned_data.get('college')
+                hospital = form.cleaned_data.get('hospital')
+                if learner_type == 'student':
+                    if not skillathon or not college:
+                        return JsonResponse({
+                            'error': 'For B2C Students, Skillathon Event and College are required.'
+                        }, status=400)
+                elif learner_type == 'nurse':
+                    if not skillathon or not hospital:
+                        return JsonResponse({
+                            'error': 'For B2C Working Nurses, Skillathon Event and Hospital are required.'
+                        }, status=400)
+            learner_name = form.cleaned_data['learner_name']
             learner_phone = form.cleaned_data['learner_phone']
             current_user = learner.learner_user
             
@@ -1298,6 +1337,25 @@ def learner_delete(request, pk):
         messages.success(request, 'Learner deleted successfully.')
         return redirect('learner_list')
     return redirect('learner_list')
+
+@login_required
+def learners_bulk_delete(request):
+    if not (request.user.has_all_permissions() or 'delete_learner' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+        ids = data.get('ids', [])
+        if not ids:
+            return JsonResponse({'error': 'No learners selected'}, status=400)
+        qs = Learner.objects.filter(pk__in=ids)
+        count = qs.count()
+        for learner in qs:
+            learner.delete()
+        return JsonResponse({'success': True, 'deleted': count})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 # Assessor Views
 @login_required

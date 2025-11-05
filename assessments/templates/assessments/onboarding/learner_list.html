@@ -36,6 +36,10 @@
         <i class="fas fa-filter"></i>
         Filters
     </button>
+    <button id="bulkDeleteBtn" class="btn btn-primary" style="margin-left: 8px;" onclick="openBulkDeleteConfirm()" disabled>
+        <i class="fas fa-trash"></i>
+        Delete Selected (0)
+    </button>
 </div>
 
 <!-- Filter Side Panel -->
@@ -140,6 +144,7 @@
     <table class="table">
         <thead>
             <tr>
+                <th style="width:36px;"><input type="checkbox" id="selectAllRows"></th>
                 <th>Full Name</th>
                 <th>Email</th>
                 <th>Mobile</th>
@@ -355,6 +360,16 @@
 
 
 <style>
+#bulkDeleteBtn.btn.btn-primary{
+    background-color: #F16564;
+    border-color: #F16564;
+    color: #fff;
+    transition: background-color .2s ease, border-color .2s ease, color .2s ease;
+}
+.btn.btn-primary.hover-state {
+    background-color: #e45857; 
+    border-color: #e45857;
+}
     
 /* Basic Layout */
 .header {
@@ -1527,8 +1542,91 @@ function confirmDelete(button) {
     const url = button.dataset.url;
     document.getElementById('deleteItemName').textContent = name;
     document.getElementById('deleteForm').action = url;
+    document.getElementById('deleteForm').dataset.bulk = 'false';
     $('#deleteModal').modal('show');
 }
+
+// Bulk delete support
+let selectedLearnerIds = new Set();
+
+document.addEventListener('change', function(e) {
+    if (e.target && e.target.classList.contains('row-select')) {
+        const id = e.target.getAttribute('data-id');
+        if (e.target.checked) selectedLearnerIds.add(id); else selectedLearnerIds.delete(id);
+        updateBulkDeleteState();
+        // Keep header checkbox in sync
+        const all = document.querySelectorAll('.row-select');
+        const allChecked = all.length > 0 && Array.from(all).every(cb => cb.checked);
+        const master = document.getElementById('selectAllRows');
+        if (master) master.checked = allChecked;
+    }
+    if (e.target && e.target.id === 'selectAllRows') {
+        const checks = document.querySelectorAll('.row-select');
+        checks.forEach(cb => {
+            cb.checked = e.target.checked;
+            const id = cb.getAttribute('data-id');
+            if (e.target.checked) selectedLearnerIds.add(id); else selectedLearnerIds.delete(id);
+        });
+        updateBulkDeleteState();
+    }
+});
+
+function updateBulkDeleteState() {
+    const btn = document.getElementById('bulkDeleteBtn');
+    if (!btn) return;
+    const count = selectedLearnerIds.size;
+    btn.disabled = count === 0;
+    // Update label with count
+    btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected (' + count + ')';
+    btn.classList.remove('btn-danger');
+    btn.classList.add('btn-primary');
+    if (count > 0) {
+        btn.classList.add('hover-state');
+    } else {
+        btn.classList.remove('hover-state');
+    }
+}
+
+function openBulkDeleteConfirm() {
+    if (selectedLearnerIds.size === 0) return;
+    document.getElementById('deleteItemName').textContent = selectedLearnerIds.size + ' learner(s)';
+    const form = document.getElementById('deleteForm');
+    form.action = '';
+    form.dataset.bulk = 'true';
+    $('#deleteModal').modal('show');
+}
+
+// Intercept delete modal submit for bulk
+document.addEventListener('submit', function(e) {
+    const form = e.target;
+    if (form && form.id === 'deleteForm' && form.dataset.bulk === 'true') {
+        e.preventDefault();
+        const ids = Array.from(selectedLearnerIds);
+        fetch('{% url "learners_bulk_delete" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({ ids })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                $('#deleteModal').modal('hide');
+                showSuccess('Deleted ' + data.deleted + ' learner(s) successfully.');
+                // Reload list
+                location.reload();
+            } else {
+                showError(data.error || 'Failed to delete learners');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showError('Failed to delete learners');
+        });
+    }
+});
 
 document.addEventListener('DOMContentLoaded', function() {
     const learnerTypeSelect = document.getElementById('learner_type');
@@ -1607,6 +1705,24 @@ document.addEventListener('DOMContentLoaded', function() {
     ['institution', 'hospital', 'learner-type'].forEach(category => {
         updateSelectionCount(category);
     });
+});
+
+// Make entire option row clickable to toggle checkbox
+document.addEventListener('click', function(e) {
+    const label = e.target.closest('label.option-item');
+    if (!label) return;
+    // Avoid double toggling when clicking directly on the checkbox
+    if (e.target && e.target.tagName && e.target.tagName.toLowerCase() === 'input') return;
+    const checkbox = label.querySelector('input[type="checkbox"]');
+    if (!checkbox) return;
+    checkbox.checked = !checkbox.checked;
+    checkbox.dispatchEvent(new Event('change'));
+    // Update the visible counter for this category if present
+    const container = label.closest('.filter-content');
+    if (container) {
+        const category = container.id.replace('-content', '');
+        if (category) updateSelectionCount(category);
+    }
 });
 
 function filterOptions(category) {
@@ -2308,24 +2424,94 @@ document.addEventListener('submit', function(e) {
                 'X-CSRFToken': getCookie('csrftoken')
             }
         })
-        .then(response => response.text())
-        .then(html => {
+        .then(response => {
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                return response.json().then(data => ({ isJson: true, data }));
+            } else {
+                return response.text().then(html => ({ isJson: false, html }));
+            }
+        })
+        .then(result => {
             // Remove loading state from button
             if (saveButton) {
                 saveButton.classList.remove('btn-loading');
+                document.getElementById("save-button").innerText = "Save"
             }
 
-            if (html.includes('form-group')) {
-                // Form has errors, re-render it
-                document.getElementById('learnerFormContainer').innerHTML = html;
+            if (result.isJson) {
+                // Handle JSON response (error or success)
+                if (result.data.error) {
+                    // Prompt for same mail
+                    showError('Email already exists.');
+                    return;
+                } else {
+                    // Success: close panel and reload page
+                    closeLearnerFormPanel();
+                    location.reload();
+                }
             } else {
-                // Success: close panel and reload page
-                closeLearnerFormPanel();
-                location.reload(); // <--- This reloads the page
+                // Handle HTML response (form with validation errors)
+                if (result.html.includes('form-group')) {
+                    // Form has errors, re-render it
+                    document.getElementById('learnerFormContainer').innerHTML = result.html;
+                } else {
+                    // Success: close panel and reload page
+                    closeLearnerFormPanel();
+                    location.reload();
+                }
             }
+        })
+        .catch(error => {
+            // Remove loading state from button
+            if (saveButton) {
+                saveButton.classList.remove('btn-loading');
+                document.getElementById("save-button").innerText = "Save"
+            }
+            console.error('Error:', error);
+            showError('An error occurred while saving the learner. Please try again.');
         });
     }
 });
+
+// Email field validation prompt on input
+document.addEventListener('input', function(e) {
+    if (e.target && e.target.id === 'id_learner_email') {
+        const input = e.target;
+        input.classList.remove('is-invalid');
+        const existingError = input.parentElement && input.parentElement.querySelector('.invalid-feedback');
+        if (existingError) existingError.remove();
+    }
+});
+
+// Prompt when same email is used
+function showSuccess(message) {
+    const notification = $(`
+        <div class="alert alert-success alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-check-circle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    $('body').append(notification);
+    setTimeout(function() { notification.alert('close'); }, 5000);
+}
+
+function showError(message) {
+    const notification = $(`
+        <div class="alert alert-danger alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-exclamation-triangle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    $('body').append(notification);
+    setTimeout(function() { notification.alert('close'); }, 5000);
+}
 
 let offset = 0;
 const limit = 10;
@@ -2334,27 +2520,70 @@ let allLoaded = false;
 let currentSearch = '';
 let currentFilters = {};
 
-// Search functionality
+// Search functionality with debouncing
+let searchTimeout = null;
+
 function filterLearners(searchQuery) {
-    currentSearch = searchQuery;
-    resetLearnerList();
-    applySearch();
+    console.log('🔍 Search input:', searchQuery);
+    
+    // Clear existing timeout
+    if (searchTimeout) {
+        clearTimeout(searchTimeout);
+    }
+    
+    // Trim the search query
+    currentSearch = searchQuery ? searchQuery.trim() : '';
+    
+    // Debounce: wait 300ms after user stops typing
+    searchTimeout = setTimeout(() => {
+        console.log('⚡ Executing search for:', currentSearch);
+        performSearch();
+    }, 300);
+}
+
+function performSearch() {
+    console.log('🎯 performSearch - currentSearch:', currentSearch, 'offset:', offset);
+    
+    // CRITICAL: Reset all state
+    offset = 0;
+    allLoaded = false;
+    loading = false; // Must reset loading flag!
+    
+    // Clear the table completely
+    const tbody = document.getElementById('learnerTableBody');
+    if (tbody) {
+        tbody.innerHTML = '';
+        console.log('✅ Table cleared');
+    }
+    
+    // Show the button
+    const showMoreBtn = document.getElementById('showMoreBtn');
+    if (showMoreBtn) {
+        showMoreBtn.style.display = 'inline-flex';
+    }
+    
+    // Load fresh data
+    console.log('📡 Calling loadMoreLearners...');
+    loadMoreLearners();
 }
 
 // Apply search with reset functionality
 function applySearch() {
-    offset = 0;
-    allLoaded = false;
-    document.getElementById('learnerTableBody').innerHTML = '';
-    document.getElementById('showMoreBtn').style.display = 'inline-flex';
-    loadMoreLearners();
+    performSearch();
 }
 
 function resetLearnerList() {
     offset = 0;
     allLoaded = false;
-    document.getElementById('learnerTableBody').innerHTML = '';
-    document.getElementById('showMoreBtn').style.display = 'inline-flex';
+    loading = false;
+    const tbody = document.getElementById('learnerTableBody');
+    if (tbody) {
+        tbody.innerHTML = '';
+    }
+    const showMoreBtn = document.getElementById('showMoreBtn');
+    if (showMoreBtn) {
+        showMoreBtn.style.display = 'inline-flex';
+    }
 }
 
 function applyFilters() {
@@ -2389,6 +2618,7 @@ function renderLearnerRow(learner) {
     var showActions = userPermissions.canEdit || userPermissions.canDelete;
     
     var html = '<tr>' +
+        '<td><input type="checkbox" class="row-select" data-id="' + learner.id + '"></td>' +
         '<td><div class="institution"><span>' + learner.full_name + '</span></div></td>' +
         '<td>' + learner.email + '</td>' +
         '<td>' + learner.phone_number + '</td>' +
@@ -2427,9 +2657,18 @@ function renderLearnerRow(learner) {
 }
 
 function loadMoreLearners() {
-    if (loading || allLoaded) return;
+    console.log('📥 loadMoreLearners - loading:', loading, 'allLoaded:', allLoaded, 'offset:', offset, 'search:', currentSearch);
+    
+    if (loading || allLoaded) {
+        console.log('❌ Blocked - loading:', loading, 'allLoaded:', allLoaded);
+        return;
+    }
+    
     loading = true;
-    document.getElementById('showMoreBtn').innerText = 'Loading...';
+    const showMoreBtn = document.getElementById('showMoreBtn');
+    if (showMoreBtn) {
+        showMoreBtn.innerText = 'Loading...';
+    }
     
     // Build query parameters
     const params = new URLSearchParams();
@@ -2438,6 +2677,9 @@ function loadMoreLearners() {
     
     if (currentSearch) {
         params.append('search', currentSearch);
+        console.log('🔎 Adding search parameter:', currentSearch);
+    } else {
+        console.log('📋 No search - loading all learners');
     }
     
     // Add filters
@@ -2452,6 +2694,7 @@ function loadMoreLearners() {
     fetch(`/onboarding/learners/api/?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
+            console.log('📦 Received data:', data.learners ? data.learners.length : 0, 'learners');
             const learners = data.learners;
             if (data.all_loaded) {
                 allLoaded = true;
@@ -2459,6 +2702,7 @@ function loadMoreLearners() {
             }
             offset += learners.length;
             const tbody = document.getElementById('learnerTableBody');
+            console.log('➕ Adding', learners.length, 'rows to table (current rows:', tbody.children.length, ')');
             learners.forEach(learner => {
                 tbody.insertAdjacentHTML('beforeend', renderLearnerRow(learner));
             });
