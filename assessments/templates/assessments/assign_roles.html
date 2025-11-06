@@ -27,6 +27,9 @@
                id="userSearchInput"
                oninput="filterUsers(this.value)">
     </div>
+    <button id="bulkDeleteUsersBtn" class="btn btn-primary" style="margin-left: 8px;" onclick="openBulkUserDeleteConfirm()" disabled>
+        <i class="fas fa-trash"></i> Delete Selected (0)
+    </button>
 </div>
 
 <!-- Create User Side Panel -->
@@ -183,6 +186,7 @@
     <table class="table" id="usersTable">
         <thead>
             <tr>
+                <th style="width:36px;"><input type="checkbox" id="selectAllUsers"></th>
                 <th>User</th>
                 <th>Email</th>
                 <th>Status</th>
@@ -1884,6 +1888,7 @@ function renderUsers() {
     filteredUsers.forEach(user => {
         const row = document.createElement('tr');
         row.innerHTML = `
+            <td><input type="checkbox" class="user-row-select" data-id="${user.id}"></td>
             <td>
                 <div class="user-info">
                     <div class="user-icon">${user.full_name.charAt(0).toUpperCase()}</div>
@@ -2061,6 +2066,88 @@ function confirmDeleteUser(userId, email){
     document.getElementById('deleteUserId').value = userId;
     document.getElementById('deleteUserEmail').textContent = email;
     $('#deleteUserModal').modal('show');
+}
+
+// Bulk select/delete logic
+let selectedUserIds = new Set();
+
+document.addEventListener('change', function(e){
+    if(e.target && e.target.classList.contains('user-row-select')){
+        const id = e.target.getAttribute('data-id');
+        if(e.target.checked) selectedUserIds.add(id); else selectedUserIds.delete(id);
+        syncUsersMasterCheckbox();
+        updateBulkUsersBtn();
+    }
+    if(e.target && e.target.id === 'selectAllUsers'){
+        const checks = document.querySelectorAll('.user-row-select');
+        checks.forEach(cb=>{
+            cb.checked = e.target.checked;
+            const id = cb.getAttribute('data-id');
+            if(e.target.checked) selectedUserIds.add(id); else selectedUserIds.delete(id);
+        });
+        updateBulkUsersBtn();
+    }
+});
+
+function syncUsersMasterCheckbox(){
+    const all = document.querySelectorAll('.user-row-select');
+    const master = document.getElementById('selectAllUsers');
+    if(master){
+        master.checked = (all.length > 0 && Array.from(all).every(cb=>cb.checked));
+    }
+}
+
+function updateBulkUsersBtn(){
+    const btn = document.getElementById('bulkDeleteUsersBtn');
+    if(!btn) return;
+    const count = selectedUserIds.size;
+    btn.disabled = count === 0;
+    btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected ('+count+')';
+    // apply same color states as primary
+    if(count > 0){ btn.classList.add('hover-state'); } else { btn.classList.remove('hover-state'); }
+}
+
+function openBulkUserDeleteConfirm(){
+    if(selectedUserIds.size === 0) return;
+    document.getElementById('deleteUserId').value = '';
+    document.getElementById('deleteUserEmail').textContent = selectedUserIds.size + ' user(s)';
+    // repurpose same modal
+    $('#deleteUserModal').modal('show');
+    const confirmBtn = document.getElementById('deleteConfirmBtn');
+    const cancelBtn = document.getElementById('deleteCancelBtn');
+    const btnSpinner = confirmBtn ? confirmBtn.querySelector('.spinner-border') : null;
+    const btnText = confirmBtn ? confirmBtn.querySelector('.btn-text') : null;
+    const originalHandler = confirmBtn._bulkHandlerAttached;
+    if(!originalHandler){
+        confirmBtn.addEventListener('click', bulkDeleteUsersHandler);
+        confirmBtn._bulkHandlerAttached = true;
+    }
+}
+
+function bulkDeleteUsersHandler(){
+    const confirmBtn = document.getElementById('deleteConfirmBtn');
+    const cancelBtn = document.getElementById('deleteCancelBtn');
+    const btnSpinner = confirmBtn ? confirmBtn.querySelector('.spinner-border') : null;
+    const btnText = confirmBtn ? confirmBtn.querySelector('.btn-text') : null;
+    const ids = Array.from(selectedUserIds);
+    if(ids.length === 0) return;
+    confirmBtn.disabled = true; cancelBtn.disabled = true;
+    if(btnSpinner) btnSpinner.style.display = 'inline-block';
+    if(btnText) btnText.textContent = 'Deleting';
+    // perform parallel deletes using existing single-delete API
+    Promise.all(ids.map(id=>
+        fetch(`/api/users/${id}/delete/`, { method:'POST', headers:{ 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }})
+            .then(r=>r.json()).catch(()=>({success:false}))
+    )).then(results=>{
+        const ok = results.filter(r=>r && r.success).length;
+        if(ok>0){ showSuccess(`Deleted ${ok} user(s).`); } else { showError('Failed to delete users'); }
+        $('#deleteUserModal').modal('hide');
+        window.location.reload();
+    }).finally(()=>{
+        if(btnSpinner) btnSpinner.style.display = 'none';
+        if(btnText) btnText.textContent = 'Delete';
+        confirmBtn.disabled = false; cancelBtn.disabled = false;
+    });
 }
 
 document.addEventListener('DOMContentLoaded', function(){
