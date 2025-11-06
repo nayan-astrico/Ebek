@@ -673,6 +673,12 @@ def create_procedure_assignment_and_test(request):
                             'unit': unit_ref,      # Reference to institution or hospital
                             'unit_name': unit_name, # Name of institution or hospital
                         }
+                        
+                        # Add year and semester from batch
+                        if year_of_batch:
+                            batchassignment_data['yearOfBatch'] = year_of_batch
+                        if semester:
+                            batchassignment_data['semester'] = semester
 
                         batchassignment_ref = db.collection('BatchAssignment').add(batchassignment_data)[1]
                         created_batchassignments.append(batchassignment_ref)
@@ -1343,7 +1349,7 @@ def update_test(request, test_id):
         if testdate_str:
             try:
                 # Accept YYYY-MM-DD
-                new_date = datetime.datetime.strptime(testdate_str, '%Y-%m-%d')
+                new_date = datetime.strptime(testdate_str, '%Y-%m-%d')
                 update_payload['testdate'] = new_date
             except Exception:
                 return JsonResponse({'error': 'Invalid date format, expected YYYY-MM-DD'}, status=400)
@@ -1375,7 +1381,7 @@ def update_test(request, test_id):
             for procedure_id in procedure_ids:
                 procedure_ref = db.collection('ProcedureTable').document(procedure_id)
                 proc_assignment_data = {
-                    'creationDate': datetime.datetime.now(),
+                    'creationDate': datetime.now(),
                     'procedure': procedure_ref,
                     'status': 'Pending',
                     'typeOfTest': 'Classroom',
@@ -1422,7 +1428,7 @@ def fetch_exam_reports(request):
             base_query = base_query.where("institute", "==", institute_ref)
 
         if auto_fetch:
-            one_minute_ago = datetime.datetime.utcnow() - datetime.timedelta(minutes=1)
+            one_minute_ago = datetime.now() - timedelta(minutes=1)
             exam_assignments_ref = base_query.where("completed_date", ">=", one_minute_ago)
             exam_assignments_ref = exam_assignments_ref.order_by("completed_date", direction=firestore.Query.DESCENDING)
             exam_assignments = exam_assignments_ref.stream()
@@ -5576,6 +5582,7 @@ def update_test_status(request, test_id, status):
 
 
 
+
 @csrf_exempt
 def fetch_assessments(request):
     """API endpoint to fetch all assessments (procedures) with pagination, search, status, and category filters."""
@@ -5802,3 +5809,890 @@ def upload_excel(request):
 
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)})
+
+# ==================== ADMIN REPORT PORTAL ====================
+
+@login_required
+def render_admin_report_portal(request):
+    """Render the admin report portal page"""
+    if not request.user.check_icon_navigation_permissions('reports'):
+        return HttpResponse('You are not authorized to access this page')
+    return render(request, 'assessments/admin_report_portal.html')
+
+
+@csrf_exempt
+@login_required
+def fetch_admin_report_filter_options(request):
+    """Fetch filter options for admin report portal"""
+    try:
+        # Get academic years from batches
+        batches = db.collection('Batches').stream()
+        academic_years = set()
+        for batch in batches:
+            batch_data = batch.to_dict()
+            year = batch_data.get('yearOfBatch', '')
+            if year:
+                academic_years.add(str(year))
+        
+        # Get institutions
+        institutions = []
+        if request.user.has_all_permissions():
+            inst_queryset = Institution.objects.all()
+        else:
+            inst_queryset = request.user.assigned_institutions.all()
+        
+        for inst in inst_queryset:
+            institutions.append({
+                'id': inst.id,
+                'name': inst.name,
+                'state': inst.state or ''
+            })
+        
+        # Get states
+        states = set()
+        for inst in Institution.objects.all():
+            if inst.state:
+                states.add(inst.state)
+        
+        # Get skills/procedures
+        procedures = db.collection('Procedures').stream()
+        skills = []
+        for proc in procedures:
+            proc_data = proc.to_dict()
+            proc_name = proc_data.get('procedureName', '')
+            if proc_name:
+                skills.append(proc_name)
+        
+        return JsonResponse({
+            'success': True,
+            'academic_years': sorted(list(academic_years), reverse=True),
+            'institutions': institutions,
+            'states': sorted(list(states)),
+            'skills': sorted(list(set(skills)))
+        })
+        
+    except Exception as e:
+        print(f"Error fetching filter options: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@login_required
+def fetch_admin_report_kpis(request):
+    """Fetch KPI metrics for admin report portal with filters"""
+    try:
+        # Get filter parameters
+        academic_year = request.GET.get('academic_year', '').strip()
+        region = request.GET.get('region', '').strip()
+        state = request.GET.get('state', '').strip()
+        institution = request.GET.get('institution', '').strip()
+        semester = request.GET.get('semester', '').strip()
+        osce_level = request.GET.get('osce_level', '').strip()  # All/Classroom/Mock/Final
+        category = request.GET.get('category', '').strip()
+        skill = request.GET.get('skill', '').strip()
+        date_from = request.GET.get('date_from', '').strip()
+        date_to = request.GET.get('date_to', '').strip()
+        
+        # Build query for ExamAssignment
+        query = db.collection('ExamAssignment').where('status', '==', 'Completed')
+        
+        # Apply filters
+        if osce_level and osce_level != 'All':
+            query = query.where('examType', '==', osce_level)
+        
+        if skill:
+            query = query.where('procedure_name', '==', skill)
+        
+        if date_from:
+            from_date = datetime.strptime(date_from, '%Y-%m-%d')
+            query = query.where('completed_date', '>=', from_date)
+        
+        if date_to:
+            to_date = datetime.strptime(date_to, '%Y-%m-%d')
+            query = query.where('completed_date', '<=', to_date)
+        
+        # Get all exam assignments
+        exam_assignments = query.stream()
+        
+        # Get batch data for academic year and semester filtering
+        batch_refs = {}
+        batch_data_cache = {}
+        
+        # Collect batchassignment references
+        batchassignment_refs = set()
+        exam_data_list = []
+        
+        for exam in exam_assignments:
+            exam_doc = exam.to_dict()
+            
+            # Get batchassignment reference
+            batchassignment_ref = exam_doc.get('batchassignment')
+            if batchassignment_ref:
+                batchassignment_refs.add(batchassignment_ref)
+            
+            exam_data_list.append({
+                'exam_doc': exam_doc,
+                'exam_id': exam.id
+            })
+        
+        # Fetch batchassignment data
+        for batchassignment_ref in batchassignment_refs:
+            try:
+                batchassignment_doc = batchassignment_ref.get()
+                if batchassignment_doc.exists:
+                    batchassignment_data = batchassignment_doc.to_dict()
+                    batch_ref = batchassignment_data.get('batch')
+                    if batch_ref:
+                        batch_doc = batch_ref.get()
+                        if batch_doc.exists:
+                            batch_data = batch_doc.to_dict()
+                            batch_year = batch_data.get('yearOfBatch', '')
+                            batch_semester = batch_data.get('semester', '')
+                            
+                            # Filter by academic year and semester
+                            if academic_year and batch_year != academic_year:
+                                continue
+                            if semester and semester != 'All' and batch_semester != semester:
+                                continue
+                            
+                            batch_data_cache[str(batchassignment_ref.id)] = {
+                                'year': batch_year,
+                                'semester': batch_semester,
+                                'batch_data': batch_data
+                            }
+            except Exception as e:
+                print(f"Error fetching batch data: {str(e)}")
+                continue
+        
+        # Filter exams by batch filters
+        filtered_exams = []
+        institutions_set = set()
+        students_set = set()
+        assessors_set = set()
+        total_score = 0
+        total_max_marks = 0
+        passed_count = 0
+        total_exams = 0
+        
+        for exam_item in exam_data_list:
+            exam_doc = exam_item['exam_doc']
+            batchassignment_ref = exam_doc.get('batchassignment')
+            
+            # Check if batch matches filters (only if academic year or semester is specified)
+            if academic_year or (semester and semester != 'All'):
+                if batchassignment_ref:
+                    batch_key = str(batchassignment_ref.id)
+                    if batch_key not in batch_data_cache:
+                        continue  # Skip if batch doesn't match filters
+                else:
+                    continue  # Skip exams without batch if filters require batch data
+            
+            # Filter by institution
+            if institution and institution != 'All':
+                unit_ref = exam_doc.get('unit')
+                if unit_ref:
+                    try:
+                        unit_doc = unit_ref.get()
+                        if unit_doc.exists:
+                            unit_data = unit_doc.to_dict()
+                            unit_name = unit_data.get('instituteName') or unit_data.get('hospitalName', '')
+                            if unit_name != institution:
+                                continue
+                    except:
+                        continue
+            
+            # Filter by state/region
+            if state or region:
+                unit_ref = exam_doc.get('unit')
+                if unit_ref:
+                    try:
+                        unit_doc = unit_ref.get()
+                        if unit_doc.exists:
+                            unit_data = unit_doc.to_dict()
+                            unit_state = unit_data.get('state', '')
+                            if state and unit_state != state:
+                                continue
+                    except:
+                        continue
+            
+            # Filter by category
+            if category:
+                exam_metadata = exam_doc.get('examMetaData', [])
+                found_category = False
+                for section in exam_metadata:
+                    for question in section.get('section_questions', []):
+                        if question.get('category', '').lower() == category.lower():
+                            found_category = True
+                            break
+                        for sub_q in question.get('sub_section_questions', []):
+                            if sub_q.get('category', '').lower() == category.lower():
+                                found_category = True
+                                break
+                    if found_category:
+                        break
+                if not found_category:
+                    continue
+            
+            # Collect data for KPIs
+            filtered_exams.append(exam_item)
+            total_exams += 1
+            
+            # Get institution
+            unit_ref = exam_doc.get('unit')
+            if unit_ref:
+                try:
+                    unit_doc = unit_ref.get()
+                    if unit_doc.exists:
+                        unit_name = unit_doc.to_dict().get('instituteName') or unit_doc.to_dict().get('hospitalName', '')
+                        if unit_name:
+                            institutions_set.add(unit_name)
+                except:
+                    pass
+            
+            # Get student
+            user_ref = exam_doc.get('user')
+            if user_ref:
+                try:
+                    user_doc = user_ref.get()
+                    if user_doc.exists:
+                        user_email = user_doc.to_dict().get('emailID', '')
+                        if user_email:
+                            students_set.add(user_email)
+                except:
+                    pass
+            
+            # Get assessor (from supervisor)
+            supervisor_ref = exam_doc.get('supervisor')
+            if supervisor_ref:
+                try:
+                    supervisor_doc = supervisor_ref.get()
+                    if supervisor_doc.exists:
+                        supervisor_email = supervisor_doc.to_dict().get('emailID', '')
+                        if supervisor_email:
+                            assessors_set.add(supervisor_email)
+                except:
+                    pass
+            
+            # Calculate scores
+            marks = exam_doc.get('marks', 0)
+            max_marks = sum(
+                question.get('right_marks_for_question', 0)
+                for section in exam_doc.get('examMetaData', [])
+                for question in section.get('section_questions', [])
+            )
+            
+            total_score += marks
+            total_max_marks += max_marks
+            
+            # Calculate pass rate (≥60%)
+            if max_marks > 0:
+                percentage = (marks / max_marks) * 100
+                if percentage >= 60:
+                    passed_count += 1
+        
+        # Calculate KPIs
+        institutions_active = len(institutions_set)
+        students_assessed = len(students_set)
+        active_assessors = len(assessors_set)
+        osces_conducted = total_exams
+        avg_osce_score = round((total_score / total_max_marks) * 100, 2) if total_max_marks > 0 else 0
+        pass_rate = round((passed_count / total_exams) * 100, 2) if total_exams > 0 else 0
+        
+        # Calculate inactive institutions (last 30 days)
+        thirty_days_ago = datetime.now() - timedelta(days=30)
+        inactive_institutions = 0
+        # This would need to check last activity from exam assignments
+        
+        return JsonResponse({
+            'success': True,
+            'kpis': {
+                'institutions_active': institutions_active,
+                'students_assessed': students_assessed,
+                'active_assessors': active_assessors,
+                'osces_conducted': osces_conducted,
+                'avg_osce_score': avg_osce_score,
+                'avg_osce_grade': get_grade_letter(avg_osce_score),
+                'pass_rate': pass_rate,
+                'inactive_institutions': inactive_institutions
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error fetching admin report KPIs: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@login_required
+def fetch_admin_report_skills_metrics(request):
+    """Fetch skills metrics table for admin report portal"""
+    try:
+        # Get filter parameters (same as KPIs)
+        academic_year = request.GET.get('academic_year', '').strip()
+        semester = request.GET.get('semester', '').strip()
+        osce_level = request.GET.get('osce_level', '').strip()
+        category = request.GET.get('category', '').strip()
+        skill = request.GET.get('skill', '').strip()
+        date_from = request.GET.get('date_from', '').strip()
+        date_to = request.GET.get('date_to', '').strip()
+        
+        # Categories to track
+        categories = ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Critical Thinking']
+        
+        # Build query
+        query = db.collection('ExamAssignment').where('status', '==', 'Completed')
+        
+        if osce_level and osce_level != 'All':
+            query = query.where('examType', '==', osce_level)
+        
+        if skill:
+            query = query.where('procedure_name', '==', skill)
+        
+        if date_from:
+            from_date = datetime.strptime(date_from, '%Y-%m-%d')
+            query = query.where('completed_date', '>=', from_date)
+        
+        if date_to:
+            to_date = datetime.strptime(date_to, '%Y-%m-%d')
+            query = query.where('completed_date', '<=', to_date)
+        
+        exam_assignments = query.stream()
+        
+        # Aggregate by category
+        category_stats = {cat: {'total_questions': 0, 'total_marks': 0, 'total_max': 0, 'count': 0, 'students': set()} for cat in categories}
+        
+        for exam in exam_assignments:
+            exam_doc = exam.to_dict()
+            
+            # Get batch data for filtering (only if filters require batch data)
+            if academic_year or (semester and semester != 'All'):
+                batchassignment_ref = exam_doc.get('batchassignment')
+                if batchassignment_ref:
+                    try:
+                        batchassignment_doc = batchassignment_ref.get()
+                        if batchassignment_doc.exists:
+                            batch_ref = batchassignment_doc.to_dict().get('batch')
+                            if batch_ref:
+                                batch_doc = batch_ref.get()
+                                if batch_doc.exists:
+                                    batch_data = batch_doc.to_dict()
+                                    if academic_year and batch_data.get('yearOfBatch', '') != academic_year:
+                                        continue
+                                    if semester and semester != 'All' and batch_data.get('semester', '') != semester:
+                                        continue
+                                else:
+                                    continue  # Skip if batch doesn't exist but filter requires it
+                            else:
+                                continue  # Skip if batch ref doesn't exist but filter requires it
+                        else:
+                            continue  # Skip if batchassignment doesn't exist but filter requires it
+                    except:
+                        continue  # Skip on error if filter requires batch data
+                else:
+                    continue  # Skip exams without batchassignment if filter requires batch data
+            
+            # Filter by category if specified
+            if category and category not in categories:
+                continue
+            
+            # Get student
+            user_ref = exam_doc.get('user')
+            student_email = None
+            if user_ref:
+                try:
+                    user_doc = user_ref.get()
+                    if user_doc.exists:
+                        student_email = user_doc.to_dict().get('emailID', '')
+                except:
+                    pass
+            
+            # Process exam metadata
+            exam_metadata = exam_doc.get('examMetaData', [])
+            for section in exam_metadata:
+                for question in section.get('section_questions', []):
+                    q_category = question.get('category', '')
+                    if q_category in categories:
+                        if not category or category == q_category:
+                            category_stats[q_category]['count'] += 1
+                            category_stats[q_category]['total_marks'] += question.get('answer_scored', 0)
+                            category_stats[q_category]['total_max'] += question.get('right_marks_for_question', 0)
+                            category_stats[q_category]['total_questions'] += 1
+                            if student_email:
+                                category_stats[q_category]['students'].add(student_email)
+                    
+                    # Check sub-questions
+                    for sub_q in question.get('sub_section_questions', []):
+                        sub_category = sub_q.get('category', '')
+                        if sub_category in categories:
+                            if not category or category == sub_category:
+                                category_stats[sub_category]['count'] += 1
+                                category_stats[sub_category]['total_marks'] += sub_q.get('answer_scored', 0)
+                                category_stats[sub_category]['total_max'] += sub_q.get('right_marks_for_question', 0)
+                                category_stats[sub_category]['total_questions'] += 1
+                                if student_email:
+                                    category_stats[sub_category]['students'].add(student_email)
+        
+        # Format results
+        skills_metrics = []
+        for cat in categories:
+            stats = category_stats[cat]
+            if stats['count'] > 0:
+                avg_score = round((stats['total_marks'] / stats['total_max']) * 100, 2) if stats['total_max'] > 0 else 0
+                skills_metrics.append({
+                    'skill_name': cat,
+                    'questions_count': stats['total_questions'],
+                    'avg_score_percentage': avg_score,
+                    'total_students': len(stats['students']),
+                    'avg_score': round(stats['total_marks'] / stats['count'], 2) if stats['count'] > 0 else 0,
+                    'max_score': round(stats['total_max'] / stats['count'], 2) if stats['count'] > 0 else 0
+                })
+        
+        return JsonResponse({
+            'success': True,
+            'skills_metrics': skills_metrics
+        })
+        
+    except Exception as e:
+        print(f"Error fetching skills metrics: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@login_required
+def fetch_admin_report_assessors_performance(request):
+    """Fetch assessors performance table for admin report portal"""
+    try:
+        # Get filter parameters
+        academic_year = request.GET.get('academic_year', '').strip()
+        semester = request.GET.get('semester', '').strip()
+        institution = request.GET.get('institution', '').strip()
+        
+        # Build query
+        query = db.collection('ExamAssignment').where('status', '==', 'Completed')
+        
+        exam_assignments = query.stream()
+        
+        # Aggregate by assessor
+        assessor_stats = {}
+        
+        for exam in exam_assignments:
+            exam_doc = exam.to_dict()
+            
+            # Get batch data for filtering (only if filters require batch data)
+            if academic_year or (semester and semester != 'All'):
+                batchassignment_ref = exam_doc.get('batchassignment')
+                if batchassignment_ref:
+                    try:
+                        batchassignment_doc = batchassignment_ref.get()
+                        if batchassignment_doc.exists:
+                            batch_ref = batchassignment_doc.to_dict().get('batch')
+                            if batch_ref:
+                                batch_doc = batch_ref.get()
+                                if batch_doc.exists:
+                                    batch_data = batch_doc.to_dict()
+                                    if academic_year and batch_data.get('yearOfBatch', '') != academic_year:
+                                        continue
+                                    if semester and semester != 'All' and batch_data.get('semester', '') != semester:
+                                        continue
+                                else:
+                                    continue  # Skip if batch doesn't exist but filter requires it
+                            else:
+                                continue  # Skip if batch ref doesn't exist but filter requires it
+                        else:
+                            continue  # Skip if batchassignment doesn't exist but filter requires it
+                    except:
+                        continue  # Skip on error if filter requires batch data
+                else:
+                    continue  # Skip exams without batchassignment if filter requires batch data
+            
+            # Filter by institution
+            if institution and institution != 'All':
+                unit_ref = exam_doc.get('unit')
+                if unit_ref:
+                    try:
+                        unit_doc = unit_ref.get()
+                        if unit_doc.exists:
+                            unit_name = unit_doc.to_dict().get('instituteName') or unit_doc.to_dict().get('hospitalName', '')
+                            if unit_name != institution:
+                                continue
+                    except:
+                        continue
+            
+            # Get assessor
+            supervisor_ref = exam_doc.get('supervisor')
+            if not supervisor_ref:
+                continue
+            
+            try:
+                supervisor_doc = supervisor_ref.get()
+                if not supervisor_doc.exists:
+                    continue
+                
+                supervisor_data = supervisor_doc.to_dict()
+                assessor_email = supervisor_data.get('emailID', '')
+                assessor_name = supervisor_data.get('username', '') or supervisor_data.get('fullName', '') or assessor_email
+                
+                if not assessor_email:
+                    continue
+                
+                # Get institution name
+                unit_ref = exam_doc.get('unit')
+                inst_name = 'Unknown'
+                if unit_ref:
+                    try:
+                        unit_doc = unit_ref.get()
+                        if unit_doc.exists:
+                            unit_data = unit_doc.to_dict()
+                            inst_name = unit_data.get('instituteName') or unit_data.get('hospitalName', 'Unknown')
+                    except:
+                        pass
+                
+                # Initialize assessor stats
+                if assessor_email not in assessor_stats:
+                    assessor_stats[assessor_email] = {
+                        'name': assessor_name,
+                        'institution': inst_name,
+                        'osces_rated': 0,
+                        'students_rated': set(),
+                        'scores': [],
+                        'institution_scores': []
+                    }
+                
+                # Update stats
+                assessor_stats[assessor_email]['osces_rated'] += 1
+                
+                # Get student
+                user_ref = exam_doc.get('user')
+                if user_ref:
+                    try:
+                        user_doc = user_ref.get()
+                        if user_doc.exists:
+                            student_email = user_doc.to_dict().get('emailID', '')
+                            if student_email:
+                                assessor_stats[assessor_email]['students_rated'].add(student_email)
+                    except:
+                        pass
+                
+                # Calculate score
+                marks = exam_doc.get('marks', 0)
+                max_marks = sum(
+                    question.get('right_marks_for_question', 0)
+                    for section in exam_doc.get('examMetaData', [])
+                    for question in section.get('section_questions', [])
+                )
+                
+                if max_marks > 0:
+                    percentage = (marks / max_marks) * 100
+                    assessor_stats[assessor_email]['scores'].append(percentage)
+                    assessor_stats[assessor_email]['institution_scores'].append((inst_name, percentage))
+                
+            except Exception as e:
+                print(f"Error processing assessor: {str(e)}")
+                continue
+        
+        # Calculate institution means
+        institution_means = {}
+        for assessor_email, stats in assessor_stats.items():
+            for inst_name, score in stats['institution_scores']:
+                if inst_name not in institution_means:
+                    institution_means[inst_name] = []
+                institution_means[inst_name].append(score)
+        
+        for inst_name in institution_means:
+            institution_means[inst_name] = sum(institution_means[inst_name]) / len(institution_means[inst_name]) if institution_means[inst_name] else 0
+        
+        # Format results
+        assessors_performance = []
+        for assessor_email, stats in assessor_stats.items():
+            if len(stats['scores']) > 0:
+                mean_score = sum(stats['scores']) / len(stats['scores'])
+                inst_mean = institution_means.get(stats['institution'], 0)
+                delta = mean_score - inst_mean
+                
+                # Calculate standard deviation
+                if len(stats['scores']) > 1:
+                    variance = sum((x - mean_score) ** 2 for x in stats['scores']) / len(stats['scores'])
+                    score_sd = round(variance ** 0.5, 2)
+                else:
+                    score_sd = 0
+                
+                assessors_performance.append({
+                    'assessor': stats['name'],
+                    'institution': stats['institution'],
+                    'osces_rated': stats['osces_rated'],
+                    'students_rated': len(stats['students_rated']),
+                    'mean_score': round(mean_score, 2),
+                    'delta_vs_inst_mean': round(delta, 2),
+                    'score_sd': score_sd,
+                    'irr': 'N/A',  # Would need multiple assessors rating same exam
+                    'last_calibration': 'N/A'  # Would need tracking
+                })
+        
+        # Sort by assessor name
+        assessors_performance.sort(key=lambda x: x['assessor'])
+        
+        return JsonResponse({
+            'success': True,
+            'assessors_performance': assessors_performance
+        })
+        
+    except Exception as e:
+        print(f"Error fetching assessors performance: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@login_required
+def fetch_admin_report_usage_engagement(request):
+    """Fetch usage & engagement data for admin report portal"""
+    try:
+        # Institution Last Access Date
+        institutions_access = []
+        
+        # Get all institutions
+        institutions = Institution.objects.all()
+        for inst in institutions:
+            # Get unit head's last login
+            last_login = None
+            if inst.unit_head:
+                last_login = inst.unit_head.last_login
+            
+            if last_login:
+                if isinstance(last_login, datetime):
+                    days_since_login = (datetime.now(datetime.timezone.utc).replace(tzinfo=None) - last_login.replace(tzinfo=datetime.timezone.utc).replace(tzinfo=None)).days
+                else:
+                    days_since_login = 999
+                status = 'Active' if days_since_login < 30 else 'In-Active'
+            else:
+                status = 'In-Active'
+            
+            institutions_access.append({
+                'institution': inst.name,
+                'last_login': last_login.strftime('%Y-%m-%d %H:%M:%S') if last_login else 'Never',
+                'status': status
+            })
+        
+        # OSCE Upload Timeliness
+        upload_timeliness = []
+        exam_assignments = db.collection('ExamAssignment').where('status', '==', 'Completed').stream()
+        
+        for exam in exam_assignments:
+            exam_doc = exam.to_dict()
+            created_at = exam_doc.get('createdAt')
+            completed_date = exam_doc.get('completed_date')
+            
+            if created_at and completed_date:
+                # Calculate delay
+                if isinstance(created_at, datetime):
+                    created_dt = created_at
+                else:
+                    created_dt = created_at
+                
+                if isinstance(completed_date, datetime):
+                    completed_dt = completed_date
+                else:
+                    completed_dt = completed_date
+                
+                delay_days = (completed_dt - created_dt).days
+                
+                # Get unit name
+                unit_ref = exam_doc.get('unit')
+                unit_name = 'Unknown'
+                if unit_ref:
+                    try:
+                        unit_doc = unit_ref.get()
+                        if unit_doc.exists:
+                            unit_data = unit_doc.to_dict()
+                            unit_name = unit_data.get('instituteName') or unit_data.get('hospitalName', 'Unknown')
+                    except:
+                        pass
+                
+                upload_timeliness.append({
+                    'osce_date': completed_dt.strftime('%Y-%m-%d') if completed_dt else 'N/A',
+                    'upload_date': completed_dt.strftime('%Y-%m-%d') if completed_dt else 'N/A',
+                    'delay_days': delay_days,
+                    'institution': unit_name
+                })
+        
+        # Checklist Versions Used (would need version tracking)
+        checklist_versions = []
+        procedures = db.collection('Procedures').stream()
+        for proc in procedures:
+            proc_doc = proc.to_dict()
+            proc_name = proc_doc.get('procedureName', 'Unknown')
+            version_id = proc_doc.get('version', '1.0')  # Default if not tracked
+            
+            # Get institutions using this procedure
+            exam_assignments = db.collection('ExamAssignment').where('procedure_name', '==', proc_name).stream()
+            institutions_using = set()
+            for exam in exam_assignments:
+                exam_doc = exam.to_dict()
+                unit_ref = exam_doc.get('unit')
+                if unit_ref:
+                    try:
+                        unit_doc = unit_ref.get()
+                        if unit_doc.exists:
+                            unit_data = unit_doc.to_dict()
+                            unit_name = unit_data.get('instituteName') or unit_data.get('hospitalName', '')
+                            if unit_name:
+                                institutions_using.add(unit_name)
+                    except:
+                        pass
+            
+            if institutions_using:
+                checklist_versions.append({
+                    'skill': proc_name,
+                    'version_id': str(version_id),
+                    'institutions': list(institutions_using)
+                })
+        
+        return JsonResponse({
+            'success': True,
+            'institution_access': institutions_access,
+            'upload_timeliness': upload_timeliness[:100],  # Limit to 100 for performance
+            'checklist_versions': checklist_versions
+        })
+        
+    except Exception as e:
+        print(f"Error fetching usage & engagement: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@login_required
+def export_admin_report_excel(request):
+    """Export admin report data to Excel"""
+    try:
+        # Get filter parameters
+        academic_year = request.GET.get('academic_year', '').strip()
+        semester = request.GET.get('semester', '').strip()
+        institution = request.GET.get('institution', '').strip()
+        osce_level = request.GET.get('osce_level', '').strip()
+        category = request.GET.get('category', '').strip()
+        skill = request.GET.get('skill', '').strip()
+        date_from = request.GET.get('date_from', '').strip()
+        date_to = request.GET.get('date_to', '').strip()
+        
+        # Create Excel file
+        buffer = BytesIO()
+        workbook = xlsxwriter.Workbook(buffer)
+        
+        # Header format
+        header_format = workbook.add_format({
+            'bold': True,
+            'bg_color': '#4472C4',
+            'font_color': 'white',
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter'
+        })
+        
+        # Cell format
+        cell_format = workbook.add_format({
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter'
+        })
+        
+        # Get KPIs
+        kpis_response = fetch_admin_report_kpis(request)
+        kpis_data = json.loads(kpis_response.content)
+        
+        # Worksheet 1: KPIs
+        worksheet1 = workbook.add_worksheet('KPIs')
+        worksheet1.write(0, 0, 'KPI', header_format)
+        worksheet1.write(0, 1, 'Value', header_format)
+        
+        if kpis_data.get('success'):
+            kpis = kpis_data.get('kpis', {})
+            row = 1
+            worksheet1.write(row, 0, 'Institutions Active', cell_format)
+            worksheet1.write(row, 1, kpis.get('institutions_active', 0), cell_format)
+            row += 1
+            worksheet1.write(row, 0, 'Students Assessed', cell_format)
+            worksheet1.write(row, 1, kpis.get('students_assessed', 0), cell_format)
+            row += 1
+            worksheet1.write(row, 0, 'Active Assessors', cell_format)
+            worksheet1.write(row, 1, kpis.get('active_assessors', 0), cell_format)
+            row += 1
+            worksheet1.write(row, 0, 'OSCEs Conducted', cell_format)
+            worksheet1.write(row, 1, kpis.get('osces_conducted', 0), cell_format)
+            row += 1
+            worksheet1.write(row, 0, 'Avg OSCE Score', cell_format)
+            worksheet1.write(row, 1, f"{kpis.get('avg_osce_score', 0)}% ({kpis.get('avg_osce_grade', 'N/A')})", cell_format)
+            row += 1
+            worksheet1.write(row, 0, 'Pass Rate (≥60%)', cell_format)
+            worksheet1.write(row, 1, f"{kpis.get('pass_rate', 0)}%", cell_format)
+        
+        # Worksheet 2: Skills Metrics
+        worksheet2 = workbook.add_worksheet('Skills Metrics')
+        worksheet2.write(0, 0, 'Skill Name', header_format)
+        worksheet2.write(0, 1, 'Questions Count', header_format)
+        worksheet2.write(0, 2, 'Avg Score %', header_format)
+        worksheet2.write(0, 3, 'Total Students', header_format)
+        worksheet2.write(0, 4, 'Avg Score', header_format)
+        worksheet2.write(0, 5, 'Max Score', header_format)
+        
+        # Fetch skills metrics
+        skills_response = fetch_admin_report_skills_metrics(request)
+        skills_data = json.loads(skills_response.content)
+        
+        if skills_data.get('success'):
+            row = 1
+            for skill in skills_data.get('skills_metrics', []):
+                worksheet2.write(row, 0, skill.get('skill_name', ''), cell_format)
+                worksheet2.write(row, 1, skill.get('questions_count', 0), cell_format)
+                worksheet2.write(row, 2, f"{skill.get('avg_score_percentage', 0)}%", cell_format)
+                worksheet2.write(row, 3, skill.get('total_students', 0), cell_format)
+                worksheet2.write(row, 4, skill.get('avg_score', 0), cell_format)
+                worksheet2.write(row, 5, skill.get('max_score', 0), cell_format)
+                row += 1
+        
+        # Worksheet 3: Assessors Performance
+        worksheet3 = workbook.add_worksheet('Assessors Performance')
+        worksheet3.write(0, 0, 'Assessor', header_format)
+        worksheet3.write(0, 1, 'Institution', header_format)
+        worksheet3.write(0, 2, 'OSCEs Rated', header_format)
+        worksheet3.write(0, 3, 'Students Rated', header_format)
+        worksheet3.write(0, 4, 'Mean Score', header_format)
+        worksheet3.write(0, 5, 'Δ vs Inst. Mean', header_format)
+        worksheet3.write(0, 6, 'Score SD', header_format)
+        worksheet3.write(0, 7, 'IRR', header_format)
+        worksheet3.write(0, 8, 'Last Calibration', header_format)
+        
+        # Fetch assessors performance
+        assessors_response = fetch_admin_report_assessors_performance(request)
+        assessors_data = json.loads(assessors_response.content)
+        
+        if assessors_data.get('success'):
+            row = 1
+            for assessor in assessors_data.get('assessors_performance', []):
+                worksheet3.write(row, 0, assessor.get('assessor', ''), cell_format)
+                worksheet3.write(row, 1, assessor.get('institution', ''), cell_format)
+                worksheet3.write(row, 2, assessor.get('osces_rated', 0), cell_format)
+                worksheet3.write(row, 3, assessor.get('students_rated', 0), cell_format)
+                worksheet3.write(row, 4, assessor.get('mean_score', 0), cell_format)
+                worksheet3.write(row, 5, assessor.get('delta_vs_inst_mean', 0), cell_format)
+                worksheet3.write(row, 6, assessor.get('score_sd', 0), cell_format)
+                worksheet3.write(row, 7, assessor.get('irr', 'N/A'), cell_format)
+                worksheet3.write(row, 8, assessor.get('last_calibration', 'N/A'), cell_format)
+                row += 1
+        
+        workbook.close()
+        buffer.seek(0)
+        
+        # Create response
+        response = HttpResponse(buffer.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = 'attachment; filename="admin_report.xlsx"'
+        
+        return response
+        
+    except Exception as e:
+        print(f"Error exporting admin report: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
