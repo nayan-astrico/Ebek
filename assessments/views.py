@@ -675,6 +675,8 @@ def create_procedure_assignment_and_test(request):
                         }
                         
                         # Add year and semester from batch
+                        year_of_batch = batch_data.get('yearOfBatch', '')
+                        semester = batch_data.get('semester', '')
                         if year_of_batch:
                             batchassignment_data['yearOfBatch'] = year_of_batch
                         if semester:
@@ -6694,5 +6696,266 @@ def export_admin_report_excel(request):
         
     except Exception as e:
         print(f"Error exporting admin report: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@login_required
+def fetch_institutions_hospitals_for_report(request):
+    """Fetch institutions and hospitals based on user permissions for OSCE report"""
+    try:
+        from assessments.models import Institution, Hospital
+        
+        institutions = []
+        hospitals = []
+        
+        # Check if user has all permissions
+        if request.user.has_all_permissions() or request.user.access_all_institutions:
+            django_institutions = Institution.objects.filter(is_active=True, onboarding_type="b2b")
+        else:
+            django_institutions = request.user.assigned_institutions.filter(is_active=True)
+        
+        if request.user.has_all_permissions() or request.user.access_all_hospitals:
+            django_hospitals = Hospital.objects.filter(is_active=True, onboarding_type="b2b")
+        else:
+            django_hospitals = request.user.assigned_hospitals.filter(is_active=True)
+        
+        # Add institutions
+        for inst in django_institutions:
+            institutions.append({
+                'id': inst.id,
+                'name': inst.name,
+                'type': 'institution'
+            })
+        
+        # Add hospitals
+        for hosp in django_hospitals:
+            hospitals.append({
+                'id': hosp.id,
+                'name': hosp.name,
+                'type': 'hospital'
+            })
+        
+        # Also fetch from Firebase InstituteNames for backward compatibility
+        try:
+            institutes_ref = db.collection('InstituteNames')
+            for doc in institutes_ref.stream():
+                institute_data = doc.to_dict()
+                institute_name = institute_data.get('instituteName', 'Unnamed Institute')
+                
+                # Check if already in Django list or if user has all permissions
+                if request.user.has_all_permissions() or request.user.access_all_institutions:
+                    if not any(inst['name'] == institute_name for inst in institutions):
+                        institutions.append({
+                            'id': doc.id,
+                            'name': institute_name,
+                            'type': 'institution'
+                        })
+                else:
+                    # Check if user has access to this institution
+                    assigned_names = list(request.user.assigned_institutions.values_list('name', flat=True))
+                    if institute_name in assigned_names:
+                        if not any(inst['name'] == institute_name for inst in institutions):
+                            institutions.append({
+                                'id': doc.id,
+                                'name': institute_name,
+                                'type': 'institution'
+                            })
+        except Exception as e:
+            print(f"Error fetching from Firebase: {str(e)}")
+        
+        return JsonResponse({
+            'success': True,
+            'institutions': institutions,
+            'hospitals': hospitals
+        })
+    except Exception as e:
+        print(f"Error fetching institutions/hospitals: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@csrf_exempt
+@login_required
+def fetch_osce_report(request):
+    """Fetch Institution-level OSCE report data with filters"""
+    try:
+        # Get filter parameters
+        academic_year = request.GET.get('academic_year', '').strip()
+        institution_id = request.GET.get('institution_id', '').strip()
+        institution_type = request.GET.get('institution_type', '').strip()  # 'institution' or 'hospital'
+        semester = request.GET.get('semester', '').strip()
+        osce_level = request.GET.get('osce_level', '').strip()  # All/Classroom/Mock/Final
+        skill = request.GET.get('skill', '').strip()
+        student_search = request.GET.get('student_search', '').strip()
+        
+        # Validate mandatory fields
+        if not academic_year:
+            return JsonResponse({'success': False, 'error': 'Academic year is required'}, status=400)
+        if not institution_id or not institution_type:
+            return JsonResponse({'success': False, 'error': 'Institution/Hospital selection is required'}, status=400)
+        
+        # Get institution/hospital name from Django models
+        institution_name = None
+        if institution_type == 'institution':
+            from assessments.models import Institution
+            try:
+                inst = Institution.objects.get(id=institution_id)
+                institution_name = inst.name
+            except Institution.DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Institution not found'}, status=404)
+        elif institution_type == 'hospital':
+            from assessments.models import Hospital
+            try:
+                hosp = Hospital.objects.get(id=institution_id)
+                institution_name = hosp.name
+            except Hospital.DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Hospital not found'}, status=404)
+        
+        # Query BatchAssignment with yearOfBatch filter
+        batch_assignments_query = db.collection('BatchAssignment').where('yearOfBatch', '==', academic_year)
+        batch_assignments = batch_assignments_query.stream()
+        
+        # Get institution reference from Firebase for filtering
+        institution_ref = None
+        if institution_name:
+            try:
+                inst_docs = db.collection('InstituteNames').where('instituteName', '==', institution_name).limit(1).get()
+                if inst_docs:
+                    institution_ref = inst_docs[0].reference
+            except Exception as e:
+                print(f"Error fetching institution reference: {str(e)}")
+        
+        # Collections to track data
+        all_user_ids = set()  # All unique user IDs from examassignments (for enrolled)
+        completed_user_ids = set()  # Unique user IDs from completed examassignments (for assessed)
+        unique_procedures = set()  # Unique procedure IDs
+        filtered_batch_assignments_count = 0
+        
+        # For calculating average score and pass rate
+        completed_exam_scores = []  # List of percentages for completed exams
+        
+        # Process each BatchAssignment
+        for ba_doc in batch_assignments:
+            ba_data = ba_doc.to_dict()
+            
+            # Filter by institution/hospital (unit field in BatchAssignment)
+            if institution_ref:
+                unit_ref = ba_data.get('unit')
+                if not unit_ref or unit_ref.id != institution_ref.id:
+                    continue
+            
+            # Filter by semester
+            if semester and semester != 'All':
+                ba_semester = ba_data.get('semester', '')
+                if ba_semester != semester:
+                    continue
+            
+            # Filter by OSCE level (examType)
+            if osce_level and osce_level != 'All':
+                exam_type = ba_data.get('examType', '')
+                if exam_type != osce_level:
+                    continue
+            
+            # Filter by skill/procedure if applied (procedure ID)
+            if skill:
+                procedure_ref = ba_data.get('procedure')
+                if procedure_ref:
+                    # Compare procedure reference ID with selected procedure ID
+                    if procedure_ref.id != skill:
+                        continue
+                else:
+                    continue  # Skip if no procedure reference
+            
+            # Count this BatchAssignment
+            filtered_batch_assignments_count += 1
+            
+            # Collect procedure ID
+            procedure_ref = ba_data.get('procedure')
+            if procedure_ref:
+                unique_procedures.add(procedure_ref.id)
+            
+            # Get examassignments from batchassignment
+            exam_assignments = ba_data.get('examassignment', [])
+            for exam_ref in exam_assignments:
+                if exam_ref:
+                    try:
+                        exam_doc = exam_ref.get()
+                        if exam_doc.exists:
+                            exam_data = exam_doc.to_dict()
+                            user_ref = exam_data.get('user')
+                            if user_ref:
+                                user_id = user_ref.id
+                                # Add to all user IDs (for enrolled)
+                                all_user_ids.add(user_id)
+                                
+                                # Process completed exams for score calculation
+                                if str(exam_data.get('status', '')).lower() == 'completed':
+                                    completed_user_ids.add(user_id)
+                                    
+                                    # Calculate percentage for completed exams
+                                    total_score = exam_data.get("marks", 0)
+                                    max_marks = sum(
+                                        question.get('right_marks_for_question', 0)
+                                        for section in exam_data.get('examMetaData', [])
+                                        for question in section.get("section_questions", [])
+                                    )
+                                    if max_marks > 0:
+                                        percentage = round((total_score / max_marks) * 100, 2)
+                                        completed_exam_scores.append(percentage)
+                    except Exception as e:
+                        print(f"Error processing exam assignment: {str(e)}")
+                        continue
+        
+        # Calculate metrics
+        total_students_enrolled = len(all_user_ids)
+        students_assessed = len(completed_user_ids)
+        total_osce_conducted = filtered_batch_assignments_count
+        assessment_rate = round((students_assessed / total_students_enrolled * 100) if total_students_enrolled > 0 else 0, 2)
+        skills_evaluated = len(unique_procedures)
+        
+        # Calculate Average Institution Score
+        average_institution_score = 0
+        if completed_exam_scores:
+            average_institution_score = round(sum(completed_exam_scores) / len(completed_exam_scores), 2)
+        
+        # Calculate Pass Rate (≥80%)
+        pass_count = sum(1 for score in completed_exam_scores if score >= 80)
+        pass_rate = round((pass_count / len(completed_exam_scores) * 100) if completed_exam_scores else 0, 2)
+        
+        # Get grade letter for average score
+        def get_grade_letter(percentage):
+            if percentage >= 90:
+                return 'A+'
+            elif percentage >= 85:
+                return 'A'
+            elif percentage >= 80:
+                return 'B+'
+            elif percentage >= 75:
+                return 'B'
+            elif percentage >= 70:
+                return 'C+'
+            elif percentage >= 65:
+                return 'C'
+            else:
+                return 'D'
+        
+        grade_letter = get_grade_letter(average_institution_score) if average_institution_score > 0 else '-'
+        
+        return JsonResponse({
+            'success': True,
+            'total_students_enrolled': total_students_enrolled,
+            'students_assessed': students_assessed,
+            'total_osce_conducted': total_osce_conducted,
+            'assessment_rate': assessment_rate,
+            'skills_evaluated': skills_evaluated,
+            'average_institution_score': average_institution_score,
+            'grade_letter': grade_letter,
+            'pass_rate': pass_rate,
+            'filter_year': academic_year
+        })
+        
+    except Exception as e:
+        print(f"Error fetching OSCE report: {str(e)}")
         traceback.print_exc()
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
