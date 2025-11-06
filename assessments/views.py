@@ -46,7 +46,7 @@ firebase_database = os.getenv('FIREBASE_DATABASE')
 
 db = firestore.client(database_id=firebase_database)
 
-def parse_excel_to_json(dataframe, procedure_name):
+def parse_excel_to_json(dataframe, procedure_name,category):
     """Parse the uploaded Excel file to JSON."""
     procedure_json = {
         "procedure_name": procedure_name,  # Procedure Name passed as an argument
@@ -78,7 +78,8 @@ def parse_excel_to_json(dataframe, procedure_name):
                 "answer_scored": 0,
                 "sub_section_questions_present": False,
                 "sub_section_questions": [],
-                "category": row["Category"] if pd.isna(row["Indicators"]) and not pd.isna(row["Category"]) else "",
+                "category": category,
+                # "category": row["Category"] if pd.isna(row["Indicators"]) and not pd.isna(row["Category"]) else "",
                 "critical": row["Critical"] == True if not pd.isna(row["Critical"]) else False  # Add critical flag
             }
 
@@ -88,7 +89,9 @@ def parse_excel_to_json(dataframe, procedure_name):
                 "question": row["Indicators"],  # Indicators column
                 "right_marks_for_question": float(row["Marks"]) if not pd.isna(row["Marks"]) else 0,
                 "answer_scored": 0,
-                "category": row["Category"] if not pd.isna(row["Category"]) else "",
+                "category": category,
+
+                # "category": row["Category"] if not pd.isna(row["Category"]) else "",
                 "critical": row["Critical"] == True if not pd.isna(row["Critical"]) else False  # Add critical flag
             })
 
@@ -188,6 +191,7 @@ def create_assessment(request):
         "page_obj": page_obj,
         "query": query,
     })
+
 
 
 class ProcedureAPIView(APIView):
@@ -5541,3 +5545,232 @@ def update_test_status(request, test_id, status):
 
         if not status:
             return JsonResponse({'error': 'Status is required'}, status=400)
+
+
+
+@csrf_exempt
+def fetch_assessments(request):
+    """API endpoint to fetch all assessments (procedures) with pagination, search, status, and category filters."""
+    try:
+        # --- Query Parameters ---
+        offset = int(request.GET.get('offset', 0))
+        limit = int(request.GET.get('limit', 10))
+        search = request.GET.get('search', '').strip().lower()
+        status_filters = request.GET.getlist('status')
+        status_filters = [s.lower() for s in status_filters if s]
+        category_filters = request.GET.getlist('category')  # <-- Add this line
+        category_filters = [c.lower() for c in category_filters if c]
+
+        # --- Fetch Data from Firestore ---
+        procedures_ref = db.collection('ProcedureTable')
+        all_docs = list(procedures_ref.stream())
+
+        filtered_docs = []
+
+        for doc in all_docs:
+            data = doc.to_dict()
+            name = data.get('procedureName', 'N/A')
+            examMetaData = data.get("examMetaData", [])
+            active = data.get("active", True)
+            status = 'active' if active else 'inactive'
+
+            # Extract Category
+            category = 'N/A'
+            if examMetaData:
+                section = examMetaData[0]
+                section_questions = section.get("section_questions", [])
+                if section_questions:
+                    category = section_questions[0].get("category", "N/A")
+
+            # --- Apply Filters ---
+            if search and search not in name.lower():
+                continue
+            if status_filters and status not in status_filters:
+                continue
+            if category_filters and category.lower() not in category_filters:
+                continue
+
+            # --- Count Questions ---
+            question_count = sum(len(section.get("section_questions", []))
+                                 for section in examMetaData if isinstance(section, dict))
+
+            filtered_docs.append({
+                'id': doc.id,
+                'name': name,
+                'questions': question_count,
+                'active': active,
+                'category': category,
+                'status': status
+            })
+
+        # --- Pagination ---
+        total_items = len(filtered_docs)
+        paginated = filtered_docs[offset:offset + limit]
+        all_loaded = offset + limit >= total_items
+
+        return JsonResponse({
+            'assessments': paginated,
+            'all_loaded': all_loaded,
+            'total_count': total_items
+        }, status=200)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+import pandas as pd
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+
+
+@csrf_exempt
+@require_POST
+def upload_preview(request):
+    file = request.FILES.get('file')
+    if not file:
+        return JsonResponse({'status': 'error', 'message': 'No file uploaded'})
+
+    try:
+        # Read Excel, header assumed at row 1 (0-indexed)
+        df = pd.read_excel(file, header=0)
+
+        # Clean column names (strip spaces)
+        df.columns = df.columns.str.strip()
+
+        # Replace NaN with empty string for preview
+        preview_data = df.head(10).fillna('').to_dict(orient='records')
+
+        # Required headers
+        required_columns = [
+            'Section', 'Parameters', 'Indicators',
+            'Category (i.e C for Communication, K for Knowledge and D for Documentation)',
+            'Marks', 'Critical'
+        ]
+        missing_cols = [col for col in required_columns if col not in df.columns]
+
+        errors = []
+        if missing_cols:
+            errors.append({'row': '-', 'message': f'Missing columns: {", ".join(missing_cols)}'})
+
+        parameters_seen = set()
+
+        for idx, row in df.iterrows():
+            row_number = idx + 2  # Excel row number
+
+            # Section required
+            if str(row.get('Section')).strip() == '':
+                errors.append({'row': row_number, 'message': 'Section is required'})
+
+            # Parameters required + uniqueness
+            param = str(row.get('Parameters')).strip()
+            if param == '':
+                errors.append({'row': row_number, 'message': 'Parameters is required'})
+            elif param in parameters_seen:
+                errors.append({'row': row_number, 'message': f'Duplicate Parameters: {param}'})
+            else:
+                parameters_seen.add(param)
+
+            # Marks must be int
+            marks = row.get('Marks')
+            if marks == '' or pd.isna(marks):
+                errors.append({'row': row_number, 'message': 'Marks is required'})
+            else:
+                try:
+                    int(marks)
+                except ValueError:
+                    errors.append({'row': row_number, 'message': 'Marks must be an integer'})
+
+            # Critical must be boolean
+            critical = str(row.get('Critical')).strip().lower()
+            if critical not in ['true', 'false', '1', '0']:
+                errors.append({'row': row_number, 'message': 'Critical must be boolean (True/False)'})
+
+        return JsonResponse({
+            'status': 'success',
+            'preview': preview_data,
+            'validation': errors,
+            'total_rows': len(df)
+        })
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)})
+
+@csrf_exempt
+@require_POST
+def upload_excel(request):
+    file = request.FILES.get('file')
+    procedure_name = request.POST.get('procedure_name')
+    category = request.POST.get('category')
+
+    if not file:
+        return JsonResponse({'status': 'error', 'message': 'No file uploaded'})
+
+    try:
+        # Save the file to MEDIA_ROOT/uploaded_excels/
+        file_name = f"{uuid.uuid4()}_{file.name}".replace(" ", "_")
+        file_path = os.path.join(settings.MEDIA_ROOT, 'uploaded_excels', file_name)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+        with open(file_path, 'wb+') as f:
+            for chunk in file.chunks():
+                f.write(chunk)
+
+        # Now read it via pandas
+        df = pd.read_excel(file_path)
+
+        # --- Your existing processing logic ---
+        df.columns = df.columns.str.strip()
+        required_columns = [
+            'Section', 'Parameters',
+            'Marks', 'Critical'
+        ]
+        missing_cols = [col for col in required_columns if col not in df.columns]
+        if missing_cols:
+            return JsonResponse({'status': 'error', 'message': f'Missing columns: {", ".join(missing_cols)}'})
+
+        # Convert Marks and Critical
+        df['Marks'] = pd.to_numeric(df['Marks'], errors='coerce').fillna(0).astype(int)
+        df['Critical'] = df['Critical'].astype(str).str.lower().map({'true': True, 'false': False, '1': True, '0': False}).fillna(False)
+
+        # Fill missing strings
+        df[['Section', 'Parameters', 'Indicators', 'Category (i.e C for Communication, K for Knowledge and D for Documentation)']] = \
+            df[['Section', 'Parameters', 'Indicators', 'Category (i.e C for Communication, K for Knowledge and D for Documentation)']].fillna('')
+
+
+        # Validate unique Parameters
+        if df['Parameters'].duplicated().any():
+            duplicates = df[df['Parameters'].duplicated(keep=False)]['Parameters'].tolist()
+            return JsonResponse({'status': 'error', 'message': f'Duplicate Parameters found: {", ".join(duplicates)}'})
+
+        success = len(df)
+        updated = 0
+        errors = 0
+
+        # Note add code to add it to the firebase database
+
+        df_data = pd.read_excel(file_path)
+        parsed_json = parse_excel_to_json(df_data, procedure_name,category)
+
+        # Upload to Firebase
+        procedure_ref = db.collection('ProcedureTable').document()
+        procedure_ref.set({
+            "procedureName": parsed_json['procedure_name'],
+            "examMetaData": parsed_json['exammetadata'],
+            "notes": parsed_json['notes'],
+            "active": True
+        })
+        print(f"File uploaded successfully - {procedure_ref.id}")
+
+        # logger.info(f"File uploaded successfully - {procedure_ref.id}")
+
+        return JsonResponse({
+            'status': 'success',
+            'file_path': file_path,  
+            'total_rows': len(df),
+            'success': success,
+            'updated': updated,
+            'errors': errors
+        })
+
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)})

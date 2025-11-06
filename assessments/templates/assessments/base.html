@@ -794,12 +794,12 @@
         </div>
         {% endif %}
 
-        {% if request.user.user_role == 'super_admin' %}
-        
-            <div class="nav-item">
-                <a href="{% url 'create_assessment' %}" class="nav-link" title="Create New Assessment">
-            <i class="fas fa-file-medical"></i>
-                    <span>Create Assessment</span>
+        <!-- Showing the button if the user is a Superuser. -->
+        {% if request.user.is_superuser or request.user.user_role == 'ebek_admin' %}
+        <div class="nav-item">
+            <a href="{% url 'create_assessment' %}" class="nav-link" title="Create New Assessment">
+                <i class="fas fa-file-medical"></i>
+                <span>Create Assessment</span>
             </a>
         </div>
         {% endif %}
