@@ -2678,7 +2678,7 @@
         
         if (testType === 'B2B') {
             // B2B: Use per-procedure assessor selection (inline rows)
-            $('#selectedProceduresList [data-procedure-id]').each(function() {
+            $('#selectedProceduresList .assessor-selection-row').each(function() {
                 const container = $(this);
                 const procedureId = container.data('procedure-id');
                 const procedureName = container.find('.procedure-name').text();
@@ -2713,6 +2713,28 @@
                 return false;
             }
 
+            // Deduplicate mappings by procedureId and union assessorIds
+            (function dedupeProcedureMappings(){
+                const byId = new Map();
+                procedureAssessorMappings.forEach(m => {
+                    const pid = String(m.procedureId || '').trim();
+                    const name = m.procedureName || '';
+                    const ids = Array.isArray(m.assessorIds) ? m.assessorIds.map(String) : [];
+                    if (!byId.has(pid)) {
+                        byId.set(pid, { procedureId: pid, procedureName: name, assessorIds: new Set(ids) });
+                    } else {
+                        const entry = byId.get(pid);
+                        ids.forEach(id => entry.assessorIds.add(id));
+                        if (!entry.procedureName && name) entry.procedureName = name; // prefer any non-empty name
+                    }
+                });
+                procedureAssessorMappings = Array.from(byId.values()).map(e => ({
+                    procedureId: e.procedureId,
+                    procedureName: e.procedureName,
+                    assessorIds: Array.from(e.assessorIds)
+                }));
+            })();
+
             // Ensure each selected procedure has at least one assessor; report names
             const missing = procedureAssessorMappings
                 .filter(m => !m.assessorIds || m.assessorIds.length === 0)
@@ -2730,14 +2752,14 @@
                 }
                 return false;
             }
-            
+
             // For B2B, also gather all assessors for backward compatibility
             const allAssessors = [];
             procedureAssessorMappings.forEach(mapping => {
                 allAssessors.push(...mapping.assessorIds);
             });
             assessors = [...new Set(allAssessors)];
-            
+
             console.log('B2B - Procedures:', procedureAssessorMappings);
         } else {
             // B2C: Use original logic

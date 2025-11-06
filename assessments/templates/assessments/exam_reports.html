@@ -21,6 +21,7 @@
         {% if "view_candidate_report" in request.user.get_all_permissions or request.user.has_all_permissions %}
         <button class="tab-button" onclick="switchTab('student')" style="outline: none;">Candidate Report</button>
         {% endif %}
+        <button class="tab-button" onclick="switchTab('osce')" style="outline: none;">OSCE Report</button>
     </div>
 
     <!-- Overall Report Tab -->
@@ -273,6 +274,136 @@
             </div>
     </div>
     {% endif %}
+
+    <!-- OSCE Report Tab -->
+    <div id="osce-tab" class="tab-content">
+        <!-- Filters Section -->
+        <div class="filters-section">
+            <div class="filter-group">
+                <select id="osceInstitutionFilter" class="select-filter">
+                    <option value="">Select Institution/Hospital *</option>
+                </select>
+                <select id="osceAcademicYearFilter" class="select-filter">
+                    <option value="">Select Academic Year *</option>
+                </select>
+                <select id="osceSemesterFilter" class="select-filter">
+                    <option value="">All Semesters</option>
+                    <option value="1">Semester 1</option>
+                    <option value="2">Semester 2</option>
+                    <option value="3">Semester 3</option>
+                    <option value="4">Semester 4</option>
+                    <option value="5">Semester 5</option>
+                    <option value="6">Semester 6</option>
+                    <option value="7">Semester 7</option>
+                    <option value="8">Semester 8</option>
+                </select>
+                <select id="osceLevelFilter" class="select-filter">
+                    <option value="All">All OSCE Levels</option>
+                    <option value="Classroom">Classroom</option>
+                    <option value="Mock">Mock</option>
+                    <option value="Final">Final</option>
+                </select>
+                <select id="osceSkillFilter" class="select-filter">
+                    <option value="">All Procedures</option>
+                </select>
+                <div class="search-input-wrapper">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" id="osceStudentSearch" class="search-input" placeholder="Search by student name...">
+                </div>
+                <button id="osceGoButton" class="search-button" onclick="applyOsceFilters()">Go</button>
+            </div>
+        </div>
+
+        <!-- Metrics Section -->
+        <div class="metrics-section" style="display: none;">
+            <div class="metrics-cards">
+                <div class="metrics-row">
+                    <div class="metric-card">
+                        <div class="metric-icon">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <div class="metric-content">
+                            <h3>Total Students Enrolled</h3>
+                            <div class="metric-value" id="osceTotalStudentsEnrolled">0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card">
+                        <div class="metric-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="metric-content">
+                            <h3>Students Assessed (any OSCE)</h3>
+                            <div class="metric-value" id="osceStudentsAssessed">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metrics-row">
+                    <div class="metric-card">
+                        <div class="metric-icon">
+                            <i class="fas fa-clipboard-check"></i>
+                        </div>
+                        <div class="metric-content">
+                            <h3>Total OSCEs Conducted</h3>
+                            <div class="metric-value" id="osceTotalConducted">0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card">
+                        <div class="metric-icon">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div class="metric-content">
+                            <h3>Assessment Rate</h3>
+                            <div class="metric-value" id="osceAssessmentRate">0%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metrics-row">
+                    <div class="metric-card">
+                        <div class="metric-icon">
+                            <i class="fas fa-tasks"></i>
+                        </div>
+                        <div class="metric-content">
+                            <h3>Skills Evaluated</h3>
+                            <div class="metric-value" id="osceSkillsEvaluated">0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card">
+                        <div class="metric-icon">
+                            <i class="fas fa-trophy"></i>
+                        </div>
+                        <div class="metric-content">
+                            <h3>Average Institutional Score</h3>
+                            <div class="metric-value" id="osceAverageScore">0% <span id="osceGradeLetter" style="font-size: 0.7em; opacity: 0.8;"></span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metrics-row">
+                    <div class="metric-card">
+                        <div class="metric-icon">
+                            <i class="fas fa-check-double"></i>
+                        </div>
+                        <div class="metric-content">
+                            <h3>Pass Rate (≥80%)</h3>
+                            <div class="metric-value" id="oscePassRate">0%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- No Data Message -->
+        <div id="osceNoDataFound" class="no-data-message">
+            <i class="fas fa-chart-bar"></i>
+            <h3>No Data Available</h3>
+            <p>Please apply filters to view OSCE report data</p>
+        </div>
+    </div>
 </div>
 
 
@@ -393,6 +524,8 @@
         display: flex;
         gap: 16px;
         flex: 1;
+        flex-wrap: wrap; /* prevent overflow and keep row responsive */
+        align-items: center;
     }
 
     .select-filter {
@@ -403,6 +536,7 @@
         color: #1a202c;
         font-size: 14px;
         min-width: 200px;
+        flex: 1 1 220px; /* allow wrapping with sensible default width */
         cursor: pointer;
         transition: all 0.3s ease;
     }
@@ -2921,6 +3055,11 @@
             clearFetchMetricsInterval();
             clearFetchStudentMetricsInterval();
             // Only start fetchStudentMetrics if Go is pressed in student tab
+        } else if (tabName === 'osce') {
+            clearFetchMetricsInterval();
+            clearFetchStudentMetricsInterval();
+            // Load OSCE data when tab is opened
+            loadOsceReportData();
         }
 
         // Reset student report when switching to it
@@ -3761,6 +3900,215 @@
                 fetchMetrics();
             }, 10000); // 10 seconds
         }
+    }
+
+    // OSCE Report Functions
+    function loadOsceReportData() {
+        // Populate academic year dropdown (2025-2050)
+        const academicYearSelect = document.getElementById('osceAcademicYearFilter');
+        if (academicYearSelect && academicYearSelect.options.length <= 1) {
+            const currentYear = new Date().getFullYear();
+            for (let year = 2025; year <= 2050; year++) {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                academicYearSelect.appendChild(option);
+            }
+        }
+        
+        // Fetch and populate institutions/hospitals dropdown
+        fetchInstitutionsHospitalsForOsce();
+        
+        // Fetch and populate procedures dropdown
+        fetchProceduresForOsce();
+        
+        // Initially show no data message, hide metrics
+        const metricsSection = document.querySelector('#osce-tab .metrics-section');
+        const noDataMessage = document.getElementById('osceNoDataFound');
+        if (metricsSection) metricsSection.style.display = 'none';
+        if (noDataMessage) {
+            noDataMessage.innerHTML = `
+                <i class="fas fa-chart-bar"></i>
+                <h3>No Data Available</h3>
+                <p>Please select Institution/Hospital and Academic Year to view OSCE report data</p>
+            `;
+            noDataMessage.style.display = 'block';
+        }
+    }
+
+    function fetchInstitutionsHospitalsForOsce() {
+        const institutionSelect = document.getElementById('osceInstitutionFilter');
+        if (!institutionSelect || institutionSelect.options.length > 1) {
+            return; // Already populated
+        }
+        
+        fetch('/api/institutions-hospitals-for-report/')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Add institutions
+                    if (data.institutions && Array.isArray(data.institutions)) {
+                        data.institutions.forEach(inst => {
+                            const option = document.createElement('option');
+                            option.value = `${inst.id}|${inst.type}`;
+                            option.textContent = `${inst.name} (Institution)`;
+                            option.dataset.institutionId = inst.id;
+                            option.dataset.institutionType = inst.type;
+                            institutionSelect.appendChild(option);
+                        });
+                    }
+                    
+                    // Add hospitals
+                    if (data.hospitals && Array.isArray(data.hospitals)) {
+                        data.hospitals.forEach(hosp => {
+                            const option = document.createElement('option');
+                            option.value = `${hosp.id}|${hosp.type}`;
+                            option.textContent = `${hosp.name} (Hospital)`;
+                            option.dataset.institutionId = hosp.id;
+                            option.dataset.institutionType = hosp.type;
+                            institutionSelect.appendChild(option);
+                        });
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching institutions/hospitals:', error);
+            });
+    }
+
+    function fetchProceduresForOsce() {
+        const procedureSelect = document.getElementById('osceSkillFilter');
+        if (!procedureSelect || procedureSelect.options.length > 1) {
+            return; // Already populated
+        }
+        
+        fetch('/fetch-procedures/')
+            .then(response => response.json())
+            .then(data => {
+                if (data.procedures && Array.isArray(data.procedures)) {
+                    data.procedures.forEach(procedure => {
+                        const option = document.createElement('option');
+                        option.value = procedure.id;
+                        option.textContent = procedure.name;
+                        procedureSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching procedures:', error);
+            });
+    }
+
+    function applyOsceFilters() {
+        const institutionValue = document.getElementById('osceInstitutionFilter').value;
+        const academicYear = document.getElementById('osceAcademicYearFilter').value;
+        const semester = document.getElementById('osceSemesterFilter').value;
+        const osceLevel = document.getElementById('osceLevelFilter').value;
+        const skill = document.getElementById('osceSkillFilter').value;
+        const studentSearch = document.getElementById('osceStudentSearch').value;
+        
+        // Validate mandatory fields
+        if (!institutionValue) {
+            alert('Please select an Institution/Hospital');
+            return;
+        }
+        if (!academicYear) {
+            alert('Please select an Academic Year');
+            return;
+        }
+        
+        // Parse institution value (format: "id|type")
+        const [institutionId, institutionType] = institutionValue.split('|');
+        
+        // Build query parameters
+        const params = new URLSearchParams();
+        params.append('academic_year', academicYear);
+        params.append('institution_id', institutionId);
+        params.append('institution_type', institutionType);
+        if (semester) params.append('semester', semester);
+        if (osceLevel && osceLevel !== 'All') params.append('osce_level', osceLevel);
+        if (skill) params.append('skill', skill);
+        if (studentSearch) params.append('student_search', studentSearch);
+        
+        // Show loading state
+        const metricsSection = document.querySelector('#osce-tab .metrics-section');
+        const noDataMessage = document.getElementById('osceNoDataFound');
+        if (metricsSection) metricsSection.style.display = 'none';
+        if (noDataMessage) {
+            noDataMessage.innerHTML = `
+                <i class="fas fa-spinner fa-spin"></i>
+                <h3>Loading...</h3>
+                <p>Fetching OSCE report data</p>
+            `;
+            noDataMessage.style.display = 'block';
+        }
+        
+        // Fetch OSCE report data
+        fetch(`/api/osce-report/?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayOsceKPIs(data);
+                } else {
+                    const metricsSection = document.querySelector('#osce-tab .metrics-section');
+                    const noDataMessage = document.getElementById('osceNoDataFound');
+                    if (metricsSection) metricsSection.style.display = 'none';
+                    if (noDataMessage) {
+                        noDataMessage.innerHTML = `
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <h3>Error Loading Data</h3>
+                            <p>${data.error || 'Unknown error'}</p>
+                        `;
+                        noDataMessage.style.display = 'block';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching OSCE report:', error);
+                const metricsSection = document.querySelector('#osce-tab .metrics-section');
+                const noDataMessage = document.getElementById('osceNoDataFound');
+                if (metricsSection) metricsSection.style.display = 'none';
+                if (noDataMessage) {
+                    noDataMessage.innerHTML = `
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <h3>Error Loading Data</h3>
+                        <p>Failed to fetch OSCE report data</p>
+                    `;
+                    noDataMessage.style.display = 'block';
+                }
+            });
+    }
+
+    function displayOsceKPIs(data) {
+        // Update metric values
+        const totalEnrolled = data.total_students_enrolled || 0;
+        const studentsAssessed = data.students_assessed || 0;
+        const averageScore = data.average_institution_score || 0;
+        const gradeLetter = data.grade_letter || '-';
+        const passRate = data.pass_rate || 0;
+        const totalConducted = data.total_osce_conducted || 0;
+        const assessmentRate = data.assessment_rate || (totalEnrolled > 0 ? Math.round((studentsAssessed / totalEnrolled) * 100) : 0);
+        const skillsEvaluated = data.skills_evaluated || 0;
+        
+        document.getElementById('osceTotalStudentsEnrolled').textContent = totalEnrolled.toLocaleString();
+        document.getElementById('osceStudentsAssessed').textContent = `${studentsAssessed.toLocaleString()}${totalEnrolled > 0 ? ` (${Math.round(assessmentRate)}%)` : ''}`;
+        document.getElementById('osceTotalConducted').textContent = totalConducted.toLocaleString();
+        document.getElementById('osceAssessmentRate').textContent = `${assessmentRate}%`;
+        document.getElementById('osceSkillsEvaluated').textContent = skillsEvaluated.toLocaleString();
+        
+        // Update new metrics
+        document.getElementById('osceAverageScore').textContent = `${averageScore}%`;
+        const gradeSpan = document.getElementById('osceGradeLetter');
+        if (gradeSpan) {
+            gradeSpan.textContent = gradeLetter !== '-' ? `(Grade ${gradeLetter})` : '';
+        }
+        document.getElementById('oscePassRate').textContent = `${passRate}%`;
+        
+        // Show metrics section and hide no data message
+        const metricsSection = document.querySelector('#osce-tab .metrics-section');
+        const noDataMessage = document.getElementById('osceNoDataFound');
+        if (metricsSection) metricsSection.style.display = 'flex';
+        if (noDataMessage) noDataMessage.style.display = 'none';
     }
 
 </script>
