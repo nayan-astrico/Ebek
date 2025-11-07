@@ -258,7 +258,7 @@
                     </td>
                     <td>
                         <div class="actions">
-                            <button class="btn-icon" onclick="openEditTestPanel('{{ test.id }}')" title="Edit">
+                            <button class="btn-icon" onclick="openEditTestPanel('{{ test.id }}', this)" title="Edit">
                                 <i class="fas fa-edit"></i>
                             </button>
                             <button class="btn-icon btn-icon-delete" onclick="confirmDeleteTest('{{ test.id }}','{{ test.type|default:"B2C" }}')" title="Delete">
@@ -277,6 +277,15 @@
                     </td>
                 </tr>
                 {% endfor %}
+                <!-- Empty state for filtered results -->
+                <tr id="filteredEmptyState" style="display: none;">
+                    <td colspan="9" class="empty">
+                        <div class="empty-state">
+                            <i class="fas fa-clipboard-list"></i>
+                            <p>No Assessment Available</p>
+                        </div>
+                    </td>
+                </tr>
             </tbody>
         </table>        
     </div>
@@ -748,6 +757,11 @@
     .chip:hover {
         background: #e45857;
     }
+    
+    /* Make procedure chips clickable for B2B */
+    #procedureChipsContainer .chip:not(.collective) {
+        cursor: pointer;
+    }
 
     .chip .remove {
         cursor: pointer;
@@ -775,7 +789,20 @@
         border: 1px solid #ced4da;
         border-radius: 5px;
     }
-    #editStatus.form-control { width: 100%; }
+    #editStatus.form-control { 
+        width: 100%; 
+        height: 45px;
+        padding: 10px 12px;
+        line-height: 1.5;
+        box-sizing: border-box;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 35px;
+    }
 
 
     .card {
@@ -1644,29 +1671,8 @@
     }
 
     .table-wrapper {
-        overflow-x: auto;
-        overflow-y: auto;
-        max-height: calc(100vh - 250px);
-    }
-
-    /* Custom Scrollbar */
-    .table-wrapper::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-    }
-
-    .table-wrapper::-webkit-scrollbar-track {
-        background: #f1f1f1;
-        border-radius: 4px;
-    }
-
-    .table-wrapper::-webkit-scrollbar-thumb {
-        background: #cbd5e0;
-        border-radius: 4px;
-    }
-
-    .table-wrapper::-webkit-scrollbar-thumb:hover {
-        background: #a0aec0;
+        overflow: visible;
+        width: 100%;
     }
 
     /* Table Styles */
@@ -2091,6 +2097,14 @@
                 
                 const testType = $('#typeDropdownBtn').text().trim();
                 if (testType === 'B2B') {
+                    // Close the assessor dropdown for this procedure before removing
+                    const assessorRow = $(`.assessor-selection-row[data-procedure-id="${id}"]`);
+                    if (assessorRow.length > 0) {
+                        const dropdownList = assessorRow.find('.assessor-dropdown-list');
+                        const dropdownBtn = assessorRow.find('.assessor-dropdown-btn');
+                        dropdownList.hide().removeClass('show');
+                        dropdownBtn.removeClass('active');
+                    }
                     removeProcedure(id);
                 }
             }
@@ -2123,6 +2137,14 @@
                 updateChipDisplay('procedureChipsContainer', 'Procedures');
                 const testType = $('#typeDropdownBtn').text().trim();
                 if (testType === 'B2B') {
+                    // Close the assessor dropdown for this procedure before removing
+                    const assessorRow = $(`.assessor-selection-row[data-procedure-id="${id}"]`);
+                    if (assessorRow.length > 0) {
+                        const dropdownList = assessorRow.find('.assessor-dropdown-list');
+                        const dropdownBtn = assessorRow.find('.assessor-dropdown-btn');
+                        dropdownList.hide().removeClass('show');
+                        dropdownBtn.removeClass('active');
+                    }
                     removeProcedure(id);
                 }
             }
@@ -2169,8 +2191,14 @@
             const procedureId = $(this).data('procedure-id');
             const dropdownList = $(this).next('.assessor-dropdown-list');
             
-            $('.assessor-dropdown-list').not(dropdownList).hide();
-            dropdownList.toggle();
+            // Toggle only this dropdown (independent of others - multiple can be open)
+            if (dropdownList.is(':visible')) {
+                dropdownList.hide().removeClass('show');
+                $(this).removeClass('active');
+            } else {
+                dropdownList.show().addClass('show');
+                $(this).addClass('active');
+            }
         });
     
         // Assessor selection for specific procedures (B2B)
@@ -2233,8 +2261,43 @@
             removeProcedure(procedureId);
         });
     
+        // Click on procedure chip to toggle its assessor dropdown (B2B only)
+        $(document).on('click', '#procedureChipsContainer .chip:not(.collective)', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Don't trigger if clicking the remove button
+            if ($(e.target).hasClass('remove') || $(e.target).closest('.remove').length) {
+                return;
+            }
+            
+            const chip = $(this);
+            const procedureId = chip.data('id');
+            const testType = $('#typeDropdownBtn').text().trim();
+            
+            // Only for B2B type
+            if (testType === 'B2B') {
+                const assessorRow = $(`.assessor-selection-row[data-procedure-id="${procedureId}"]`);
+                
+                if (assessorRow.length > 0) {
+                    const dropdownList = assessorRow.find('.assessor-dropdown-list');
+                    const dropdownBtn = assessorRow.find('.assessor-dropdown-btn');
+                    
+                    // Toggle only this procedure's dropdown (independent of others)
+                    if (dropdownList.is(':visible')) {
+                        dropdownList.hide().removeClass('show');
+                        dropdownBtn.removeClass('active');
+                    } else {
+                        dropdownList.show().addClass('show');
+                        dropdownBtn.addClass('active');
+                    }
+                }
+            }
+        });
+        
         // Remove chips when clicking X
-        $('.chip-container').on('click', '.chip:not(.collective) .remove', function() {
+        $('.chip-container').on('click', '.chip:not(.collective) .remove', function(e) {
+            e.stopPropagation(); // Prevent triggering chip click
             const chip = $(this).parent();
             const containerId = chip.closest('.chip-container').attr('id');
             const chipId = chip.data('id');
@@ -2246,6 +2309,14 @@
                 
                 const testType = $('#typeDropdownBtn').text().trim();
                 if (testType === 'B2B') {
+                    // Close the assessor dropdown for this procedure before removing
+                    const assessorRow = $(`.assessor-selection-row[data-procedure-id="${chipId}"]`);
+                    if (assessorRow.length > 0) {
+                        const dropdownList = assessorRow.find('.assessor-dropdown-list');
+                        const dropdownBtn = assessorRow.find('.assessor-dropdown-btn');
+                        dropdownList.hide().removeClass('show');
+                        dropdownBtn.removeClass('active');
+                    }
                     removeProcedure(chipId);
                 }
             } else if (containerId === 'assessorChipsContainer') {
@@ -2554,8 +2625,8 @@
         // Update display
         updateChipDisplay('procedureChipsContainer', 'Procedures');
         
-        // Hide the container if no procedures remain
-        if ($('.procedure-item').length === 0) {
+        // Hide the container ONLY if no assessor-selection-row remains
+        if ($('#selectedProceduresList .assessor-selection-row').length === 0) {
             $('#selectedProceduresContainer').hide();
         }
     }
@@ -2923,29 +2994,156 @@
     });
 
     let __editingTestId = null;
-    function openEditTestPanel(testId){
+    function openEditTestPanel(testId, buttonElement){
+        if (!testId) {
+            console.error('openEditTestPanel: testId is missing');
+            return;
+        }
+        
         __editingTestId = testId;
-        fetch(`/api/tests/${testId}/`)
-          .then(r => r.json())
-          .then(res => {
-            if(!res.success){ throw new Error(res.error || 'Failed'); }
-            const t = res.test;
-            $('#editAssessmentName').val(t.assessment_name || '');
-            $('#editSkillathon').val(t.skillathon || '');
-            const procContainer = $('#editProcedures'); procContainer.empty();
-            (t.procedures||[]).forEach(p => procContainer.append(`<span class=\"chip\" data-id=\"${p.id}\">${p.name}<span class=\"remove\">&times;</span></span>`));
-            const assContainer = $('#editAssessors'); assContainer.empty();
-            (t.assessors||[]).forEach(a => assContainer.append(`<span class=\"chip\" data-id=\"${a.id}\">${a.name}<span class=\"remove\">&times;</span></span>`));
-            $('#editStatus').val(t.status || 'Not Completed');
-            $('#editDate').val(t.testdate || '');
-            toggleEditPanel(true);
+        
+        // Check if jQuery elements exist
+        if (!$('#editAssessmentName').length) {
+            console.error('Edit panel elements not found');
+            return;
+        }
+        
+        // Try to extract data from the table row as fallback
+        let rowData = {};
+        if (buttonElement) {
+            const row = buttonElement.closest('.assessment-row');
+            if (row) {
+                const cells = row.querySelectorAll('td');
+                if (cells.length >= 8) {
+                    // Extract data from table cells
+                    rowData.assessment_name = cells[1]?.querySelector('.assessment-name span')?.textContent?.trim() || '';
+                    rowData.skillathon = row.dataset.mode || '';
+                    rowData.status = 'Not Completed'; // Default, will be updated from API if available
+                    const dateText = cells[7]?.querySelector('.date-text')?.textContent?.trim() || '';
+                    // Try to parse date if available
+                    if (dateText && dateText !== '-') {
+                        // Date format is "d M Y" (e.g., "15 Jan 2024")
+                        try {
+                            const dateParts = dateText.split(' ');
+                            if (dateParts.length === 3) {
+                                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                const monthIndex = months.indexOf(dateParts[1]);
+                                if (monthIndex !== -1) {
+                                    const day = parseInt(dateParts[0]);
+                                    const year = parseInt(dateParts[2]);
+                                    const date = new Date(year, monthIndex, day);
+                                    if (!isNaN(date.getTime())) {
+                                        rowData.testdate = date.toISOString().split('T')[0];
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            // Ignore date parsing errors
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Open the panel first
+        toggleEditPanel(true);
+        
+        // Clear existing data
+        $('#editAssessmentName').val(rowData.assessment_name || '');
+        $('#editSkillathon').val(rowData.skillathon || '');
+        $('#editProcedures').empty();
+        $('#editAssessors').empty();
+        $('#editStatus').val(rowData.status || 'Not Completed');
+        $('#editDate').val(rowData.testdate || '');
+        
+        // Try to load data from API (but don't block if it fails)
+        const url = `/api/tests/${testId}/`;
+        
+        fetch(url, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+            }
+        })
+          .then(r => {
+            if (!r.ok) {
+                // If API fails, continue with row data we extracted
+                console.warn('API request failed, using row data. Status:', r.status);
+                return null;
+            }
+            return r.json().catch(e => {
+                console.warn('Failed to parse JSON response:', e);
+                return null;
+            });
           })
-          .catch(() => { alert('Failed to load test'); });
+          .then(res => {
+            if (!res || !res.success || !res.test) {
+                // If response is invalid, continue with row data
+                if (res && res.error) {
+                    console.warn('API error:', res.error);
+                } else {
+                    console.warn('Invalid API response structure');
+                }
+                return;
+            }
+            
+            const t = res.test;
+            
+            // Populate form fields from API (overrides row data)
+            if (t.assessment_name !== undefined && t.assessment_name !== null) {
+                $('#editAssessmentName').val(String(t.assessment_name));
+            }
+            if (t.skillathon !== undefined && t.skillathon !== null) {
+                $('#editSkillathon').val(String(t.skillathon));
+            }
+            if (t.status !== undefined && t.status !== null) {
+                $('#editStatus').val(String(t.status));
+            }
+            if (t.testdate !== undefined && t.testdate !== null) {
+                $('#editDate').val(String(t.testdate));
+            }
+            
+            // Populate procedures
+            const procContainer = $('#editProcedures'); 
+            procContainer.empty(); // Clear any existing chips
+            if (t.procedures && Array.isArray(t.procedures) && t.procedures.length > 0) {
+                t.procedures.forEach(p => {
+                    if (p && p.id && p.name) {
+                        const procId = String(p.id);
+                        const procName = String(p.name);
+                        procContainer.append(`<span class="chip" data-id="${procId}">${procName}<span class="remove">&times;</span></span>`);
+                    }
+                });
+            }
+            
+            // Populate assessors
+            const assContainer = $('#editAssessors'); 
+            assContainer.empty(); // Clear any existing chips
+            if (t.assessors && Array.isArray(t.assessors) && t.assessors.length > 0) {
+                t.assessors.forEach(a => {
+                    if (a && a.id && a.name) {
+                        const assId = String(a.id);
+                        const assName = String(a.name);
+                        assContainer.append(`<span class="chip" data-id="${assId}">${assName}<span class="remove">&times;</span></span>`);
+                    }
+                });
+            }
+          })
+          .catch(error => { 
+            // Silently handle errors - panel is already open with row data, user can still edit
+            console.warn('Error loading test data (non-blocking):', error);
+          });
     }
 
     function toggleEditPanel(forceOpen){
         const panel = document.getElementById('editPanel');
         const overlay = document.getElementById('editOverlay');
+        
+        if (!panel || !overlay) {
+            console.error('Edit panel or overlay not found');
+            return;
+        }
+        
         if (forceOpen === true){
             panel.classList.add('active');
             overlay.classList.add('active');
@@ -3227,6 +3425,11 @@
         updateActiveFiltersDisplay();
         // Show all rows again
         document.querySelectorAll('.assessment-row').forEach(row => row.style.display = '');
+        // Hide empty state message
+        const emptyStateRow = document.getElementById('filteredEmptyState');
+        if (emptyStateRow) {
+            emptyStateRow.style.display = 'none';
+        }
     }
 
     // Store active filters globally
@@ -3278,6 +3481,17 @@
         };
         
         const rows = document.querySelectorAll('.assessment-row');
+        let visibleCount = 0;
+        
+        // Check if any filters are active
+        const hasActiveFilters = filters.types.length > 0 || 
+                                 filters.modes.length > 0 || 
+                                 filters.entities.length > 0 || 
+                                 filters.batches.length > 0 || 
+                                 filters.assessors.length > 0 || 
+                                 filters.statuses.length > 0 || 
+                                 filters.dateFrom || 
+                                 filters.dateTo;
         
         rows.forEach(row => {
             let show = true;
@@ -3322,7 +3536,18 @@
             }
             
             row.style.display = show ? '' : 'none';
+            if (show) visibleCount++;
         });
+        
+        // Show/hide empty state message if filters are active and no results
+        const emptyStateRow = document.getElementById('filteredEmptyState');
+        if (emptyStateRow) {
+            if (hasActiveFilters && visibleCount === 0) {
+                emptyStateRow.style.display = '';
+            } else {
+                emptyStateRow.style.display = 'none';
+            }
+        }
         
         // Update active filters display
         updateActiveFiltersDisplay();
