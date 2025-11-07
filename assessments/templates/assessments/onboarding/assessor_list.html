@@ -3,6 +3,88 @@
 {% block content %}
 
 <link href="{% static 'assessments/css/list.css' %}" rel="stylesheet">
+<style>
+.btn-filter {
+    position: relative;
+}
+
+.filter-badge {
+    background: #F16564;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    position: absolute;
+    top: -5px;
+    right: -5px;
+}
+
+.filter-type {
+    position: relative;
+}
+
+.filter-type .filter-type-badge {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    padding: 0 6px;
+    border-radius: 9px;
+    background: #F16564;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    cursor: pointer;
+    width: 100%;
+    user-select: none;
+    margin: 0;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    pointer-events: auto;
+    position: relative;
+}
+
+.option-item:hover {
+    background-color: #f7fafc;
+}
+
+.option-item span {
+    pointer-events: none;
+    flex: 1;
+}
+
+.select-all-item {
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 12px;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.select-all-item span {
+    font-weight: 600;
+    color: #1a202c;
+}
+</style>
 
 
 <!-- Header -->
@@ -30,9 +112,10 @@
                id="assessorSearchInput"
                oninput="filterAssessors(this.value)">
     </div>
-    <button class="btn-filter" onclick="toggleFilterPanel()">
+    <button class="btn-filter" onclick="toggleFilterPanel()" id="filterBtn">
         <i class="fas fa-filter"></i>
         <span>Filters</span>
+        <span class="filter-badge" id="filterBadge" style="display: none;">0</span>
     </button>
 </div>
 
@@ -64,14 +147,19 @@
                 <div class="filter-content" id="speciality-content">
                     <div class="filter-search">
                         <input type="text" placeholder="Search specialities" onkeyup="filterOptions('speciality')">
-                        <div class="selection-count">0 Speciality selected</div>
+                        <div class="selection-count" id="specialitySelectionCount">0 Speciality selected</div>
                     </div>
                     <div class="options-list" id="speciality-options">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllSpecialities" onchange="toggleSelectAll('speciality', this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                         {% for speciality in all_specialities %}
                         <label class="option-item">
                             <input type="checkbox" name="speciality" value="{{ speciality }}"
                                    {% if speciality in selected_specialities %}checked{% endif %}
-                                   onchange="updateSelectionCount('speciality')">
+                                   onchange="updateSelectionCount('speciality')"
+                                   class="speciality-checkbox">
                             <span>{{ speciality }}</span>
                         </label>
                             {% endfor %}
@@ -82,19 +170,25 @@
                 <div class="filter-content" id="status-content">
                     <div class="filter-search">
                         <input type="text" placeholder="Search status" onkeyup="filterOptions('status')">
-                        <div class="selection-count">0 Status selected</div>
+                        <div class="selection-count" id="statusSelectionCount">0 Status selected</div>
                     </div>
                     <div class="options-list" id="status-options">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllStatuses" onchange="toggleSelectAll('status', this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                         <label class="option-item">
                             <input type="checkbox" name="status" value="active"
                                    {% if 'active' in selected_statuses %}checked{% endif %}
-                                   onchange="updateSelectionCount('status')">
+                                   onchange="updateSelectionCount('status')"
+                                   class="status-checkbox">
                             <span>Active</span>
                         </label>
                         <label class="option-item">
                             <input type="checkbox" name="status" value="inactive"
                                    {% if 'inactive' in selected_statuses %}checked{% endif %}
-                                   onchange="updateSelectionCount('status')">
+                                   onchange="updateSelectionCount('status')"
+                                   class="status-checkbox">
                             <span>Inactive</span>
                         </label>
                     </div>
@@ -105,6 +199,7 @@
         <!-- Filter Actions -->
         <div class="filter-actions">
             <button type="button" class="btn btn-light" onclick="toggleFilterPanel()">Cancel</button>
+            <button type="button" class="btn btn-light" onclick="clearAllFilters()">Clear All</button>
             <button type="button" class="btn btn-primary" onclick="applyFiltersAndClose()">Apply filter</button>
         </div>
     </form>
@@ -758,6 +853,9 @@ document.addEventListener('DOMContentLoaded', function() {
         updateSelectionCount(category);
     });
     
+    // Initialize filter badge
+    updateFilterBadge();
+    
     // Load all institutions and hospitals on page load
     loadAllInstitutionsAndHospitals();
     
@@ -765,23 +863,173 @@ document.addEventListener('DOMContentLoaded', function() {
     loadMoreAssessors();
 });
 
+// Make entire option row clickable to toggle checkbox
+document.addEventListener('click', function(e) {
+    const label = e.target.closest('label.option-item');
+    if (!label) return;
+    
+    if (label.classList.contains('select-all-item')) {
+        return;
+    }
+    
+    const checkbox = label.querySelector('input[type="checkbox"]');
+    if (!checkbox) return;
+    
+    if (e.target === checkbox || e.target.type === 'checkbox') {
+        setTimeout(function() {
+            const container = label.closest('.filter-content');
+            if (container) {
+                const category = container.id.replace('-content', '');
+                if (category) {
+                    updateSelectionCount(category);
+                }
+            }
+        }, 10);
+        return;
+    }
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    checkbox.checked = !checkbox.checked;
+    
+    const changeEvent = new Event('change', { bubbles: true, cancelable: false });
+    checkbox.dispatchEvent(changeEvent);
+    
+    const container = label.closest('.filter-content');
+    if (container) {
+        const category = container.id.replace('-content', '');
+        if (category) {
+            updateSelectionCount(category);
+        }
+    }
+}, true);
+
 function filterOptions(category) {
     const searchInput = document.querySelector(`#${category}-content .filter-search input`);
     const searchTerm = searchInput.value.toLowerCase();
     const options = document.querySelectorAll(`#${category}-options .option-item`);
     
     options.forEach(option => {
+        if (option.classList.contains('select-all-item')) {
+            option.style.display = '';
+            return;
+        }
         const text = option.querySelector('span').textContent.toLowerCase();
         option.style.display = text.includes(searchTerm) ? '' : 'none';
     });
 }
 
+function toggleSelectAll(category, selectAllCheckbox) {
+    let checkboxSelector;
+    if (category === 'speciality') {
+        checkboxSelector = '.speciality-checkbox';
+    } else if (category === 'status') {
+        checkboxSelector = '.status-checkbox';
+    } else {
+        checkboxSelector = `input[name="${category}"]`;
+    }
+    
+    const checkboxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}`);
+    const isChecked = selectAllCheckbox.checked;
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = isChecked;
+        const changeEvent = new Event('change', { bubbles: true });
+        checkbox.dispatchEvent(changeEvent);
+    });
+    
+    updateSelectionCount(category);
+}
+
 function updateSelectionCount(category) {
-    const checkboxes = document.querySelectorAll(`#${category}-options input[type="checkbox"]:checked`);
-    const countElement = document.querySelector(`#${category}-content .selection-count`);
-    const count = checkboxes.length;
+    let checkboxSelector;
+    if (category === 'speciality') {
+        checkboxSelector = '.speciality-checkbox';
+    } else if (category === 'status') {
+        checkboxSelector = '.status-checkbox';
+    } else {
+        checkboxSelector = `input[name="${category}"]`;
+    }
+    
+    const checkboxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}`);
+    const checkedBoxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}:checked`);
+    const count = checkedBoxes.length;
+    
+    const countElement = document.getElementById(`${category}SelectionCount`) || document.querySelector(`#${category}-content .selection-count`);
     const label = category.charAt(0).toUpperCase() + category.slice(1);
-    countElement.textContent = `${count} ${label} selected`;
+    if (countElement) {
+        countElement.textContent = `${count} ${label} selected`;
+    }
+    
+    let selectAllId;
+    if (category === 'speciality') {
+        selectAllId = 'selectAllSpecialities';
+    } else if (category === 'status') {
+        selectAllId = 'selectAllStatuses';
+    }
+    
+    if (selectAllId) {
+        const selectAllCheckbox = document.getElementById(selectAllId);
+        if (selectAllCheckbox && checkboxes.length > 0) {
+            selectAllCheckbox.checked = (count === checkboxes.length);
+            selectAllCheckbox.indeterminate = (count > 0 && count < checkboxes.length);
+        }
+    }
+    
+    updateFilterBadge();
+    setFilterTypeBadge(category, count);
+}
+
+function updateFilterBadge() {
+    let totalFilterCategories = 0;
+    
+    if (document.querySelectorAll('input[name="speciality"]:checked').length > 0) {
+        totalFilterCategories++;
+    }
+    if (document.querySelectorAll('input[name="status"]:checked').length > 0) {
+        totalFilterCategories++;
+    }
+    
+    const badge = document.getElementById('filterBadge');
+    if (badge) {
+        if (totalFilterCategories > 0) {
+            badge.textContent = totalFilterCategories;
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+function setFilterTypeBadge(category, count) {
+    const el = document.querySelector(`.filter-type[data-filter="${category}"]`);
+    if (!el) return;
+    let badge = el.querySelector('.filter-type-badge');
+    if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'filter-type-badge';
+        el.appendChild(badge);
+    }
+    if (count > 0) {
+        badge.textContent = String(count);
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function clearAllFilters() {
+    document.querySelectorAll('.filter-form input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+        cb.indeterminate = false;
+    });
+    
+    ['speciality', 'status'].forEach(category => {
+        updateSelectionCount(category);
+    });
+    
+    updateFilterBadge();
 }
 
 // Helper functions for DOM manipulation

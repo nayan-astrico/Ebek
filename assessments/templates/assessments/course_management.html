@@ -132,12 +132,18 @@
                         <div class="selection-count" id="statusSelectionCount">0 Status selected</div>
                     </div>
                     <div class="options-list" id="filterStatusOptions">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllStatuses" onchange="toggleSelectAll('status', this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                         <label class="option-item">
-                            <input type="checkbox" name="status" value="active" onchange="updateStatusSelectionCount()">
+                            <input type="checkbox" name="status" value="active" onchange="updateStatusSelectionCount()"
+                                   class="status-checkbox">
                             <span>Active</span>
                         </label>
                         <label class="option-item">
-                            <input type="checkbox" name="status" value="inactive" onchange="updateStatusSelectionCount()">
+                            <input type="checkbox" name="status" value="inactive" onchange="updateStatusSelectionCount()"
+                                   class="status-checkbox">
                             <span>Inactive</span>
                         </label>
                     </div>
@@ -930,10 +936,32 @@ input:checked + .slider:before {
 
 .filter-type {
     padding: 16px 20px;
+    padding-right: 28px; /* room for badge on the right */
     cursor: pointer;
     border-bottom: 1px solid #e2e8f0;
     font-weight: 500;
     color: #4a5568;
+    position: relative;
+}
+
+.filter-type .filter-type-badge {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    padding: 0 6px;
+    border-radius: 9px;
+    background: #F16564;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
 }
 
 .filter-type.active {
@@ -1167,6 +1195,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('searchInput').addEventListener('input', function() {
         filterCourses(this.value);
     });
+    
+    // Initialize filter badge and status selection count
+    updateStatusSelectionCount();
+    updateFilterBadge();
 });
 
 function setupEventListeners() {
@@ -1368,10 +1400,48 @@ function filterCourseOptions(searchText) {
 function filterStatusOptions(searchText) {
     const options = document.querySelectorAll('#filterStatusOptions .option-item');
     options.forEach(option => {
+        // Always show "Select All" option
+        if (option.classList.contains('select-all-item')) {
+            option.style.display = 'flex';
+            return;
+        }
         const text = option.textContent.toLowerCase();
         option.style.display = text.includes(searchText.toLowerCase()) ? 'flex' : 'none';
     });
 }
+
+// Make entire option row clickable to toggle checkbox
+document.addEventListener('click', function(e) {
+    const label = e.target.closest('label.option-item');
+    if (!label) return;
+    
+    // Only handle status filter options
+    if (!label.closest('#filterStatusOptions')) return;
+    
+    if (label.classList.contains('select-all-item')) {
+        return;
+    }
+    
+    const checkbox = label.querySelector('input[type="checkbox"]');
+    if (!checkbox) return;
+    
+    if (e.target === checkbox || e.target.type === 'checkbox') {
+        setTimeout(function() {
+            updateStatusSelectionCount();
+        }, 10);
+        return;
+    }
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    checkbox.checked = !checkbox.checked;
+    
+    const changeEvent = new Event('change', { bubbles: true, cancelable: false });
+    checkbox.dispatchEvent(changeEvent);
+    
+    updateStatusSelectionCount();
+}, true);
 
 function updateCourseSelectionCount() {
     const checkedCourses = document.querySelectorAll('#filterCourseOptions input[type="checkbox"]:checked');
@@ -1379,18 +1449,79 @@ function updateCourseSelectionCount() {
     countElement.textContent = `${checkedCourses.length} Course selected`;
 }
 
+function toggleSelectAll(category, selectAllCheckbox) {
+    let checkboxSelector;
+    if (category === 'status') {
+        checkboxSelector = '.status-checkbox';
+    } else {
+        checkboxSelector = `input[name="${category}"]`;
+    }
+    
+    const checkboxes = document.querySelectorAll(`#filter${category.charAt(0).toUpperCase() + category.slice(1)}Options ${checkboxSelector}`);
+    const isChecked = selectAllCheckbox.checked;
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = isChecked;
+        const changeEvent = new Event('change', { bubbles: true });
+        checkbox.dispatchEvent(changeEvent);
+    });
+    
+    if (category === 'status') {
+        updateStatusSelectionCount();
+    }
+}
+
 function updateStatusSelectionCount() {
-    const checkedStatuses = document.querySelectorAll('#filterStatusOptions input[type="checkbox"]:checked');
+    const checkedStatuses = document.querySelectorAll('#filterStatusOptions .status-checkbox:checked');
     const countElement = document.getElementById('statusSelectionCount');
-    countElement.textContent = `${checkedStatuses.length} Status selected`;
+    const count = checkedStatuses.length;
+    countElement.textContent = `${count} Status selected`;
+    
+    // Sync "Select All" checkbox state
+    const selectAllCheckbox = document.getElementById('selectAllStatuses');
+    const allStatusCheckboxes = document.querySelectorAll('#filterStatusOptions .status-checkbox');
+    if (selectAllCheckbox && allStatusCheckboxes.length > 0) {
+        selectAllCheckbox.checked = (count === allStatusCheckboxes.length);
+        selectAllCheckbox.indeterminate = (count > 0 && count < allStatusCheckboxes.length);
+    }
+    
+    updateFilterBadge();
+    setFilterTypeBadge('status', count);
 }
 
 function updateFilterBadge() {
-    const totalFilters = currentFilters.courses.length + currentFilters.status.length;
-    const badge = document.getElementById('filterBadge');
+    // Count active filter categories (not individual selections)
+    let totalFilterCategories = 0;
     
-    if (totalFilters > 0) {
-        badge.textContent = totalFilters;
+    if (currentFilters.courses && currentFilters.courses.length > 0) {
+        totalFilterCategories++;
+    }
+    if (document.querySelectorAll('#filterStatusOptions .status-checkbox:checked').length > 0) {
+        totalFilterCategories++;
+    }
+    
+    const badge = document.getElementById('filterBadge');
+    if (badge) {
+        if (totalFilterCategories > 0) {
+            badge.textContent = totalFilterCategories;
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+function setFilterTypeBadge(category, count) {
+    const el = document.querySelector(`.filter-type[data-filter="${category}"]`);
+    if (!el) return;
+    let badge = el.querySelector('.filter-type-badge');
+    if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'filter-type-badge';
+        el.appendChild(badge);
+    }
+    if (count > 0) {
+        badge.textContent = String(count);
         badge.style.display = 'flex';
     } else {
         badge.style.display = 'none';
@@ -1431,10 +1562,12 @@ function clearAllFilters() {
     // Uncheck all course filters
     document.querySelectorAll('#filterCourseOptions input[type="checkbox"]').forEach(cb => {
         cb.checked = false;
+        cb.indeterminate = false;
     });
-    // Uncheck all status filters
+    // Uncheck all status filters (including Select All)
     document.querySelectorAll('#filterStatusOptions input[type="checkbox"]').forEach(cb => {
         cb.checked = false;
+        cb.indeterminate = false;
     });
     // Update selection counts
     updateCourseSelectionCount();
