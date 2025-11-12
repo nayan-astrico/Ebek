@@ -29,6 +29,7 @@ urlpatterns = [
     path('exam-reports/', views.render_exam_reports_page, name='exam_reports_page'),
     path('fetch-exam-reports/', views.fetch_exam_reports, name='fetch_exam_reports'),
     path('api/osce-report/', views.fetch_osce_report, name='fetch_osce_report'),
+    path('api/skills-for-category/', views.fetch_skills_for_category, name='fetch_skills_for_category'),
     path('api/institutions-hospitals-for-report/', views.fetch_institutions_hospitals_for_report, name='fetch_institutions_hospitals_for_report'),
     path('admin-report-portal/', views.render_admin_report_portal, name='admin_report_portal'),
     path('api/admin-report/filter-options/', views.fetch_admin_report_filter_options, name='fetch_admin_report_filter_options'),
@@ -116,6 +117,8 @@ urlpatterns = [
 
     path('upload-preview/', views.upload_preview, name='upload_preview'),
     path('upload-excel/', views.upload_excel, name='upload_excel'),
+    path('api/procedure/<str:procedure_id>/edit/', views.get_procedure_for_edit, name='get_procedure_for_edit'),
+    path('api/procedure/update/', views.update_procedure, name='update_procedure'),
 
 
     # Batch Course API endpoints
