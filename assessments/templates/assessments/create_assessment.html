@@ -178,6 +178,52 @@
         <div id="procedureContent" class="side-panel-body"></div>
     </div>
 
+    <!-- Edit Procedure Panel -->
+    <div id="editProcedurePanel" class="side-panel">
+        <div class="side-panel-header">
+            <h3>Edit Assessment</h3>
+            <button class="close-btn" onclick="toggleEditProcedurePanel()">×</button>
+        </div>
+        <div class="side-panel-body">
+            <form id="editProcedureForm">
+                <input type="hidden" id="editProcedureId" value="">
+                
+                <div class="form-group">
+                    <label for="editProcedureName"><strong>Procedure Name</strong></label>
+                    <input type="text" id="editProcedureName" class="form-control" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="editCategory"><strong>Category</strong></label>
+                    <select id="editCategory" class="form-control" required>
+                        <option value="">Select a category</option>
+                        <option value="Core Skills">Core Skills</option>
+                        <option value="Infection Control">Infection Control</option>
+                        <option value="Documentation">Documentation</option>
+                        <option value="Pre-Procedure">Pre-Procedure</option>
+                        <option value="Critical Thinking">Critical Thinking</option>
+                        <option value="Communication">Communication</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label><strong>Questions</strong></label>
+                    <div id="questionsContainer" class="questions-container">
+                        <!-- Questions will be dynamically added here -->
+                    </div>
+                    <button type="button" class="btn btn-add" onclick="addQuestion()">
+                        <i class="fas fa-plus"></i> Add Question
+                    </button>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-light" onclick="toggleEditProcedurePanel()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
 
 <!-- Bulk Upload Panel -->
 <div class="upload-panel" id="uploadPanel">
@@ -723,6 +769,324 @@ function showSuccess(message) {
     function downloadProcedure(procedureId) {
         window.location.href = `/procedures/${procedureId}/download/`;
     }
+
+    // Edit Procedure Functions
+    async function editProcedure(procedureId) {
+        try {
+            const response = await fetch(`/api/procedure/${procedureId}/edit/`);
+            const data = await response.json();
+            
+            if (data.status !== 'success') {
+                alert('Error loading procedure: ' + (data.message || 'Unknown error'));
+                return;
+            }
+            
+            const procedure = data.procedure;
+            
+            // Set procedure ID
+            document.getElementById('editProcedureId').value = procedure.id;
+            document.getElementById('editProcedureName').value = procedure.procedureName || '';
+            document.getElementById('editCategory').value = procedure.category || '';
+            
+            // Load questions
+            loadQuestions(procedure.examMetaData || []);
+            
+            // Show edit panel
+            toggleEditProcedurePanel();
+            
+        } catch (error) {
+            console.error('Error loading procedure:', error);
+            alert('Error loading procedure for editing');
+        }
+    }
+
+    function toggleEditProcedurePanel() {
+        const panel = document.getElementById('editProcedurePanel');
+        panel.classList.toggle('active');
+        document.body.style.overflow = panel.classList.contains('active') ? 'hidden' : '';
+    }
+
+    function loadQuestions(examMetaData) {
+        const container = document.getElementById('questionsContainer');
+        container.innerHTML = '';
+        
+        if (!examMetaData || examMetaData.length === 0) {
+            return;
+        }
+        
+        const section = examMetaData[0];
+        const questions = section.section_questions || [];
+        
+        questions.forEach((question, index) => {
+            addQuestionToContainer(question, index);
+        });
+    }
+
+    function addQuestionToContainer(question, index) {
+        const container = document.getElementById('questionsContainer');
+        const questionDiv = document.createElement('div');
+        questionDiv.className = 'question-item';
+        questionDiv.dataset.index = index;
+        
+        questionDiv.innerHTML = `
+            <div class="question-header">
+                <strong>Question ${index + 1}</strong>
+                <button type="button" class="btn-icon btn-danger btn-sm" onclick="deleteQuestion(this)" title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+            <div class="form-group">
+                <label>Question Text</label>
+                <input type="text" class="form-control question-text" value="${question.question || ''}" placeholder="Enter question text" required>
+            </div>
+            <div class="form-group">
+                <label>Marks</label>
+                <input type="number" class="form-control question-marks" value="${question.right_marks_for_question || 0}" min="0" required>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" class="question-critical" ${question.critical ? 'checked' : ''}>
+                    Critical
+                </label>
+            </div>
+            ${question.sub_section_questions_present ? `
+                <div class="sub-questions">
+                    <label><strong>Sub-questions:</strong></label>
+                    <div class="sub-questions-list" data-question-index="${index}">
+                        ${(question.sub_section_questions || []).map((subQ, subIndex) => `
+                            <div class="sub-question-item">
+                                <input type="text" class="form-control sub-question-text" value="${subQ.question || ''}" placeholder="Sub-question text">
+                                <input type="number" class="form-control sub-question-marks" value="${subQ.right_marks_for_question || 0}" min="0" placeholder="Marks">
+                                <button type="button" class="btn-icon btn-danger btn-sm" onclick="deleteSubQuestion(this)" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="addSubQuestion(this)">
+                        <i class="fas fa-plus"></i> Add Sub-question
+                    </button>
+                </div>
+            ` : `
+                <button type="button" class="btn btn-sm btn-secondary" onclick="enableSubQuestions(this)">
+                    <i class="fas fa-plus"></i> Add Sub-questions
+                </button>
+            `}
+        `;
+        
+        container.appendChild(questionDiv);
+    }
+
+    function addQuestion() {
+        const newQuestion = {
+            question: '',
+            right_marks_for_question: 0,
+            answer_scored: 0,
+            sub_section_questions_present: false,
+            sub_section_questions: [],
+            category: document.getElementById('editCategory').value || '',
+            critical: false
+        };
+        
+        const container = document.getElementById('questionsContainer');
+        const index = container.children.length;
+        addQuestionToContainer(newQuestion, index);
+    }
+
+    function deleteQuestion(button) {
+        if (confirm('Are you sure you want to delete this question?')) {
+            button.closest('.question-item').remove();
+            // Re-index questions
+            reindexQuestions();
+        }
+    }
+
+    function reindexQuestions() {
+        const container = document.getElementById('questionsContainer');
+        const questions = container.querySelectorAll('.question-item');
+        questions.forEach((q, index) => {
+            q.dataset.index = index;
+            const header = q.querySelector('.question-header strong');
+            if (header) header.textContent = `Question ${index + 1}`;
+        });
+    }
+
+    function addSubQuestion(button) {
+        const questionItem = button.closest('.question-item');
+        if (!questionItem) return;
+        
+        let subQuestionsList = questionItem.querySelector('.sub-questions-list');
+        
+        // If sub-questions section doesn't exist, create it
+        if (!subQuestionsList) {
+            const subQuestionsHTML = `
+                <div class="sub-questions">
+                    <label><strong>Sub-questions:</strong></label>
+                    <div class="sub-questions-list" data-question-index="${questionItem.dataset.index}">
+                    </div>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="addSubQuestion(this)">
+                        <i class="fas fa-plus"></i> Add Sub-question
+                    </button>
+                </div>
+            `;
+            questionItem.insertAdjacentHTML('beforeend', subQuestionsHTML);
+            subQuestionsList = questionItem.querySelector('.sub-questions-list');
+        }
+        
+        const subQuestionDiv = document.createElement('div');
+        subQuestionDiv.className = 'sub-question-item';
+        subQuestionDiv.innerHTML = `
+            <input type="text" class="form-control sub-question-text" placeholder="Sub-question text">
+            <input type="number" class="form-control sub-question-marks" value="0" min="0" placeholder="Marks">
+            <button type="button" class="btn-icon btn-danger btn-sm" onclick="deleteSubQuestion(this)" title="Delete">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+        subQuestionsList.appendChild(subQuestionDiv);
+    }
+
+    function deleteSubQuestion(button) {
+        button.closest('.sub-question-item').remove();
+    }
+
+    function enableSubQuestions(button) {
+        const questionItem = button.closest('.question-item');
+        if (!questionItem) return;
+        
+        const subQuestionsHTML = `
+            <div class="sub-questions">
+                <label><strong>Sub-questions:</strong></label>
+                <div class="sub-questions-list" data-question-index="${questionItem.dataset.index}">
+                </div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="addSubQuestion(this)">
+                    <i class="fas fa-plus"></i> Add Sub-question
+                </button>
+            </div>
+        `;
+        button.outerHTML = subQuestionsHTML;
+    }
+
+    // Handle form submission
+    document.getElementById('editProcedureForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const procedureId = document.getElementById('editProcedureId').value;
+        const procedureName = document.getElementById('editProcedureName').value.trim();
+        const category = document.getElementById('editCategory').value;
+        
+        if (!procedureName) {
+            alert('Please enter a procedure name');
+            return;
+        }
+        
+        if (!category) {
+            alert('Please select a category');
+            return;
+        }
+        
+        // Collect questions
+        const questions = collectQuestions();
+        
+        // Prepare data
+        const data = {
+            procedure_id: procedureId,
+            procedure_name: procedureName,
+            category: category,
+            exam_meta_data: questions
+        };
+        
+        try {
+            const response = await fetch('/api/procedure/update/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken()
+                },
+                body: JSON.stringify(data)
+            });
+            
+            const result = await response.json();
+            
+            if (result.status === 'success') {
+                alert('Assessment updated successfully!');
+                toggleEditProcedurePanel();
+                // Reload procedures list
+                if (window.resetProceduresAndLoad) {
+                    resetProceduresAndLoad();
+                }
+            } else {
+                alert('Error updating assessment: ' + (result.message || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error updating procedure:', error);
+            alert('Error updating assessment');
+        }
+    });
+
+    function collectQuestions() {
+        const container = document.getElementById('questionsContainer');
+        const questionItems = container.querySelectorAll('.question-item');
+        const questions = [];
+        
+        questionItems.forEach((item) => {
+            const questionText = item.querySelector('.question-text').value.trim();
+            const marks = parseInt(item.querySelector('.question-marks').value) || 0;
+            const critical = item.querySelector('.question-critical').checked;
+            const category = document.getElementById('editCategory').value;
+            
+            if (!questionText) return; // Skip empty questions
+            
+            const question = {
+                question: questionText,
+                right_marks_for_question: marks,
+                answer_scored: 0,
+                category: category,
+                critical: critical,
+                sub_section_questions_present: false,
+                sub_section_questions: []
+            };
+            
+            // Check for sub-questions
+            const subQuestionsList = item.querySelector('.sub-questions-list');
+            if (subQuestionsList && subQuestionsList.children.length > 0) {
+                question.sub_section_questions_present = true;
+                const subQuestions = [];
+                
+                subQuestionsList.querySelectorAll('.sub-question-item').forEach((subItem) => {
+                    const subText = subItem.querySelector('.sub-question-text').value.trim();
+                    const subMarks = parseFloat(subItem.querySelector('.sub-question-marks').value) || 0;
+                    
+                    if (subText) {
+                        subQuestions.push({
+                            question: subText,
+                            right_marks_for_question: subMarks,
+                            answer_scored: 0,
+                            category: category,
+                            critical: critical
+                        });
+                    }
+                });
+                
+                question.sub_section_questions = subQuestions;
+                
+                // Recalculate total marks if sub-questions exist
+                if (subQuestions.length > 0) {
+                    question.right_marks_for_question = subQuestions.reduce((sum, sq) => sum + sq.right_marks_for_question, 0);
+                }
+            }
+            
+            questions.push(question);
+        });
+        
+        return [{
+            section_name: '',
+            section_questions: questions
+        }];
+    }
+
+    function getCSRFToken() {
+        return document.querySelector('[name=csrfmiddlewaretoken]').value;
+    }
 </script>
 
 <script>
@@ -880,7 +1244,7 @@ function renderProcedureRow(proc) {
     const row = document.createElement('tr');
     row.className = 'procedure-row clickable';
     row.innerHTML = `
-        <td>${proc.name}</td>
+        <td style="cursor: pointer;">${proc.name}</td>
         <td>${proc.questions}</td>
         <td>${proc.category}</td>
         <td>
@@ -891,10 +1255,13 @@ function renderProcedureRow(proc) {
         </td>
         <td>
             <div class="actions">
-                <button class="btn-icon btn-danger" onclick="event.stopPropagation(); deleteProcedure('${proc.id}')">
+                <button class="btn-icon" onclick="event.stopPropagation(); editProcedure('${proc.id}')" title="Edit">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn-icon btn-danger" onclick="event.stopPropagation(); deleteProcedure('${proc.id}')" title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
-                <button class="btn-icon" onclick="event.stopPropagation(); downloadProcedure('${proc.id}')">
+                <button class="btn-icon" onclick="event.stopPropagation(); downloadProcedure('${proc.id}')" title="Download">
                     <i class="fas fa-download"></i>
                 </button>
             </div>
@@ -2093,9 +2460,123 @@ input:checked + .slider:before {
     background: #e2e8f0;
 }
 
+/* Edit Panel Styles */
+#editProcedurePanel {
+    position: fixed;
+    top: 0;
+    right: -800px;
+    width: 800px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+#editProcedurePanel.active {
+    right: 0;
+}
+
+.questions-container {
+    margin: 16px 0;
+}
+
+.question-item {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.question-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.question-header strong {
+    color: #1a202c;
+    font-size: 14px;
+}
+
+.sub-questions {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.sub-questions-list {
+    margin: 12px 0;
+}
+
+.sub-question-item {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    align-items: center;
+}
+
+.sub-question-item .form-control {
+    flex: 1;
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    padding: 16px 0;
+    border-top: 1px solid #e2e8f0;
+    margin-top: 24px;
+}
+
+.btn-primary {
+    background: #F16564;
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-primary:hover {
+    background: #e45857;
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.btn-secondary:hover {
+    background: #5a6268;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .filter-panel {
+        width: 100%;
+        right: -100%;
+    }
+    #editProcedurePanel {
         width: 100%;
         right: -100%;
     }
