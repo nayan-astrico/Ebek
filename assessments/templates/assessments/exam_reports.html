@@ -314,6 +314,17 @@
             </div>
         </div>
 
+        <!-- OSCE Report Loader Overlay -->
+        <div id="osceReportLoader" class="osce-loader-overlay" style="display: none;">
+            <div class="osce-loader-content">
+                <div class="osce-loader-spinner">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </div>
+                <h3>Loading OSCE Report Data...</h3>
+                <p>Please wait while we fetch the data</p>
+            </div>
+        </div>
+
         <!-- Metrics Section -->
         <div class="metrics-section" style="display: none;">
             <div class="metrics-cards">
@@ -1178,6 +1189,53 @@
         padding: 24px;
         margin-bottom: 24px;
         margin-top: 24px;
+    }
+
+    /* OSCE Report Loader Overlay */
+    .osce-loader-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: transparent;
+        z-index: 9999;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        pointer-events: none;
+    }
+    
+    .osce-loader-overlay .osce-loader-content {
+        pointer-events: auto;
+    }
+
+    .osce-loader-content {
+        text-align: center;
+        padding: 40px;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        max-width: 400px;
+    }
+
+    .osce-loader-spinner {
+        font-size: 48px;
+        color: #F16564;
+        margin-bottom: 20px;
+    }
+
+    .osce-loader-content h3 {
+        color: #1a202c;
+        font-size: 20px;
+        font-weight: 600;
+        margin: 0 0 12px 0;
+    }
+
+    .osce-loader-content p {
+        color: #64748b;
+        font-size: 14px;
+        margin: 0;
     }
 
     .osce-section .section-title {
@@ -4394,23 +4452,33 @@
         if (skill) params.append('skill', skill);
         if (studentSearch) params.append('student_search', studentSearch);
         
-        // Show loading state
+        // Show complete loader overlay
+        const loader = document.getElementById('osceReportLoader');
+        if (loader) {
+            loader.style.display = 'flex';
+        }
+        
+        // Hide existing content
         const metricsSection = document.querySelector('#osce-tab .metrics-section');
         const noDataMessage = document.getElementById('osceNoDataFound');
         if (metricsSection) metricsSection.style.display = 'none';
-        if (noDataMessage) {
-            noDataMessage.innerHTML = `
-                <i class="fas fa-spinner fa-spin"></i>
-                <h3>Loading...</h3>
-                <p>Fetching OSCE report data</p>
-            `;
-            noDataMessage.style.display = 'block';
-        }
+        if (noDataMessage) noDataMessage.style.display = 'none';
+        
+        // Hide all sections
+        const allSections = document.querySelectorAll('#osce-tab .osce-section');
+        allSections.forEach(section => {
+            section.style.display = 'none';
+        });
         
         // Fetch OSCE report data
         fetch(`/api/osce-report/?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
+                // Hide loader
+                if (loader) {
+                    loader.style.display = 'none';
+                }
+                
                 if (data.success) {
                     displayOsceKPIs(data);
                 } else {
@@ -4429,6 +4497,12 @@
             })
             .catch(error => {
                 console.error('Error fetching OSCE report:', error);
+                
+                // Hide loader
+                if (loader) {
+                    loader.style.display = 'none';
+                }
+                
                 const metricsSection = document.querySelector('#osce-tab .metrics-section');
                 const noDataMessage = document.getElementById('osceNoDataFound');
                 if (metricsSection) metricsSection.style.display = 'none';
@@ -4853,18 +4927,27 @@
         if (semester) params.append('semester', semester);
         if (osceLevel && osceLevel !== 'All') params.append('osce_level', osceLevel);
         
-        // Show loading
-        const section = document.getElementById('osceSkillsReportSection');
-        if (section) {
-            section.style.display = 'block';
-            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Show complete loader overlay
+        const loader = document.getElementById('osceReportLoader');
+        if (loader) {
+            loader.style.display = 'flex';
         }
         
         // Fetch skills data
         fetch(`/api/skills-for-category/?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
+                // Hide loader
+                if (loader) {
+                    loader.style.display = 'none';
+                }
+                
                 if (data.success) {
+                    const section = document.getElementById('osceSkillsReportSection');
+                    if (section) {
+                        section.style.display = 'block';
+                        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
                     displaySkillsReport(data, category);
                 } else {
                     alert(`Error: ${data.error || 'Failed to fetch skills data'}`);
@@ -4872,6 +4955,12 @@
             })
             .catch(error => {
                 console.error('Error fetching skills data:', error);
+                
+                // Hide loader
+                if (loader) {
+                    loader.style.display = 'none';
+                }
+                
                 alert('Failed to fetch skills data');
             });
     }
