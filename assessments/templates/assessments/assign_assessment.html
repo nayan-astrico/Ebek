@@ -31,9 +31,6 @@
         Filters
         <span class="filter-badge" id="filterBadge" style="display: none;">0</span>
     </button>
-    <button type="button" id="bulkDeleteAssessmentsBtn" class="btn btn-danger" disabled>
-        <i class="fas fa-trash"></i> Delete Selected (0)
-    </button>
 </div>
 
 <!-- Filter Side Panel -->
@@ -78,15 +75,22 @@
                 <!-- Type Content -->
                 <div class="filter-content active" id="type-content">
                     <div class="filter-search">
+                        <input type="text" placeholder="Search type" id="filterTypeSearch" oninput="filterTypeOptions(this.value)">
                         <div class="selection-count" id="typeSelectionCount">0 Type selected</div>
                     </div>
                     <div class="options-list" id="filterTypeOptions">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllTypes" onchange="toggleSelectAll('type', this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                         <label class="option-item">
-                            <input type="checkbox" name="type" value="B2B" onchange="updateTypeSelectionCount()">
+                            <input type="checkbox" name="type" value="B2B" onchange="updateTypeSelectionCount()"
+                                   class="type-checkbox">
                             <span>B2B</span>
                         </label>
                         <label class="option-item">
-                            <input type="checkbox" name="type" value="B2C" onchange="updateTypeSelectionCount()">
+                            <input type="checkbox" name="type" value="B2C" onchange="updateTypeSelectionCount()"
+                                   class="type-checkbox">
                             <span>B2C</span>
                         </label>
                     </div>
@@ -95,23 +99,32 @@
                 <!-- Mode Content -->
                 <div class="filter-content" id="mode-content">
                     <div class="filter-search">
+                        <input type="text" placeholder="Search mode" id="filterModeSearch" oninput="filterModeOptions(this.value)">
                         <div class="selection-count" id="modeSelectionCount">0 Mode selected</div>
                     </div>
                     <div class="options-list" id="filterModeOptions">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllModes" onchange="toggleSelectAll('mode', this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                         <label class="option-item">
-                            <input type="checkbox" name="mode" value="Classroom" onchange="updateModeSelectionCount()">
+                            <input type="checkbox" name="mode" value="Classroom" onchange="updateModeSelectionCount()"
+                                   class="mode-checkbox">
                             <span>Classroom</span>
                         </label>
                         <label class="option-item">
-                            <input type="checkbox" name="mode" value="Mock" onchange="updateModeSelectionCount()">
+                            <input type="checkbox" name="mode" value="Mock" onchange="updateModeSelectionCount()"
+                                   class="mode-checkbox">
                             <span>Mock</span>
                         </label>
                         <label class="option-item">
-                            <input type="checkbox" name="mode" value="Final" onchange="updateModeSelectionCount()">
+                            <input type="checkbox" name="mode" value="Final" onchange="updateModeSelectionCount()"
+                                   class="mode-checkbox">
                             <span>Final</span>
                         </label>
                         <label class="option-item">
-                            <input type="checkbox" name="mode" value="Skillathon" onchange="updateModeSelectionCount()">
+                            <input type="checkbox" name="mode" value="Skillathon" onchange="updateModeSelectionCount()"
+                                   class="mode-checkbox">
                             <span>Skillathon</span>
                         </label>
                     </div>
@@ -124,16 +137,23 @@
                         <div class="selection-count" id="entitySelectionCount">0 Entity selected</div>
                     </div>
                     <div class="options-list" id="filterEntityOptions">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllEntities" onchange="toggleSelectAll('entity', this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                         <label class="option-item">
-                            <input type="checkbox" name="entity" value="Skillathon" onchange="updateEntitySelectionCount()">
+                            <input type="checkbox" name="entity" value="Skillathon" onchange="updateEntitySelectionCount()"
+                                   class="entity-checkbox">
                             <span>Skillathon</span>
                         </label>
                         <label class="option-item">
-                            <input type="checkbox" name="entity" value="Institution" onchange="updateEntitySelectionCount()">
+                            <input type="checkbox" name="entity" value="Institution" onchange="updateEntitySelectionCount()"
+                                   class="entity-checkbox">
                             <span>Institution</span>
                         </label>
                         <label class="option-item">
-                            <input type="checkbox" name="entity" value="Hospital" onchange="updateEntitySelectionCount()">
+                            <input type="checkbox" name="entity" value="Hospital" onchange="updateEntitySelectionCount()"
+                                   class="entity-checkbox">
                             <span>Hospital</span>
                         </label>
                     </div>
@@ -216,7 +236,6 @@
         <table class="table">
             <thead>
                 <tr>
-                    <th style="width:36px;"><input type="checkbox" id="selectAllAssessments"></th>
                     <th>Assessment Name</th>
                     <th>Type</th>
                     <th>Mode</th>
@@ -230,7 +249,6 @@
             <tbody id="assessmentsTableBody">
                 {% for test in page_obj %}
                 <tr class="assessment-row" data-type="{{ test.type|default:'B2C' }}" data-mode="{{ test.mode|default:'Skillathon' }}">
-                    <td><input type="checkbox" class="assessment-row-select" data-id="{{ test.id }}" data-type="{{ test.type|default:'B2C' }}"></td>
                     <td>
                         <div class="assessment-name">
                             <span>{{ test.assessment_name }}</span>
@@ -1460,6 +1478,18 @@
         position: relative;
         padding-right: 28px; /* room for badge on the right */
     }
+    .select-all-item {
+        border-bottom: 1px solid #e2e8f0;
+        padding-bottom: 12px;
+        margin-bottom: 8px;
+        font-weight: 600;
+    }
+
+    .select-all-item span {
+        font-weight: 600;
+        color: #1a202c;
+    }
+
     .filter-type .filter-type-badge {
         position: absolute;
         right: 10px;
@@ -2992,7 +3022,6 @@
     function confirmDeleteTest(testId, testType) {
         document.getElementById('deleteTestId').value = testId;
         document.getElementById('deleteTestType').value = (testType || 'B2C');
-        document.getElementById('deleteTestId').dataset.bulk = 'false';
         $('#deleteTestModal').modal('show');
     }
 
@@ -3011,38 +3040,20 @@
                 btn.disabled = true;
                 btn.textContent = 'Deleting...';
                 
-                const bulk = document.getElementById('deleteTestId').dataset.bulk === 'true';
                 const csrf = $('[name="csrfmiddlewaretoken"]').val();
-                const doDelete = (id, type) => {
-                    const url = (type === 'B2B') ? `/api/batch-assignments/${id}/delete/` : `/api/tests/${id}/delete/`;
-                    return $.ajax({ url, method: 'POST', headers: { 'X-CSRFToken': csrf } });
-                };
-                if (!bulk) {
-                    doDelete(testId, testType).done(function(){
-                        $('#deleteTestModal').modal('hide');
-                        window.location.reload();
-                    }).fail(function(xhr){
-                        alert(xhr.responseJSON?.error || 'Failed to delete');
-                        btn.disabled = false;
-                        btn.textContent = originalText;
-                    });
-                } else {
-                    // Bulk delete flow: iterate selected IDs
-                    const ids = Array.from(selectedAssessmentIds);
-                    const types = ids.map(id => selectedAssessmentTypes.get(id) || 'B2C');
-                    let seq = Promise.resolve();
-                    ids.forEach((id, idx) => {
-                        seq = seq.then(() => doDelete(id, types[idx]));
-                    });
-                    seq.then(() => {
-                        $('#deleteTestModal').modal('hide');
-                        window.location.reload();
-                    }).catch((err) => {
-                        alert('Failed to delete some items');
-                        btn.disabled = false;
-                        btn.textContent = originalText;
-                    });
-                }
+                const url = (testType === 'B2B') ? `/api/batch-assignments/${testId}/delete/` : `/api/tests/${testId}/delete/`;
+                $.ajax({ 
+                    url, 
+                    method: 'POST', 
+                    headers: { 'X-CSRFToken': csrf } 
+                }).done(function(){
+                    $('#deleteTestModal').modal('hide');
+                    window.location.reload();
+                }).fail(function(xhr){
+                    alert(xhr.responseJSON?.error || 'Failed to delete');
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                });
             });
         }
     });
@@ -3268,64 +3279,6 @@
         }
     }
 
-    // Bulk delete: track selections
-    let selectedAssessmentIds = new Set();
-    const selectedAssessmentTypes = new Map();
-
-    document.addEventListener('change', function(e) {
-        if (e.target && e.target.classList.contains('assessment-row-select')) {
-            const id = e.target.getAttribute('data-id');
-            const type = e.target.getAttribute('data-type') || 'B2C';
-            if (e.target.checked) {
-                selectedAssessmentIds.add(id);
-                selectedAssessmentTypes.set(id, type);
-            } else {
-                selectedAssessmentIds.delete(id);
-                selectedAssessmentTypes.delete(id);
-            }
-            updateBulkDeleteAssessmentsState();
-            // Sync header checkbox
-            const all = document.querySelectorAll('.assessment-row-select');
-            const master = document.getElementById('selectAllAssessments');
-            if (master) master.checked = (all.length > 0 && Array.from(all).every(cb => cb.checked));
-        }
-        if (e.target && e.target.id === 'selectAllAssessments') {
-            const checks = document.querySelectorAll('.assessment-row-select');
-            checks.forEach(cb => {
-                cb.checked = e.target.checked;
-                const id = cb.getAttribute('data-id');
-                const type = cb.getAttribute('data-type') || 'B2C';
-                if (e.target.checked) {
-                    selectedAssessmentIds.add(id);
-                    selectedAssessmentTypes.set(id, type);
-                } else {
-                    selectedAssessmentIds.delete(id);
-                    selectedAssessmentTypes.delete(id);
-                }
-            });
-            updateBulkDeleteAssessmentsState();
-        }
-    });
-
-    function updateBulkDeleteAssessmentsState() {
-        const btn = document.getElementById('bulkDeleteAssessmentsBtn');
-        if (!btn) return;
-        const count = selectedAssessmentIds.size;
-        btn.disabled = count === 0;
-        btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected (' + count + ')';
-    }
-
-    document.addEventListener('click', function(e) {
-        const target = e.target;
-        if (target && target.id === 'bulkDeleteAssessmentsBtn') {
-            if (selectedAssessmentIds.size === 0) return;
-            // Use existing modal
-            document.getElementById('deleteTestId').value = '';
-            document.getElementById('deleteTestType').value = '';
-            document.getElementById('deleteTestId').dataset.bulk = 'true';
-            $('#deleteTestModal').modal('show');
-        }
-    });
 
     // Switch Filter Type
     function switchFilter(filterType) {
@@ -3343,9 +3296,57 @@
     }
 
     // Update Selection Counts
+    function toggleSelectAll(category, selectAllCheckbox) {
+        let checkboxSelector;
+        if (category === 'type') {
+            checkboxSelector = '.type-checkbox';
+        } else if (category === 'mode') {
+            checkboxSelector = '.mode-checkbox';
+        } else if (category === 'entity') {
+            checkboxSelector = '.entity-checkbox';
+        } else if (category === 'batch') {
+            checkboxSelector = '.batch-checkbox';
+        } else if (category === 'assessor') {
+            checkboxSelector = '.assessor-checkbox';
+        } else {
+            checkboxSelector = `input[name="${category}"]`;
+        }
+        
+        const checkboxes = document.querySelectorAll(`#filter${category.charAt(0).toUpperCase() + category.slice(1)}Options ${checkboxSelector}`);
+        const isChecked = selectAllCheckbox.checked;
+        
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = isChecked;
+            const changeEvent = new Event('change', { bubbles: true });
+            checkbox.dispatchEvent(changeEvent);
+        });
+        
+        if (category === 'type') {
+            updateTypeSelectionCount();
+        } else if (category === 'mode') {
+            updateModeSelectionCount();
+        } else if (category === 'entity') {
+            updateEntitySelectionCount();
+        } else if (category === 'batch') {
+            updateBatchSelectionCount();
+        } else if (category === 'assessor') {
+            updateAssessorSelectionCount();
+        }
+    }
+
     function updateTypeSelectionCount() {
-        const count = document.querySelectorAll('input[name="type"]:checked').length;
+        const checkedBoxes = document.querySelectorAll('#filterTypeOptions .type-checkbox:checked');
+        const count = checkedBoxes.length;
         document.getElementById('typeSelectionCount').textContent = `${count} Type selected`;
+        
+        // Sync "Select All" checkbox state
+        const selectAllCheckbox = document.getElementById('selectAllTypes');
+        const allCheckboxes = document.querySelectorAll('#filterTypeOptions .type-checkbox');
+        if (selectAllCheckbox && allCheckboxes.length > 0) {
+            selectAllCheckbox.checked = (count === allCheckboxes.length);
+            selectAllCheckbox.indeterminate = (count > 0 && count < allCheckboxes.length);
+        }
+        
         updateFilterBadge();
         setFilterTypeBadge('type', count);
     }
@@ -3371,41 +3372,83 @@
         const batchOptions = document.getElementById('filterBatchOptions');
         const assessorOptions = document.getElementById('filterAssessorOptions');
         if (batchOptions) {
-            batchOptions.innerHTML = Array.from(batchSet).sort().map(b => (
-                `<label class="option-item"><input type="checkbox" name="batch" value="${b}" onchange="updateBatchSelectionCount()"><span>${b}</span></label>`
+            const batchOptionsHTML = Array.from(batchSet).sort().map(b => (
+                `<label class="option-item"><input type="checkbox" name="batch" value="${b}" onchange="updateBatchSelectionCount()" class="batch-checkbox"><span>${b}</span></label>`
             )).join('');
+            batchOptions.innerHTML = `<label class="option-item select-all-item"><input type="checkbox" id="selectAllBatches" onchange="toggleSelectAll('batch', this)"><span><strong>Select All</strong></span></label>` + batchOptionsHTML;
         }
         if (assessorOptions) {
-            assessorOptions.innerHTML = Array.from(assessorSet).sort().map(a => (
-                `<label class="option-item"><input type="checkbox" name="assessor" value="${a}" onchange="updateAssessorSelectionCount()"><span>${a}</span></label>`
+            const assessorOptionsHTML = Array.from(assessorSet).sort().map(a => (
+                `<label class="option-item"><input type="checkbox" name="assessor" value="${a}" onchange="updateAssessorSelectionCount()" class="assessor-checkbox"><span>${a}</span></label>`
             )).join('');
+            assessorOptions.innerHTML = `<label class="option-item select-all-item"><input type="checkbox" id="selectAllAssessors" onchange="toggleSelectAll('assessor', this)"><span><strong>Select All</strong></span></label>` + assessorOptionsHTML;
         }
     }
 
     function updateModeSelectionCount() {
-        const count = document.querySelectorAll('input[name="mode"]:checked').length;
+        const checkedBoxes = document.querySelectorAll('#filterModeOptions .mode-checkbox:checked');
+        const count = checkedBoxes.length;
         document.getElementById('modeSelectionCount').textContent = `${count} Mode selected`;
+        
+        // Sync "Select All" checkbox state
+        const selectAllCheckbox = document.getElementById('selectAllModes');
+        const allCheckboxes = document.querySelectorAll('#filterModeOptions .mode-checkbox');
+        if (selectAllCheckbox && allCheckboxes.length > 0) {
+            selectAllCheckbox.checked = (count === allCheckboxes.length);
+            selectAllCheckbox.indeterminate = (count > 0 && count < allCheckboxes.length);
+        }
+        
         updateFilterBadge();
         setFilterTypeBadge('mode', count);
     }
 
     function updateEntitySelectionCount() {
-        const count = document.querySelectorAll('input[name="entity"]:checked').length;
+        const checkedBoxes = document.querySelectorAll('#filterEntityOptions .entity-checkbox:checked');
+        const count = checkedBoxes.length;
         document.getElementById('entitySelectionCount').textContent = `${count} Entity selected`;
+        
+        // Sync "Select All" checkbox state
+        const selectAllCheckbox = document.getElementById('selectAllEntities');
+        const allCheckboxes = document.querySelectorAll('#filterEntityOptions .entity-checkbox');
+        if (selectAllCheckbox && allCheckboxes.length > 0) {
+            selectAllCheckbox.checked = (count === allCheckboxes.length);
+            selectAllCheckbox.indeterminate = (count > 0 && count < allCheckboxes.length);
+        }
+        
         updateFilterBadge();
         setFilterTypeBadge('entity', count);
     }
 
     function updateBatchSelectionCount() {
-        const count = document.querySelectorAll('input[name="batch"]:checked').length;
+        const checkedBoxes = document.querySelectorAll('#filterBatchOptions .batch-checkbox:checked');
+        const count = checkedBoxes.length;
         document.getElementById('batchSelectionCount').textContent = `${count} Batch selected`;
+        
+        // Sync "Select All" checkbox state
+        const selectAllCheckbox = document.getElementById('selectAllBatches');
+        const allCheckboxes = document.querySelectorAll('#filterBatchOptions .batch-checkbox');
+        if (selectAllCheckbox && allCheckboxes.length > 0) {
+            selectAllCheckbox.checked = (count === allCheckboxes.length);
+            selectAllCheckbox.indeterminate = (count > 0 && count < allCheckboxes.length);
+        }
+        
         updateFilterBadge();
         setFilterTypeBadge('batch', count);
     }
 
     function updateAssessorSelectionCount() {
-        const count = document.querySelectorAll('input[name="assessor"]:checked').length;
+        const checkedBoxes = document.querySelectorAll('#filterAssessorOptions .assessor-checkbox:checked');
+        const count = checkedBoxes.length;
         document.getElementById('assessorSelectionCount').textContent = `${count} Assessor selected`;
+        
+        // Sync "Select All" checkbox state
+        const selectAllCheckbox = document.getElementById('selectAllAssessors');
+        const allCheckboxes = document.querySelectorAll('#filterAssessorOptions .assessor-checkbox');
+        if (selectAllCheckbox && allCheckboxes.length > 0) {
+            selectAllCheckbox.checked = (count === allCheckboxes.length);
+            selectAllCheckbox.indeterminate = (count > 0 && count < allCheckboxes.length);
+        }
+        
         updateFilterBadge();
         setFilterTypeBadge('assessor', count);
     }
@@ -3466,7 +3509,10 @@
 
     // Clear All Filters
     function clearAllFilters() {
-        document.querySelectorAll('.filter-form input[type="checkbox"]').forEach(cb => cb.checked = false);
+        document.querySelectorAll('.filter-form input[type="checkbox"]').forEach(cb => {
+            cb.checked = false;
+            cb.indeterminate = false;
+        });
         document.getElementById('filterDateFrom').value = '';
         document.getElementById('filterDateTo').value = '';
         updateTypeSelectionCount();
@@ -3485,6 +3531,67 @@
             emptyStateRow.style.display = 'none';
         }
     }
+
+    // Make entire option row clickable to toggle checkbox
+    document.addEventListener('click', function(e) {
+        const label = e.target.closest('label.option-item');
+        if (!label) return;
+        
+        // Only handle filter options
+        if (!label.closest('.filter-content')) return;
+        
+        if (label.classList.contains('select-all-item')) {
+            return;
+        }
+        
+        const checkbox = label.querySelector('input[type="checkbox"]');
+        if (!checkbox) return;
+        
+        if (e.target === checkbox || e.target.type === 'checkbox') {
+            setTimeout(function() {
+                const container = label.closest('.filter-content');
+                if (container) {
+                    const category = container.id.replace('-content', '');
+                    if (category === 'type') {
+                        updateTypeSelectionCount();
+                    } else if (category === 'mode') {
+                        updateModeSelectionCount();
+                    } else if (category === 'entity') {
+                        updateEntitySelectionCount();
+                    } else if (category === 'batch') {
+                        updateBatchSelectionCount();
+                    } else if (category === 'assessor') {
+                        updateAssessorSelectionCount();
+                    }
+                }
+            }, 10);
+            return;
+        }
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        checkbox.checked = !checkbox.checked;
+        
+        const changeEvent = new Event('change', { bubbles: true, cancelable: false });
+        checkbox.dispatchEvent(changeEvent);
+        
+        const container = label.closest('.filter-content');
+        if (container) {
+            const category = container.id.replace('-content', '');
+            if (category === 'type') {
+                updateTypeSelectionCount();
+            } else if (category === 'mode') {
+                updateModeSelectionCount();
+            } else if (category === 'entity') {
+                updateEntitySelectionCount();
+            } else if (category === 'batch') {
+                updateBatchSelectionCount();
+            } else if (category === 'assessor') {
+                updateAssessorSelectionCount();
+            }
+        }
+    }, true);
 
     // Store active filters globally
     let activeFilters = {
@@ -3610,9 +3717,40 @@
     }
 
     // Filter search functions
+    function filterTypeOptions(searchTerm) {
+        const options = document.querySelectorAll('#filterTypeOptions .option-item');
+        options.forEach(option => {
+            // Always show "Select All" option
+            if (option.classList.contains('select-all-item')) {
+                option.style.display = '';
+                return;
+            }
+            const text = option.textContent.toLowerCase();
+            option.style.display = text.includes(searchTerm.toLowerCase()) ? '' : 'none';
+        });
+    }
+
+    function filterModeOptions(searchTerm) {
+        const options = document.querySelectorAll('#filterModeOptions .option-item');
+        options.forEach(option => {
+            // Always show "Select All" option
+            if (option.classList.contains('select-all-item')) {
+                option.style.display = '';
+                return;
+            }
+            const text = option.textContent.toLowerCase();
+            option.style.display = text.includes(searchTerm.toLowerCase()) ? '' : 'none';
+        });
+    }
+
     function filterEntityOptions(searchTerm) {
         const options = document.querySelectorAll('#filterEntityOptions .option-item');
         options.forEach(option => {
+            // Always show "Select All" option
+            if (option.classList.contains('select-all-item')) {
+                option.style.display = '';
+                return;
+            }
             const text = option.textContent.toLowerCase();
             option.style.display = text.includes(searchTerm.toLowerCase()) ? '' : 'none';
         });
@@ -3621,6 +3759,11 @@
     function filterBatchOptions(searchTerm) {
         const options = document.querySelectorAll('#filterBatchOptions .option-item');
         options.forEach(option => {
+            // Always show "Select All" option
+            if (option.classList.contains('select-all-item')) {
+                option.style.display = '';
+                return;
+            }
             const text = option.textContent.toLowerCase();
             option.style.display = text.includes(searchTerm.toLowerCase()) ? '' : 'none';
         });
@@ -3629,6 +3772,11 @@
     function filterAssessorOptions(searchTerm) {
         const options = document.querySelectorAll('#filterAssessorOptions .option-item');
         options.forEach(option => {
+            // Always show "Select All" option
+            if (option.classList.contains('select-all-item')) {
+                option.style.display = '';
+                return;
+            }
             const text = option.textContent.toLowerCase();
             option.style.display = text.includes(searchTerm.toLowerCase()) ? '' : 'none';
         });
