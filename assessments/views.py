@@ -7314,7 +7314,39 @@ def fetch_osce_report(request):
         for sem in sorted(semester_data.keys(), key=lambda x: int(x) if x.isdigit() else 0):
             sem_data = semester_data[sem]
             num_students = len(sem_data['students'])
-            num_osces = len(sem_data['osces'])
+            
+            # Calculate num_osces from BatchAssignmentSummary for this semester
+            # Each BatchAssignmentSummary document represents one OSCE
+            bas_query_sem = db.collection('BatchAssignmentSummary').where('yearOfBatch', '==', academic_year).where('unit_name', '==', institution_name).where('semester', '==', sem)
+            
+            # Filter by exam_type (OSCE level) if applied
+            if osce_level and osce_level != 'All':
+                bas_query_sem = bas_query_sem.where('exam_type', '==', osce_level)
+            
+            batch_assignment_summaries_sem = list(bas_query_sem.stream())
+            
+            # If skill/procedure filter is applied, check if procedure exists in procedure_assessor_mappings
+            if skill:
+                num_osces = 0
+                for bas_doc in batch_assignment_summaries_sem:
+                    bas_data = bas_doc.to_dict()
+                    procedure_mappings = bas_data.get('procedure_assessor_mappings', [])
+                    
+                    # Check if the selected procedure exists in any mapping
+                    procedure_found = False
+                    for mapping in procedure_mappings:
+                        if isinstance(mapping, dict):
+                            procedure_id = mapping.get('procedure_id', '')
+                            if procedure_id == skill:
+                                procedure_found = True
+                                break
+                    
+                    if procedure_found:
+                        num_osces += 1
+            else:
+                # No skill filter, count all matching BatchAssignmentSummary documents for this semester
+                num_osces = len(batch_assignment_summaries_sem)
+            
             avg_score = round(sum(sem_data['scores']) / len(sem_data['scores']), 2) if sem_data['scores'] else 0
             pass_count_sem = sum(1 for s in sem_data['scores'] if s >= 80)
             pass_pct = round((pass_count_sem / len(sem_data['scores']) * 100) if sem_data['scores'] else 0, 2)
