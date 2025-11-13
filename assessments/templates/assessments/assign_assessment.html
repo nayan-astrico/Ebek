@@ -231,7 +231,7 @@
 <div class="filter-overlay" id="filterOverlay" onclick="toggleFilterPanel()"></div>
 
 <!-- Table -->
-<div class="card">
+<div class="card" style="width: fit-content;">
     <div class="table-wrapper">
         <table class="table">
             <thead>
@@ -406,9 +406,32 @@
                     <ul class="dropdown-list" id="procedureDropdownList"></ul>
                 </div>
                 <div id="procedureChipsContainer" class="chip-container"></div>
-                <!-- Inline Procedures & Assessors (B2B only) -->
-                <div id="selectedProceduresContainer" style="display: none;">
-                    <div id="selectedProceduresList"></div>
+                
+                <!-- Procedure-Assessor Mapping Table (B2B only) -->
+                <div id="procedureAssessorMappingContainer" style="display: none; margin-top: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h4 style="margin: 0; font-size: 16px; font-weight: 600; color: #1a202c;">Map Procedures to Assessors</h4>
+                    </div>
+                    <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+                        <div style="max-height: 400px; overflow-y: auto;">
+                            <table id="procedureAssessorMappingTable" style="width: 100%; border-collapse: collapse;">
+                                <thead style="background: #f7fafc; position: sticky; top: 0; z-index: 10;">
+                                    <tr>
+                                        <th style="padding: 12px; text-align: left; font-weight: 600; color: #1a202c; border-bottom: 2px solid #e2e8f0; min-width: 200px;">Procedure</th>
+                                        <th style="padding: 12px; text-align: left; font-weight: 600; color: #1a202c; border-bottom: 2px solid #e2e8f0;">Assessors</th>
+                                        <th style="padding: 12px; text-align: center; font-weight: 600; color: #1a202c; border-bottom: 2px solid #e2e8f0; width: 80px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="procedureAssessorMappingBody">
+                                    <!-- Rows will be dynamically added here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div id="mappingEmptyState" style="text-align: center; padding: 40px; color: #64748b; display: none;">
+                        <i class="fas fa-clipboard-list" style="font-size: 48px; margin-bottom: 12px; opacity: 0.5;"></i>
+                        <p style="margin: 0;">No procedures selected. Please select procedures first.</p>
+                    </div>
                 </div>
             </div>
 
@@ -800,6 +823,161 @@
         padding: 6px 14px;
     }
 
+    /* Procedure-Assessor Mapping Table Styles */
+    #procedureAssessorMappingTable tbody tr {
+        border-bottom: 1px solid #e2e8f0;
+        transition: background-color 0.2s;
+    }
+
+    #procedureAssessorMappingTable tbody tr:hover {
+        background-color: #f7fafc;
+    }
+
+    #procedureAssessorMappingTable tbody tr:last-child {
+        border-bottom: none;
+    }
+
+    #procedureAssessorMappingTable td {
+        padding: 16px 12px;
+        vertical-align: top;
+    }
+
+    .procedure-name-cell {
+        font-weight: 600;
+        color: #1a202c;
+    }
+
+    .assessor-select-cell {
+        min-width: 300px;
+    }
+
+    .assessor-select-dropdown {
+        position: relative;
+        display: inline-block;
+        width: 100%;
+    }
+
+    .assessor-select-btn {
+        width: 100%;
+        padding: 8px 32px 8px 12px;
+        border: 1px solid #cbd5e0;
+        border-radius: 6px;
+        background: white;
+        cursor: pointer;
+        text-align: left;
+        font-size: 14px;
+        color: #4a5568;
+        position: relative;
+    }
+
+    .assessor-select-btn:hover {
+        border-color: #F16564;
+    }
+
+    .assessor-select-btn.active {
+        border-color: #F16564;
+        box-shadow: 0 0 0 3px rgba(241, 101, 100, 0.1);
+    }
+
+    .assessor-select-btn::after {
+        content: '\f0d7';
+        font-family: 'Font Awesome 5 Free';
+        font-weight: 900;
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #64748b;
+    }
+
+    .assessor-select-list {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        max-height: 250px;
+        overflow-y: auto;
+        z-index: 1000;
+        margin-top: 4px;
+        display: none;
+    }
+
+    .assessor-select-list.show {
+        display: block;
+    }
+
+    .assessor-select-list .assessor-item {
+        padding: 10px 12px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        transition: background-color 0.2s;
+    }
+
+    .assessor-select-list .assessor-item:hover {
+        background-color: #f7fafc;
+    }
+
+    .assessor-select-list .assessor-item input[type="checkbox"] {
+        margin: 0;
+        cursor: pointer;
+    }
+
+    .assessor-select-list .assessor-item label {
+        margin: 0;
+        cursor: pointer;
+        flex: 1;
+        font-size: 14px;
+        color: #1a202c;
+    }
+
+    .assessor-chips-inline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+    }
+
+    .assessor-chip-inline {
+        background: #F16564;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .assessor-chip-inline .remove {
+        cursor: pointer;
+        font-weight: bold;
+        opacity: 0.9;
+    }
+
+    .assessor-chip-inline .remove:hover {
+        opacity: 1;
+    }
+
+    .remove-procedure-btn {
+        background: none;
+        border: none;
+        color: #e53e3e;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+    }
+
+    .remove-procedure-btn:hover {
+        background-color: #fed7d7;
+    }
+
     .form-control {
         width: 100%;
         padding: 10px;
@@ -823,12 +1001,12 @@
     }
 
 
-    .card {
+    /* .card {
         background: white;
         border-radius: 8px;
         border: 1px solid #e2e8f0;
         overflow: hidden;
-    }
+    } */
 
     /* Table Enhancements */
     .table {
@@ -1710,6 +1888,7 @@
         width: 100%;
         border-collapse: collapse;
         min-width: 1200px; /* Ensures horizontal scroll on smaller screens */
+        overflow: visible;
     }
 </style>
 
@@ -2206,7 +2385,7 @@
                     
                     const testType = $('#typeDropdownBtn').text().trim();
                     if (testType === 'B2B') {
-                        addProcedureWithAssessorSelection(id, value);
+                        addProcedureToMappingTable(id, value);
                     }
                 }
             } else {
@@ -2215,15 +2394,7 @@
                 
                 const testType = $('#typeDropdownBtn').text().trim();
                 if (testType === 'B2B') {
-                    // Close the assessor dropdown for this procedure before removing
-                    const assessorRow = $(`.assessor-selection-row[data-procedure-id="${id}"]`);
-                    if (assessorRow.length > 0) {
-                        const dropdownList = assessorRow.find('.assessor-dropdown-list');
-                        const dropdownBtn = assessorRow.find('.assessor-dropdown-btn');
-                        dropdownList.hide().removeClass('show');
-                        dropdownBtn.removeClass('active');
-                    }
-                    removeProcedure(id);
+                    removeProcedureFromMappingTable(id);
                 }
             }
         });
@@ -2247,7 +2418,7 @@
                     updateChipDisplay('procedureChipsContainer', 'Procedures');
                     const testType = $('#typeDropdownBtn').text().trim();
                     if (testType === 'B2B') {
-                        addProcedureWithAssessorSelection(id, value);
+                        addProcedureToMappingTable(id, value);
                     }
                 }
             } else {
@@ -2255,15 +2426,7 @@
                 updateChipDisplay('procedureChipsContainer', 'Procedures');
                 const testType = $('#typeDropdownBtn').text().trim();
                 if (testType === 'B2B') {
-                    // Close the assessor dropdown for this procedure before removing
-                    const assessorRow = $(`.assessor-selection-row[data-procedure-id="${id}"]`);
-                    if (assessorRow.length > 0) {
-                        const dropdownList = assessorRow.find('.assessor-dropdown-list');
-                        const dropdownBtn = assessorRow.find('.assessor-dropdown-btn');
-                        dropdownList.hide().removeClass('show');
-                        dropdownBtn.removeClass('active');
-                    }
-                    removeProcedure(id);
+                    removeProcedureFromMappingTable(id);
                 }
             }
         });
@@ -2659,48 +2822,247 @@
         }
     }
 
-    // Add procedure with assessor selection for B2B
-    function addProcedureWithAssessorSelection(procedureId, procedureName) {
-        // Check if procedure already exists
-        if ($(`.assessor-selection-row[data-procedure-id="${procedureId}"]`).length > 0) {
+    // Store assessors globally for mapping table
+    let allAssessors = [];
+    
+    // Fetch and cache assessors when B2B is selected
+    function fetchAssessorsForMapping() {
+        if (allAssessors.length > 0) {
+            return Promise.resolve(allAssessors);
+        }
+        
+        return $.ajax({
+            url: '/fetch-assessors/',
+            type: 'GET',
+            dataType: 'json'
+        }).then(function(response) {
+            if (response && response.assessors && Array.isArray(response.assessors)) {
+                allAssessors = response.assessors;
+                return allAssessors;
+            }
+            return [];
+        }).catch(function() {
+            console.error('Failed to fetch assessors');
+            return [];
+        });
+    }
+    
+    // Add procedure to mapping table for B2B
+    function addProcedureToMappingTable(procedureId, procedureName) {
+        // Check if procedure already exists in table
+        if ($(`#procedureAssessorMappingBody tr[data-procedure-id="${procedureId}"]`).length > 0) {
             return;
         }
         
-        // Ensure container is visible when at least one procedure is selected
-        $('#selectedProceduresContainer').show();
+        // Show mapping container
+        $('#procedureAssessorMappingContainer').show();
+        $('#mappingEmptyState').hide();
         
-        const procedureHtml = `
-            <div class="assessor-selection-row" data-procedure-id="${procedureId}" style="margin-top: 10px;">
-                <div style="display:flex; align-items:center; justify-content: space-between; gap: 12px;">
-                    <span class="procedure-name" style="font-weight: 600;">${procedureName}</span>
-                    <button type="button" class="remove-procedure" data-procedure-id="${procedureId}" title="Remove" style="background: none; border: none; cursor: pointer; color: #6c757d;">
-                        <i class="fas fa-times"></i>
+        // Create table row
+        const rowHtml = `
+            <tr data-procedure-id="${procedureId}">
+                <td class="procedure-name-cell">${procedureName}</td>
+                <td class="assessor-select-cell">
+                    <div class="assessor-select-dropdown">
+                        <button type="button" class="assessor-select-btn" data-procedure-id="${procedureId}">
+                            <span class="assessor-select-text">Select Assessors</span>
+                        </button>
+                        <div class="assessor-select-list" data-procedure-id="${procedureId}">
+                            <!-- Assessor checkboxes will be populated here -->
+                        </div>
+                    </div>
+                    <div class="assessor-chips-inline" data-procedure-id="${procedureId}"></div>
+                </td>
+                <td style="text-align: center;">
+                    <button type="button" class="remove-procedure-btn" data-procedure-id="${procedureId}" title="Remove Procedure">
+                        <i class="fas fa-trash"></i>
                     </button>
-                </div>
-                <div class="dropdown-container" style="margin-top: 8px;">
-                    <button type="button" class="dropdown-btn assessor-dropdown-btn" data-procedure-id="${procedureId}">Select Assessors</button>
-                    <ul class="dropdown-list assessor-dropdown-list" id="assessorList-${procedureId}"></ul>
-                </div>
-                <div class="assessor-chips chip-container" id="assessorChips-${procedureId}" data-procedure-id="${procedureId}" style="margin-top: 8px;"></div>
-            </div>
+                </td>
+            </tr>
         `;
         
-        $('#selectedProceduresList').append(procedureHtml);
+        $('#procedureAssessorMappingBody').append(rowHtml);
         
-        // Populate assessor list for this procedure
-        $.ajax({
-            url: '/fetch-assessors/',
-            type: 'GET',
-            success: function(response) {
-                populateAssessorsForProcedure(procedureId, response.assessors);
-            },
-            error: function() {
-                console.error('Failed to fetch assessors for procedure');
-            }
+        // Populate assessor dropdown for this row
+        fetchAssessorsForMapping().then(function(assessors) {
+            populateAssessorDropdownForProcedure(procedureId, assessors);
         });
     }
+    
+    // Populate assessor dropdown for a specific procedure row
+    function populateAssessorDropdownForProcedure(procedureId, assessors) {
+        const dropdown = $(`.assessor-select-list[data-procedure-id="${procedureId}"]`);
+        dropdown.empty();
+        
+        if (!assessors || assessors.length === 0) {
+            dropdown.append('<div class="assessor-item" style="color:#888; padding:8px 12px;">No assessors available</div>');
+            return;
+        }
+        
+        assessors.forEach(function(assessor) {
+            const itemHtml = `
+                <div class="assessor-item">
+                    <input type="checkbox" 
+                           id="assessor-${procedureId}-${assessor.id}" 
+                           value="${assessor.id}" 
+                           data-assessor-id="${assessor.id}"
+                           data-assessor-name="${assessor.name}">
+                    <label for="assessor-${procedureId}-${assessor.id}">${assessor.name}</label>
+                </div>
+            `;
+            dropdown.append(itemHtml);
+        });
+        
+        // Attach change handler for checkboxes
+        dropdown.find('input[type="checkbox"]').off('change').on('change', function() {
+            updateAssessorSelectionForProcedure(procedureId);
+        });
+    }
+    
+    // Update assessor selection display for a procedure
+    function updateAssessorSelectionForProcedure(procedureId) {
+        const dropdown = $(`.assessor-select-list[data-procedure-id="${procedureId}"]`);
+        const checkedBoxes = dropdown.find('input[type="checkbox"]:checked');
+        const chipsContainer = $(`.assessor-chips-inline[data-procedure-id="${procedureId}"]`);
+        const selectBtn = $(`.assessor-select-btn[data-procedure-id="${procedureId}"]`);
+        const selectText = selectBtn.find('.assessor-select-text');
+        
+        chipsContainer.empty();
+        
+        if (checkedBoxes.length === 0) {
+            selectText.text('Select Assessors');
+        } else {
+            selectText.text(`${checkedBoxes.length} Assessor${checkedBoxes.length > 1 ? 's' : ''} Selected`);
+            
+            checkedBoxes.each(function() {
+                const assessorId = $(this).data('assessor-id');
+                const assessorName = $(this).data('assessor-name');
+                const chipHtml = `
+                    <span class="assessor-chip-inline" data-assessor-id="${assessorId}">
+                        ${assessorName}
+                        <span class="remove" data-assessor-id="${assessorId}">&times;</span>
+                    </span>
+                `;
+                chipsContainer.append(chipHtml);
+            });
+        }
+    }
+    
+    // Remove procedure from mapping table
+    function removeProcedureFromMappingTable(procedureId) {
+        $(`#procedureAssessorMappingBody tr[data-procedure-id="${procedureId}"]`).remove();
+        
+        // Hide container if no procedures remain
+        if ($('#procedureAssessorMappingBody tr').length === 0) {
+            $('#procedureAssessorMappingContainer').hide();
+            $('#mappingEmptyState').show();
+        }
+    }
+    
+    // Get mapping data from table
+    function getProcedureAssessorMappingFromTable() {
+        const mappings = [];
+        
+        $('#procedureAssessorMappingBody tr').each(function() {
+            const procedureId = $(this).data('procedure-id');
+            const procedureName = $(this).find('.procedure-name-cell').text().trim();
+            const assessorIds = [];
+            
+            $(this).find('.assessor-select-list input[type="checkbox"]:checked').each(function() {
+                assessorIds.push($(this).data('assessor-id'));
+            });
+            
+            if (procedureId && procedureName) {
+                mappings.push({
+                    procedureId: procedureId,
+                    procedureName: procedureName,
+                    assessorIds: assessorIds
+                });
+            }
+        });
+        
+        return mappings;
+    }
+    
+    // Event Handlers for Mapping Table
+    $(document).ready(function() {
+        // Toggle assessor dropdown when button is clicked
+        $(document).on('click', '.assessor-select-btn', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const $btn = $(this);
+            const procedureId = $btn.data('procedure-id');
+            const $dropdown = $(`.assessor-select-list[data-procedure-id="${procedureId}"]`);
+            
+            // Close all other dropdowns
+            $('.assessor-select-list').not($dropdown).removeClass('show');
+            $('.assessor-select-btn').not($btn).removeClass('active');
+            
+            // Toggle current dropdown
+            $dropdown.toggleClass('show');
+            $btn.toggleClass('active');
+        });
+        
+        // Close dropdowns when clicking outside
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('.assessor-select-dropdown').length) {
+                $('.assessor-select-list').removeClass('show');
+                $('.assessor-select-btn').removeClass('active');
+            }
+        });
+        
+        // Remove assessor chip
+        $(document).on('click', '.assessor-chip-inline .remove', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const $chip = $(this).closest('.assessor-chip-inline');
+            const procedureId = $chip.closest('.assessor-chips-inline').data('procedure-id');
+            const assessorId = $chip.data('assessor-id');
+            
+            // Uncheck the checkbox
+            $(`.assessor-select-list[data-procedure-id="${procedureId}"] input[data-assessor-id="${assessorId}"]`).prop('checked', false);
+            
+            // Update display
+            updateAssessorSelectionForProcedure(procedureId);
+        });
+        
+        // Remove procedure from table
+        $(document).on('click', '.remove-procedure-btn', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const procedureId = $(this).data('procedure-id');
+            
+            // Remove from mapping table
+            removeProcedureFromMappingTable(procedureId);
+            
+            // Remove chip and uncheck checkbox
+            $(`#procedureChipsContainer .chip[data-id="${procedureId}"]`).remove();
+            $(`#procedureDropdownList li[data-id="${procedureId}"] .procedure-checkbox`).prop('checked', false);
+            updateChipDisplay('procedureChipsContainer', 'Procedures');
+        });
+        
+        // Show/hide mapping container based on test type
+        $(document).on('change', '#typeDropdownBtn, #typeDropdownList input', function() {
+            const testType = $('#typeDropdownBtn').text().trim();
+            if (testType === 'B2B') {
+                // Show mapping container if there are procedures
+                if ($('#procedureAssessorMappingBody tr').length > 0) {
+                    $('#procedureAssessorMappingContainer').show();
+                    $('#mappingEmptyState').hide();
+                } else {
+                    $('#procedureAssessorMappingContainer').show();
+                    $('#mappingEmptyState').show();
+                }
+            } else {
+                $('#procedureAssessorMappingContainer').hide();
+            }
+        });
+    });
 
-    // Populate assessors for a specific procedure (B2B)
+    // Populate assessors for a specific procedure (B2B) - OLD FUNCTION, KEPT FOR BACKWARD COMPATIBILITY
     function populateAssessorsForProcedure(procedureId, assessors) {
         const assessorList = $(`#assessorList-${procedureId}`);
         assessorList.empty();
@@ -2879,63 +3241,14 @@
         let assessors = [];
         
         if (testType === 'B2B') {
-            // B2B: Use per-procedure assessor selection (inline rows)
-            $('#selectedProceduresList .assessor-selection-row').each(function() {
-                const container = $(this);
-                const procedureId = container.data('procedure-id');
-                const procedureName = container.find('.procedure-name').text();
-                let assessorIds = container.find('.assessor-chips .chip').map(function() {
-                    return $(this).data('id');
-                }).get().filter(function(v){ return v !== undefined && v !== null && v !== ''; });
-
-                // Fallback 1: if no per-procedure assessor chips (e.g., collapsed into summary), read checked items from its dropdown list
-                if (assessorIds.length === 0) {
-                    assessorIds = $(`#assessorList-${procedureId} input[type="checkbox"]:checked`).map(function(){
-                        return $(this).val();
-                    }).get().filter(function(v){ return v !== undefined && v !== null && v !== ''; });
-                }
-
-                // Fallback 2: if still none, use global assessors (if any)
-                if (assessorIds.length === 0) {
-                    assessorIds = $('#assessorChipsContainer .chip:not(.collective)').map(function() {
-                        return $(this).data('id');
-                    }).get().filter(function(v){ return v !== undefined && v !== null && v !== ''; });
-                }
-                
-                procedureAssessorMappings.push({
-                    procedureId: procedureId,
-                    procedureName: procedureName,
-                    assessorIds: assessorIds
-                });
-            });
+            // B2B: Use new mapping table
+            procedureAssessorMappings = getProcedureAssessorMappingFromTable();
             
             // Validation: Check if procedures are selected
             if (procedureAssessorMappings.length === 0) {
                 alert('Please select at least one procedure');
                 return false;
             }
-
-            // Deduplicate mappings by procedureId and union assessorIds
-            (function dedupeProcedureMappings(){
-                const byId = new Map();
-                procedureAssessorMappings.forEach(m => {
-                    const pid = String(m.procedureId || '').trim();
-                    const name = m.procedureName || '';
-                    const ids = Array.isArray(m.assessorIds) ? m.assessorIds.map(String) : [];
-                    if (!byId.has(pid)) {
-                        byId.set(pid, { procedureId: pid, procedureName: name, assessorIds: new Set(ids) });
-                    } else {
-                        const entry = byId.get(pid);
-                        ids.forEach(id => entry.assessorIds.add(id));
-                        if (!entry.procedureName && name) entry.procedureName = name; // prefer any non-empty name
-                    }
-                });
-                procedureAssessorMappings = Array.from(byId.values()).map(e => ({
-                    procedureId: e.procedureId,
-                    procedureName: e.procedureName,
-                    assessorIds: Array.from(e.assessorIds)
-                }));
-            })();
 
             // Ensure each selected procedure has at least one assessor; report names
             const missing = procedureAssessorMappings
@@ -2945,8 +3258,8 @@
                 alert('Please select at least one assessor for: ' + missing.join(', '));
                 // Focus the first missing row
                 const firstMissing = missing[0];
-                const firstMissingRow = $('#selectedProceduresList [data-procedure-id]').filter(function(){
-                    const name = $(this).find('.procedure-name').text();
+                const firstMissingRow = $('#procedureAssessorMappingBody tr').filter(function(){
+                    const name = $(this).find('.procedure-name-cell').text().trim();
                     return name === firstMissing;
                 }).get(0);
                 if (firstMissingRow) {
