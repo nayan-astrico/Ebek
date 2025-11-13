@@ -6226,10 +6226,10 @@ def fetch_admin_report_kpis(request):
             total_score += marks
             total_max_marks += max_marks
             
-            # Calculate pass rate (≥60%)
+            # Calculate pass rate (≥80%)
             if max_marks > 0:
                 percentage = (marks / max_marks) * 100
-                if percentage >= 60:
+                if percentage >= 80:
                     passed_count += 1
         
         # Calculate KPIs
@@ -6767,7 +6767,7 @@ def export_admin_report_excel(request):
             worksheet1.write(row, 0, 'Avg OSCE Score', cell_format)
             worksheet1.write(row, 1, f"{kpis.get('avg_osce_score', 0)}% ({kpis.get('avg_osce_grade', 'N/A')})", cell_format)
             row += 1
-            worksheet1.write(row, 0, 'Pass Rate (≥60%)', cell_format)
+            worksheet1.write(row, 0, 'Pass Rate (≥80%)', cell_format)
             worksheet1.write(row, 1, f"{kpis.get('pass_rate', 0)}%", cell_format)
         
         # Worksheet 2: Skills Metrics
@@ -7060,10 +7060,8 @@ def fetch_osce_report(request):
                     'types': []
                 }
             
-            # Track OSCE activity for timeline (only when semester filter is applied)
-            osce_activity_students = set()
-            osce_activity_scores = []
-            osce_activity_pass_count = 0
+            # Track OSCE activity for timeline - MOVED to BatchAssignmentSummary section below
+            # No longer tracking per BatchAssignment, will use BatchAssignmentSummary instead
             
             # Get examassignments from batchassignment
             exam_assignments = ba_data.get('examassignment', [])
@@ -7115,13 +7113,6 @@ def fetch_osce_report(request):
                                         if procedure_category and procedure_category in category_scores:
                                             category_scores[procedure_category].append(percentage)
                                         
-                                        # Track OSCE activity timeline (only when semester filter is applied)
-                                        if semester_filter_applied:
-                                            osce_activity_students.add(user_id)
-                                            osce_activity_scores.append(percentage)
-                                            if percentage >= 80:
-                                                osce_activity_pass_count += 1
-                                        
                                         # Track student performance data (only when semester filter is applied)
                                         if semester_filter_applied:
                                             if user_id not in student_performance_data:
@@ -7156,38 +7147,6 @@ def fetch_osce_report(request):
                     except Exception as e:
                         print(f"Error processing exam assignment: {str(e)}")
                         continue
-            
-            # Add OSCE activity to timeline (only when semester filter is applied)
-            if semester_filter_applied and exam_type and osce_activity_scores:
-                avg_score = round(sum(osce_activity_scores) / len(osce_activity_scores), 2) if osce_activity_scores else 0
-                pass_rate = round((osce_activity_pass_count / len(osce_activity_scores) * 100) if osce_activity_scores else 0, 2)
-                
-                # Format date
-                date_str = 'N/A'
-                if test_date:
-                    try:
-                        if hasattr(test_date, 'timestamp'):
-                            date_str = datetime.fromtimestamp(test_date.timestamp()).strftime('%d %b %Y')
-                        elif hasattr(test_date, 'seconds'):
-                            date_str = datetime.fromtimestamp(test_date.seconds).strftime('%d %b %Y')
-                        elif isinstance(test_date, datetime):
-                            date_str = test_date.strftime('%d %b %Y')
-                        elif isinstance(test_date, str):
-                            try:
-                                date_obj = datetime.strptime(test_date, '%Y-%m-%d')
-                                date_str = date_obj.strftime('%d %b %Y')
-                            except:
-                                date_str = test_date
-                    except:
-                        date_str = 'N/A'
-                
-                osce_activity_timeline.append({
-                    'osce_level': exam_type,
-                    'date_conducted': date_str,
-                    'num_students': len(osce_activity_students),
-                    'avg_score': avg_score,
-                    'pass_percentage': pass_rate
-                })
         
         # Calculate total_students_enrolled from Batches
         # Get institution/hospital reference from Firestore using the name
@@ -7351,42 +7310,52 @@ def fetch_osce_report(request):
             pass_count_sem = sum(1 for s in sem_data['scores'] if s >= 80)
             pass_pct = round((pass_count_sem / len(sem_data['scores']) * 100) if sem_data['scores'] else 0, 2)
             
-            # Get most recent date
+            # Get most recent date and corresponding OSCE type
             most_recent_date = None
+            osce_type = '-------'
+            
             if sem_data['dates']:
                 try:
-                    # Convert Firestore timestamps to datetime if needed
-                    dates = []
-                    for d in sem_data['dates']:
+                    # Convert Firestore timestamps to datetime and track indices
+                    date_type_pairs = []
+                    for i, d in enumerate(sem_data['dates']):
                         if d:
+                            parsed_date = None
                             if hasattr(d, 'timestamp'):
                                 # Firestore Timestamp
-                                dates.append(datetime.fromtimestamp(d.timestamp()))
+                                parsed_date = datetime.fromtimestamp(d.timestamp())
                             elif hasattr(d, 'seconds'):
                                 # Firestore Timestamp with seconds attribute
-                                dates.append(datetime.fromtimestamp(d.seconds))
+                                parsed_date = datetime.fromtimestamp(d.seconds)
                             elif isinstance(d, datetime):
-                                dates.append(d)
+                                parsed_date = d
                             elif isinstance(d, str):
                                 # Try parsing string date
                                 try:
-                                    dates.append(datetime.strptime(d, '%Y-%m-%d'))
+                                    parsed_date = datetime.strptime(d, '%Y-%m-%d')
                                 except:
                                     pass
-                    if dates:
-                        most_recent_date = max(dates).strftime('%b %Y')
+                            
+                            if parsed_date and i < len(sem_data['types']):
+                                date_type_pairs.append((parsed_date, sem_data['types'][i]))
+                    
+                    if date_type_pairs:
+                        # Sort by exam type priority (Final, Mock, Classroom) and then by date
+                        exam_type_priority = {'Final': 2, 'Mock': 1, 'Classroom': 0}
+                        date_type_pairs.sort(
+                            key=lambda x: (
+                                exam_type_priority.get(x[1], -1),  # Sort by exam type first
+                                x[0]  # Then by date
+                            ),
+                            reverse=True
+                        )
+                        most_recent_date = date_type_pairs[0][0].strftime('%Y-%m-%d')
+                        osce_type = date_type_pairs[0][1]  # Get the type of the most recent/highest priority exam
                     else:
                         most_recent_date = 'N/A'
                 except Exception as e:
                     print(f"Error processing dates: {str(e)}")
                     most_recent_date = 'N/A'
-            
-            # Get most common OSCE type
-            osce_type = '-------'
-            if sem_data['types']:
-                from collections import Counter
-                type_counts = Counter(sem_data['types'])
-                osce_type = type_counts.most_common(1)[0][0] if type_counts else '-------'
             
             semester_wise_performance.append({
                 'semester': sem,
@@ -7397,6 +7366,36 @@ def fetch_osce_report(request):
                 'most_recent_date': most_recent_date or 'N/A',
                 'osce_type': osce_type
             })
+        
+        # Update overall pass rate and average score based on semester_wise_performance
+        print(f"DEBUG: semester value = '{semester}', type = {type(semester)}")
+        print(f"DEBUG: semester_wise_performance = {semester_wise_performance}")
+        print(f"DEBUG: Current pass_rate before override = {pass_rate}")
+        
+        if semester_wise_performance:
+            if semester and semester != 'All':
+                # If specific semester is selected, use that semester's values
+                print(f"DEBUG: Looking for semester '{semester}' in semester_wise_performance")
+                for sem_perf in semester_wise_performance:
+                    print(f"DEBUG: Checking sem_perf['semester'] = '{sem_perf['semester']}', type = {type(sem_perf['semester'])}")
+                    if sem_perf['semester'] == semester:
+                        print(f"DEBUG: MATCH FOUND! Updating pass_rate from {pass_rate} to {sem_perf['pass_percentage']}")
+                        pass_rate = sem_perf['pass_percentage']
+                        average_institution_score = sem_perf['average_score']
+                        grade_letter = get_grade_letter(average_institution_score) if average_institution_score > 0 else '-'
+                        break
+                else:
+                    print(f"DEBUG: NO MATCH FOUND for semester '{semester}'")
+            else:
+                # If no semester filter (All semesters), calculate average pass rate across all semesters
+                semester_pass_rates = [sem_perf['pass_percentage'] for sem_perf in semester_wise_performance if sem_perf['pass_percentage'] is not None]
+                semester_avg_scores = [sem_perf['average_score'] for sem_perf in semester_wise_performance if sem_perf['average_score'] is not None]
+                
+                if semester_pass_rates:
+                    pass_rate = round(sum(semester_pass_rates) / len(semester_pass_rates), 2)
+                if semester_avg_scores:
+                    average_institution_score = round(sum(semester_avg_scores) / len(semester_avg_scores), 2)
+                    grade_letter = get_grade_letter(average_institution_score) if average_institution_score > 0 else '-'
         
         # Process category-wise performance (always process - data is already filtered by applied filters)
         category_wise_performance = []
@@ -7411,8 +7410,134 @@ def fetch_osce_report(request):
         # Process semester dashboard data (only when semester filter is applied)
         semester_dashboard_data = None
         if semester_filter_applied:
-            # Sort OSCE activity timeline by date
-            osce_activity_timeline.sort(key=lambda x: x.get('date_conducted', ''), reverse=True)
+            # Populate OSCE Activity Timeline from BatchAssignmentSummary
+            # Each BatchAssignmentSummary represents one complete OSCE
+            bas_query_timeline = db.collection('BatchAssignmentSummary').where('yearOfBatch', '==', academic_year).where('unit_name', '==', institution_name).where('semester', '==', semester)
+            
+            # Filter by exam_type (OSCE level) if applied
+            if osce_level and osce_level != 'All':
+                bas_query_timeline = bas_query_timeline.where('exam_type', '==', osce_level)
+            
+            batch_assignment_summaries_timeline = list(bas_query_timeline.stream())
+            
+            # Process each BatchAssignmentSummary to create timeline entries
+            for bas_doc in batch_assignment_summaries_timeline:
+                bas_data = bas_doc.to_dict()
+                
+                # If skill/procedure filter is applied, check if procedure exists in procedure_assessor_mappings
+                if skill:
+                    procedure_mappings = bas_data.get('procedure_assessor_mappings', [])
+                    procedure_found = False
+                    for mapping in procedure_mappings:
+                        if isinstance(mapping, dict):
+                            procedure_id = mapping.get('procedure_id', '')
+                            if procedure_id == skill:
+                                procedure_found = True
+                                break
+                    
+                    # Skip this OSCE if the filtered procedure is not found
+                    if not procedure_found:
+                        continue
+                
+                # Get OSCE details
+                osce_level_value = bas_data.get('exam_type', 'N/A')
+                test_date = bas_data.get('test_date')
+                
+                # Format date
+                date_str = 'N/A'
+                if test_date:
+                    try:
+                        if hasattr(test_date, 'timestamp'):
+                            date_str = datetime.fromtimestamp(test_date.timestamp()).strftime('%d %b %Y')
+                        elif hasattr(test_date, 'seconds'):
+                            date_str = datetime.fromtimestamp(test_date.seconds).strftime('%d %b %Y')
+                        elif isinstance(test_date, datetime):
+                            date_str = test_date.strftime('%d %b %Y')
+                        elif isinstance(test_date, str):
+                            try:
+                                date_obj = datetime.strptime(test_date, '%Y-%m-%d')
+                                date_str = date_obj.strftime('%d %b %Y')
+                            except:
+                                date_str = test_date
+                    except:
+                        date_str = 'N/A'
+                
+                # Get all batch assignments for this summary to calculate stats
+                procedure_mappings = bas_data.get('procedure_assessor_mappings', [])
+                osce_students = set()
+                osce_scores = []
+                osce_pass_count = 0
+                
+                # Iterate through each procedure mapping to get batch assignments
+                for mapping in procedure_mappings:
+                    if isinstance(mapping, dict):
+                        batchassignment_id = mapping.get('batchassignment_id', '')
+                        if batchassignment_id:
+                            try:
+                                # Get the batch assignment
+                                ba_ref = db.collection('BatchAssignment').document(batchassignment_id)
+                                ba_doc_timeline = ba_ref.get()
+                                if ba_doc_timeline.exists:
+                                    ba_data_timeline = ba_doc_timeline.to_dict()
+                                    
+                                    # Get exam assignments
+                                    exam_assignments_timeline = ba_data_timeline.get('examassignment', [])
+                                    for exam_ref in exam_assignments_timeline:
+                                        if exam_ref:
+                                            try:
+                                                exam_doc_timeline = exam_ref.get()
+                                                if exam_doc_timeline.exists:
+                                                    exam_data_timeline = exam_doc_timeline.to_dict()
+                                                    user_ref = exam_data_timeline.get('user')
+                                                    
+                                                    if user_ref:
+                                                        user_id = user_ref.id
+                                                        osce_students.add(user_id)
+                                                        
+                                                        # Process completed exams for score calculation
+                                                        if str(exam_data_timeline.get('status', '')).lower() == 'completed':
+                                                            total_score = exam_data_timeline.get("marks", 0)
+                                                            exam_metadata = exam_data_timeline.get('examMetaData', [])
+                                                            max_marks = sum(
+                                                                question.get('right_marks_for_question', 0)
+                                                                for section in exam_metadata
+                                                                for question in section.get("section_questions", [])
+                                                            )
+                                                            if max_marks > 0:
+                                                                percentage = round((total_score / max_marks) * 100, 2)
+                                                                osce_scores.append(percentage)
+                                                                if percentage >= 80:
+                                                                    osce_pass_count += 1
+                                            except Exception as e:
+                                                print(f"Error processing exam assignment in timeline: {str(e)}")
+                                                continue
+                            except Exception as e:
+                                print(f"Error getting batch assignment for timeline: {str(e)}")
+                                continue
+                
+                # Calculate average score and pass rate for this timeline entry
+                avg_score = round(sum(osce_scores) / len(osce_scores), 2) if osce_scores else 0
+                timeline_pass_rate = round((osce_pass_count / len(osce_scores) * 100) if osce_scores else 0, 2)
+                
+                # Add to timeline
+                osce_activity_timeline.append({
+                    'osce_level': osce_level_value,
+                    'date_conducted': date_str,
+                    'num_students': len(osce_students),
+                    'avg_score': avg_score,
+                    'pass_percentage': timeline_pass_rate
+                })
+            
+            # Sort OSCE activity timeline by exam type priority (Final, Mock, Classroom) and then by date
+            # Higher priority numbers come first with reverse=True, so Final=2, Mock=1, Classroom=0
+            exam_type_priority = {'Final': 2, 'Mock': 1, 'Classroom': 0}
+            osce_activity_timeline.sort(
+                key=lambda x: (
+                    exam_type_priority.get(x.get('osce_level', ''), -1),  # Sort by exam type first (Final, Mock, Classroom)
+                    x.get('date_conducted', '') if x.get('date_conducted') != 'N/A' else '0000-00-00'  # Then by date (most recent first)
+                ),
+                reverse=True
+            )
             
             # Get latest OSCE
             latest_osce = 'N/A'
@@ -7420,9 +7545,17 @@ def fetch_osce_report(request):
                 latest = osce_activity_timeline[0]
                 latest_osce = f"{latest['osce_level']} OSCE - {latest['date_conducted']}"
             
-            # Calculate semester average score and pass rate (from completed_exam_scores filtered by semester)
-            semester_avg_score = average_institution_score
-            semester_pass_rate = pass_rate
+            # Use the exact same values from semester_wise_performance table
+            # This ensures the dashboard shows identical metrics as the semester-wise table
+            semester_avg_score = 0
+            semester_pass_rate = 0
+            
+            # Find the matching semester in semester_wise_performance
+            for sem_perf in semester_wise_performance:
+                if sem_perf['semester'] == semester:
+                    semester_avg_score = sem_perf['average_score']
+                    semester_pass_rate = sem_perf['pass_percentage']
+                    break
             
             # Get grade letter for semester average
             semester_grade_letter = get_grade_letter(semester_avg_score) if semester_avg_score > 0 else '-'
@@ -7470,6 +7603,9 @@ def fetch_osce_report(request):
         # Build response - always include semester, category, and grade distribution data
         # Data is automatically filtered by applied filters (semester, osce_level, skill)
         # If no filters are applied, shows overall/institutional data
+        print(f"DEBUG: Final pass_rate being sent in response = {pass_rate}")
+        print(f"DEBUG: Final average_institution_score being sent in response = {average_institution_score}")
+        
         response_data = {
             'success': True,
             'total_students_enrolled': total_students_enrolled,
