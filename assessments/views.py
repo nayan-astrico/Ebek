@@ -737,7 +737,9 @@ def create_procedure_assignment_and_test(request):
                             'test_date': test_date_obj,
                             'procedure_assessor_mappings': processed_mappings,
                             'created_at': datetime.now(),
-                            'status': 'Active'
+                            'status': 'Active',
+                            'semester': semester,
+                            'yearOfBatch': year_of_batch,
                         }
                         
                         # Create summary document
@@ -6278,7 +6280,7 @@ def fetch_admin_report_skills_metrics(request):
         date_to = request.GET.get('date_to', '').strip()
         
         # Categories to track
-        categories = ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Critical Thinking', 'Pre-procedure']
+        categories = ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Critical Thinking', 'Pre-Procedure']
         
         # Build query
         query = db.collection('ExamAssignment').where('status', '==', 'Completed')
@@ -6974,7 +6976,7 @@ def fetch_osce_report(request):
             'Infection Control': [],
             'Communication': [],
             'Documentation': [],
-            'Pre-procedure': [],
+            'Pre-Procedure': [],
             'Critical Thinking': []
         }
         
@@ -7187,12 +7189,95 @@ def fetch_osce_report(request):
                     'pass_percentage': pass_rate
                 })
         
-        # Calculate metrics
-        total_students_enrolled = len(all_user_ids)
+        # Calculate total_students_enrolled from Batches
+        # Get institution/hospital reference from Firestore using the name
+        institution_ref = None
+        if institution_type == 'institution':
+            print(f"Institution Name: {institution_name}")
+            # Query InstituteNames collection by name to get the reference
+            inst_docs = db.collection('InstituteNames').where('instituteName', '==', institution_name).limit(1).stream()
+            for doc in inst_docs:
+                institution_ref = doc.reference
+                break
+        elif institution_type == 'hospital':
+            # Query Hospitals collection by name (adjust collection name if different)
+            hosp_docs = db.collection('Hospitals').where('hospitalName', '==', institution_name).limit(1).stream()
+            for doc in hosp_docs:
+                institution_ref = doc.reference
+                break
+        
+        # Collect all enrolled students from batches
+        enrolled_user_ids = set()
+        if institution_ref:
+            print(f"Institution Reference: {institution_ref}")
+            # Query batches by unit reference and year
+            batches_query = db.collection('Batches').where('unit', '==', institution_ref).where('yearOfBatch', '==', academic_year)
+            print(f"Batches Query: {batches_query}")
+            # If semester filter is applied, also filter by semester
+            if semester and semester != 'All':
+                batches_query = batches_query.where('semester', '==', semester)
+            
+            batches = batches_query.stream()
+            
+            # Collect all learners from matching batches
+            for batch_doc in batches:
+                batch_data = batch_doc.to_dict()
+                learners = batch_data.get('learners', [])
+                for learner_ref in learners:
+                    if learner_ref:
+                        # Extract user ID from reference
+                        if hasattr(learner_ref, 'id'):
+                            enrolled_user_ids.add(learner_ref.id)
+                        elif isinstance(learner_ref, str):
+                            # Handle string path like "/Users/2219"
+                            if '/Users/' in learner_ref:
+                                user_id = learner_ref.split('/Users/')[-1]
+                                enrolled_user_ids.add(user_id)
+                            else:
+                                enrolled_user_ids.add(learner_ref)
+        
+        total_students_enrolled = len(enrolled_user_ids)
         students_assessed = len(completed_user_ids)
         print(f"Students Assessed: {students_assessed}")
         print(f"Total Students Enrolled: {total_students_enrolled}")
-        total_osce_conducted = filtered_batch_assignments_count
+        
+        # Calculate total_osce_conducted from BatchAssignmentSummary
+        # Each BatchAssignmentSummary document represents one OSCE
+        bas_query = db.collection('BatchAssignmentSummary').where('yearOfBatch', '==', academic_year).where('unit_name', '==', institution_name)
+        
+        # Filter by semester if applied
+        if semester and semester != 'All':
+            bas_query = bas_query.where('semester', '==', semester)
+        
+        # Filter by exam_type (OSCE level) if applied
+        if osce_level and osce_level != 'All':
+            bas_query = bas_query.where('exam_type', '==', osce_level)
+        
+        # Convert stream to list so we can iterate multiple times if needed
+        batch_assignment_summaries = list(bas_query.stream())
+        total_osce_conducted = 0
+        
+        # If skill/procedure filter is applied, check if procedure exists in procedure_assessor_mappings
+        if skill:
+            for bas_doc in batch_assignment_summaries:
+                bas_data = bas_doc.to_dict()
+                procedure_mappings = bas_data.get('procedure_assessor_mappings', [])
+                
+                # Check if the selected procedure exists in any mapping
+                procedure_found = False
+                for mapping in procedure_mappings:
+                    if isinstance(mapping, dict):
+                        procedure_id = mapping.get('procedure_id', '')
+                        if procedure_id == skill:
+                            procedure_found = True
+                            break
+                
+                if procedure_found:
+                    total_osce_conducted += 1
+        else:
+            # No skill filter, count all matching BatchAssignmentSummary documents
+            total_osce_conducted = len(batch_assignment_summaries)
+        
         assessment_rate = round((students_assessed / total_students_enrolled * 100) if total_students_enrolled > 0 else 0, 2)
         skills_evaluated = len(unique_procedures)
         
@@ -7283,7 +7368,7 @@ def fetch_osce_report(request):
         
         # Process category-wise performance (always process - data is already filtered by applied filters)
         category_wise_performance = []
-        for category in ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Pre-procedure', 'Critical Thinking']:
+        for category in ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Pre-Procedure', 'Critical Thinking']:
             scores = category_scores.get(category, [])
             avg_percentage = round(sum(scores) / len(scores), 2) if scores else None
             category_wise_performance.append({
