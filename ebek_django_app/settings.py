@@ -162,6 +162,8 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static'),  # optional common static folder
 ]
 
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
 AUTH_USER_MODEL = 'assessments.EbekUser'
 
 LOGIN_URL = 'login_page'

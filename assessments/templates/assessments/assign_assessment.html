@@ -1769,6 +1769,60 @@
             e.stopPropagation();
         });
     
+        // Specific handler for assessor dropdown - fetch if empty
+        // This handler runs first and ensures data is loaded before showing dropdown
+        $(document).on('click', '#assessorDropdownBtn', function(e) {
+            const $list = $('#assessorDropdownList');
+            const $btn = $(this);
+            
+            // Check if list is empty or has no valid items
+            const listItems = $list.find('li');
+            const hasItems = listItems.length > 0 && 
+                           !listItems.first().text().includes('No options available') &&
+                           !listItems.first().text().includes('No assessors available') &&
+                           !listItems.first().text().includes('Error loading') &&
+                           !listItems.first().text().includes('Loading assessors');
+            
+            if (!hasItems) {
+                // Stop event propagation to prevent universal handler from toggling empty dropdown
+                e.stopImmediatePropagation();
+                
+                // Show loading state immediately
+                $list.html('<li style="color:#888; cursor:default; padding: 8px 12px; text-align: center;"><i class="fas fa-spinner fa-spin"></i> Loading assessors...</li>');
+                $list.show().addClass('show');
+                $btn.addClass('active');
+                
+                // Fetch assessors
+                $.ajax({
+                    url: '/fetch-assessors/',
+                    type: 'GET',
+                    success: function (response) {
+                        console.log('Assessors API response:', response);
+                        if (response && response.assessors && Array.isArray(response.assessors) && response.assessors.length > 0) {
+                            populateDropdown('assessorDropdownList', response.assessors, 'name');
+                            // Ensure dropdown stays visible after populating
+                            $list.show().addClass('show');
+                            $btn.addClass('active');
+                        } else {
+                            console.warn('No assessors in response:', response);
+                            $list.html('<li style="color:#888; cursor:default; padding: 8px 12px;">No assessors available</li>');
+                            $list.show().addClass('show');
+                            $btn.addClass('active');
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        console.error('Failed to fetch assessors:', error, 'Status:', status, 'Response:', xhr.responseText);
+                        $list.html('<li style="color:#f44336; cursor:default; padding: 8px 12px;">Error loading assessors. Please try again.</li>');
+                        $list.show().addClass('show');
+                        $btn.addClass('active');
+                    }
+                });
+                
+                return false; // Prevent further event handling
+            }
+            // If items exist, let the universal handler proceed normally
+        });
+    
         // Type selection - FIXED
         $(document).on('click', '#typeDropdownList li', function(e) {
             e.preventDefault();
