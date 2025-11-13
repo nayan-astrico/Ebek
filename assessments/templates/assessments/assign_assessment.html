@@ -1761,13 +1761,12 @@
     
         // UNIVERSAL DROPDOWN HANDLER - FIXED VERSION
         // Use namespace to prevent duplicate handlers
-        // Use event delegation with target to work reliably in all environments
-        $(document).off('click.dropdownHandler', '.dropdown-btn').on('click.dropdownHandler', '.dropdown-btn', function(e) {
+        // Exclude assessor-dropdown-btn as they have their own handler
+        $(document).off('click.dropdownHandler', '.dropdown-btn:not(.assessor-dropdown-btn)').on('click.dropdownHandler', '.dropdown-btn:not(.assessor-dropdown-btn)', function(e) {
             e.preventDefault();
             e.stopPropagation();
             
             // Use event target as primary source (more reliable across environments)
-            // This works regardless of 'this' context issues in production
             const $target = $(e.target);
             let $btn = $target.closest('.dropdown-btn');
             
@@ -1786,26 +1785,15 @@
             
             // Validate we have a button
             if (!$btn.length || !$btn.hasClass('dropdown-btn')) {
-                console.warn('Could not find dropdown button element. Target:', e.target, 'This:', this);
                 return;
             }
-            
-            // Get the native DOM element for ID access
-            const btnElement = $btn[0];
-            
-            // Get ID - prioritize native property (most reliable)
-            const btnId = (btnElement && btnElement.id) || $btn.attr('id') || $btn.prop('id') || 'unknown';
             
             const $container = $btn.closest('.dropdown-container');
             const $list = $container.find('.dropdown-list');
             const $search = $container.find('.dropdown-search');
             
-            console.log('Dropdown clicked:', btnId, 'Target:', e.target, 'Button element:', btnElement);
-            console.log('List found:', $list.length, 'Search found:', $search.length);
-            
             // Validate we have the necessary elements
             if (!$container.length) {
-                console.warn('Dropdown container not found for button:', btnId);
                 return;
             }
             
@@ -2314,12 +2302,25 @@
             $(this).closest('li').trigger('click');
         });
     
-        // Assessor dropdown for B2B procedures
-        $(document).on('click', '.assessor-dropdown-btn', function(e) {
+        // Assessor dropdown for B2B procedures (per-procedure assessor selection)
+        // This handler manages assessor dropdowns for individual procedures in B2B mode
+        // It automatically fetches assessors if the list is empty
+        $(document).off('click.b2bAssessorDropdown', '.assessor-dropdown-btn').on('click.b2bAssessorDropdown', '.assessor-dropdown-btn', function(e) {
+            // Stop all event propagation to prevent conflicts with universal handler
             e.preventDefault();
             e.stopPropagation();
-            const procedureId = $(this).data('procedure-id');
-            const dropdownList = $(this).next('.assessor-dropdown-list');
+            e.stopImmediatePropagation();
+            
+            // Get button and related elements
+            const $btn = $(this);
+            const procedureId = $btn.attr('data-procedure-id') || $btn.data('procedure-id');
+            const $dropdownList = $btn.next('.assessor-dropdown-list');
+            
+            // Validate we have the necessary elements
+            if (!procedureId || !$dropdownList.length) {
+                console.warn('Invalid assessor dropdown: missing procedure-id or dropdown list');
+                return false;
+            }
             
             // Toggle only this dropdown (independent of others - multiple can be open)
             if (dropdownList.is(':visible')) {
