@@ -32,9 +32,10 @@
         <i class="fas fa-search"></i>
         <input type="text" placeholder="Search learners..." id="searchInput" oninput="filterLearners(this.value)">
     </div>
-    <button class="btn-filter" onclick="toggleFilterPanel()">
+    <button class="btn-filter" onclick="toggleFilterPanel()" id="filterBtn">
         <i class="fas fa-filter"></i>
         Filters
+        <span class="filter-badge" id="filterBadge" style="display: none;">0</span>
     </button>
     <button id="bulkDeleteBtn" class="btn btn-primary" style="margin-left: 8px;" onclick="openBulkDeleteConfirm()" disabled>
         <i class="fas fa-trash"></i>
@@ -75,14 +76,19 @@
                 <div class="filter-content" id="institution-content">
                     <div class="filter-search">
                         <input type="text" placeholder="Search institutions" onkeyup="filterOptions('institution')">
-                        <div class="selection-count">0 Institution selected</div>
+                        <div class="selection-count" id="institutionSelectionCount">0 Institution selected</div>
                     </div>
                     <div class="options-list" id="institution-options">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllInstitutions" onchange="toggleSelectAll('institution', this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                             {% for institution in institutions %}
                         <label class="option-item">
                             <input type="checkbox" name="institution" value="{{ institution.id }}"
                                    {% if institution.id in selected_institutions %}checked{% endif %}
-                                   onchange="updateSelectionCount('institution')">
+                                   onchange="updateSelectionCount('institution')"
+                                   class="institution-checkbox">
                             <span>{{ institution.name }}</span>
                         </label>
                             {% endfor %}
@@ -93,14 +99,19 @@
                 <div class="filter-content" id="hospital-content">
                     <div class="filter-search">
                         <input type="text" placeholder="Search hospitals" onkeyup="filterOptions('hospital')">
-                        <div class="selection-count">0 Hospital selected</div>
+                        <div class="selection-count" id="hospitalSelectionCount">0 Hospital selected</div>
                     </div>
                     <div class="options-list" id="hospital-options">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllHospitals" onchange="toggleSelectAll('hospital', this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                             {% for hospital in hospitals %}
                         <label class="option-item">
                             <input type="checkbox" name="hospital" value="{{ hospital.id }}"
                                    {% if hospital.id in selected_hospitals %}checked{% endif %}
-                                   onchange="updateSelectionCount('hospital')">
+                                   onchange="updateSelectionCount('hospital')"
+                                   class="hospital-checkbox">
                             <span>{{ hospital.name }}</span>
                         </label>
                             {% endfor %}
@@ -111,22 +122,28 @@
                 <div class="filter-content" id="learner-type-content">
                     <div class="filter-search">
                         <input type="text" placeholder="Search learner types" onkeyup="filterOptions('learner-type')">
-                        <div class="selection-count">0 Type selected</div>
+                        <div class="selection-count" id="learnerTypeSelectionCount">0 Type selected</div>
                     </div>
                     <div class="options-list" id="learner-type-options">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllLearnerTypes" onchange="toggleSelectAll('learner-type', this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                         <label class="option-item">
                             <input type="checkbox" name="learner_type" value="student"
                                    {% if 'student' in selected_learner_types %}checked{% endif %}
-                                   onchange="updateSelectionCount('learner-type')">
+                                   onchange="updateSelectionCount('learner-type')"
+                                   class="learner-type-checkbox">
                             <span>Student</span>
                         </label>
                         <label class="option-item">
                             <input type="checkbox" name="learner_type" value="nurse"
                                    {% if 'nurse' in selected_learner_types %}checked{% endif %}
-                                   onchange="updateSelectionCount('learner-type')">
+                                   onchange="updateSelectionCount('learner-type')"
+                                   class="learner-type-checkbox">
                             <span>Working Nurse</span>
                         </label>
-                </div>
+                    </div>
                     </div>
                 </div>
         </div>
@@ -134,6 +151,7 @@
         <!-- Filter Actions -->
         <div class="filter-actions">
             <button type="button" class="btn btn-light" onclick="toggleFilterPanel()">Cancel</button>
+            <button type="button" class="btn btn-light" onclick="clearAllFilters()">Clear All</button>
             <button type="button" class="btn btn-primary" onclick="applyFilters()">Apply filter</button>
         </div>
     </form>
@@ -470,6 +488,23 @@
     border-top: 1px solid #e2e8f0;
 }
 
+.table tbody tr {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.table tbody tr:hover {
+    background-color: #f7fafc;
+}
+
+.table tbody tr .actions {
+    cursor: default;
+}
+
+.table tbody tr .actions * {
+    cursor: pointer;
+}
+
 /* Institution */
 .institution {
     display: flex;
@@ -665,10 +700,27 @@
     color: #4a5568;
     cursor: pointer;
     transition: all 0.2s;
+    position: relative;
 }
 
 .btn-filter:hover {
     background: #f7fafc;
+}
+
+.filter-badge {
+    background: #F16564;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    position: absolute;
+    top: -5px;
+    right: -5px;
 }
 
 /* Updated Filter Panel Styles */
@@ -721,10 +773,31 @@
 
 .filter-type {
     padding: 16px 20px;
+    padding-right: 28px; /* room for badge on the right */
     cursor: pointer;
     transition: all 0.2s;
     position: relative;
     color: #4a5568;
+}
+
+.filter-type .filter-type-badge {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    padding: 0 6px;
+    border-radius: 9px;
+    background: #F16564;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
 }
 
 .filter-type:hover {
@@ -793,6 +866,7 @@
     padding: 16px 20px;
     overflow-y: auto;
     flex: 1;
+    width: 100%;
 }
 
 .option-item {
@@ -801,6 +875,18 @@
     gap: 12px;
     padding: 8px 0;
     cursor: pointer;
+    width: 100%;
+    user-select: none;
+    margin: 0;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    pointer-events: auto;
+    position: relative;
+}
+
+.option-item:hover {
+    background-color: #f7fafc;
 }
 
 .option-item input[type="checkbox"] {
@@ -809,6 +895,8 @@
     border: 2px solid #cbd5e0;
     border-radius: 4px;
     cursor: pointer;
+    pointer-events: auto;
+    flex-shrink: 0;
 }
 
 .option-item input[type="checkbox"]:checked {
@@ -819,6 +907,20 @@
 .option-item span {
     font-size: 14px;
     color: #4a5568;
+    pointer-events: none;
+    flex: 1;
+}
+
+.select-all-item {
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 12px;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.select-all-item span {
+    font-weight: 600;
+    color: #1a202c;
 }
 
 .filter-actions {
@@ -1549,6 +1651,33 @@ function confirmDelete(button) {
 // Bulk delete support
 let selectedLearnerIds = new Set();
 
+// Make entire row clickable to toggle checkbox (except action buttons)
+document.addEventListener('click', function(e) {
+    // Find the closest table row
+    const row = e.target.closest('tr');
+    if (!row) return;
+    
+    // Don't toggle if clicking on:
+    // - Action buttons or their children
+    // - The checkbox itself (to avoid double-toggling - let checkbox handle its own click)
+    // - Links or buttons
+    if (e.target.closest('.actions') || 
+        e.target.closest('a') || 
+        e.target.closest('button') ||
+        e.target.classList.contains('row-select') ||
+        e.target.type === 'checkbox') {
+        return;
+    }
+    
+    // Find the checkbox in this row
+    const checkbox = row.querySelector('.row-select');
+    if (!checkbox) return;
+    
+    // Toggle the checkbox
+    checkbox.checked = !checkbox.checked;
+    checkbox.dispatchEvent(new Event('change'));
+});
+
 document.addEventListener('change', function(e) {
     if (e.target && e.target.classList.contains('row-select')) {
         const id = e.target.getAttribute('data-id');
@@ -1705,25 +1834,62 @@ document.addEventListener('DOMContentLoaded', function() {
     ['institution', 'hospital', 'learner-type'].forEach(category => {
         updateSelectionCount(category);
     });
+    
+    // Initialize filter badge
+    updateFilterBadge();
 });
 
 // Make entire option row clickable to toggle checkbox
 document.addEventListener('click', function(e) {
+    // Find the closest option-item label
     const label = e.target.closest('label.option-item');
     if (!label) return;
-    // Avoid double toggling when clicking directly on the checkbox
-    if (e.target && e.target.tagName && e.target.tagName.toLowerCase() === 'input') return;
+    
+    // Skip if it's a "Select All" item (it has its own handler)
+    if (label.classList.contains('select-all-item')) {
+        return;
+    }
+    
+    // Find the checkbox in this label
     const checkbox = label.querySelector('input[type="checkbox"]');
     if (!checkbox) return;
+    
+    // If clicking directly on the checkbox, let it handle natively
+    // but ensure updateSelectionCount is called
+    if (e.target === checkbox || e.target.type === 'checkbox') {
+        // Use setTimeout to ensure the checkbox state has updated
+        setTimeout(function() {
+            const container = label.closest('.filter-content');
+            if (container) {
+                const category = container.id.replace('-content', '');
+                if (category) {
+                    updateSelectionCount(category);
+                }
+            }
+        }, 10);
+        return;
+    }
+    
+    // For clicks anywhere else in the label (text, empty space, etc.)
+    // Manually toggle the checkbox
+    e.preventDefault();
+    e.stopPropagation();
+    
     checkbox.checked = !checkbox.checked;
-    checkbox.dispatchEvent(new Event('change'));
-    // Update the visible counter for this category if present
+    
+    // Trigger change event to fire onchange handlers
+    const changeEvent = new Event('change', { bubbles: true, cancelable: false });
+    checkbox.dispatchEvent(changeEvent);
+    
+    // Update counts
     const container = label.closest('.filter-content');
     if (container) {
         const category = container.id.replace('-content', '');
-        if (category) updateSelectionCount(category);
+        if (category) {
+            updateSelectionCount(category);
+        }
     }
-});
+}, true); // Use capture phase
 
 function filterOptions(category) {
     const searchInput = document.querySelector(`#${category}-content .filter-search input`);
@@ -1731,17 +1897,132 @@ function filterOptions(category) {
     const options = document.querySelectorAll(`#${category}-options .option-item`);
     
     options.forEach(option => {
+        // Always show "Select All" option
+        if (option.classList.contains('select-all-item')) {
+            option.style.display = '';
+            return;
+        }
         const text = option.querySelector('span').textContent.toLowerCase();
         option.style.display = text.includes(searchTerm) ? '' : 'none';
     });
 }
 
+function toggleSelectAll(category, selectAllCheckbox) {
+    let checkboxSelector;
+    if (category === 'institution') {
+        checkboxSelector = '.institution-checkbox';
+    } else if (category === 'hospital') {
+        checkboxSelector = '.hospital-checkbox';
+    } else if (category === 'learner-type') {
+        checkboxSelector = '.learner-type-checkbox';
+    } else {
+        return;
+    }
+    
+    const checkboxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}`);
+    const isChecked = selectAllCheckbox.checked;
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = isChecked;
+        // Trigger change event to ensure onchange handlers fire
+        const changeEvent = new Event('change', { bubbles: true });
+        checkbox.dispatchEvent(changeEvent);
+    });
+    
+    // Update selection count
+    updateSelectionCount(category);
+}
+
 function updateSelectionCount(category) {
-    const checkboxes = document.querySelectorAll(`#${category}-options input[type="checkbox"]:checked`);
-    const countElement = document.querySelector(`#${category}-content .selection-count`);
-    const count = checkboxes.length;
+    // Get checkboxes excluding the "Select All" checkbox
+    let checkboxSelector;
+    if (category === 'institution') {
+        checkboxSelector = '.institution-checkbox';
+    } else if (category === 'hospital') {
+        checkboxSelector = '.hospital-checkbox';
+    } else if (category === 'learner-type') {
+        checkboxSelector = '.learner-type-checkbox';
+    } else {
+        checkboxSelector = `input[name="${category}"]`;
+    }
+    
+    const checkboxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}`);
+    const checkedBoxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}:checked`);
+    const count = checkedBoxes.length;
+    
+    // Update selection count display
+    const countElement = document.getElementById(`${category}SelectionCount`) || document.querySelector(`#${category}-content .selection-count`);
     const label = category === 'learner-type' ? 'Type' : category.charAt(0).toUpperCase() + category.slice(1);
-    countElement.textContent = `${count} ${label} selected`;
+    if (countElement) {
+        countElement.textContent = `${count} ${label} selected`;
+    }
+    
+    // Sync "Select All" checkbox state
+    let selectAllId;
+    if (category === 'institution') {
+        selectAllId = 'selectAllInstitutions';
+    } else if (category === 'hospital') {
+        selectAllId = 'selectAllHospitals';
+    } else if (category === 'learner-type') {
+        selectAllId = 'selectAllLearnerTypes';
+    }
+    
+    if (selectAllId) {
+        const selectAllCheckbox = document.getElementById(selectAllId);
+        if (selectAllCheckbox && checkboxes.length > 0) {
+            // Check if all are selected
+            selectAllCheckbox.checked = (count === checkboxes.length);
+            // Set indeterminate state if some (but not all) are selected
+            selectAllCheckbox.indeterminate = (count > 0 && count < checkboxes.length);
+        }
+    }
+    
+    updateFilterBadge();
+    setFilterTypeBadge(category, count);
+}
+
+// Helper to show count badges against individual filter types in sidebar
+function setFilterTypeBadge(category, count) {
+    const el = document.querySelector(`.filter-type[data-filter="${category}"]`);
+    if (!el) return;
+    let badge = el.querySelector('.filter-type-badge');
+    if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'filter-type-badge';
+        el.appendChild(badge);
+    }
+    if (count > 0) {
+        badge.textContent = String(count);
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+// Update Filter Badge
+function updateFilterBadge() {
+    // Count only the filter categories that have at least one selection
+    let totalFilterCategories = 0;
+    
+    if (document.querySelectorAll('input[name="institution"]:checked').length > 0) {
+        totalFilterCategories++;
+    }
+    if (document.querySelectorAll('input[name="hospital"]:checked').length > 0) {
+        totalFilterCategories++;
+    }
+    if (document.querySelectorAll('input[name="learner_type"]:checked').length > 0) {
+        totalFilterCategories++;
+    }
+    
+    const badge = document.getElementById('filterBadge');
+    if (badge) {
+        if (totalFilterCategories > 0) {
+            badge.textContent = totalFilterCategories;
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
 }
 
 function toggleUploadPanel() {
@@ -2610,6 +2891,25 @@ function applyFilters() {
     resetLearnerList();
     loadMoreLearners();
     toggleFilterPanel();
+}
+
+function clearAllFilters() {
+    // Uncheck all filter checkboxes (including Select All checkboxes)
+    document.querySelectorAll('.filter-form input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+        cb.indeterminate = false;
+    });
+    
+    // Update all selection counts
+    ['institution', 'hospital', 'learner-type'].forEach(category => {
+        updateSelectionCount(category);
+    });
+    
+    // Update filter badge
+    updateFilterBadge();
+    
+    // Clear current filters
+    currentFilters = {};
 }
 
 function renderLearnerRow(learner) {

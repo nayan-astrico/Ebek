@@ -1227,55 +1227,114 @@ def get_test(request, test_id):
     if request.method != 'GET':
         return JsonResponse({'error': 'Only GET method allowed'}, status=405)
     try:
+        if not test_id:
+            return JsonResponse({'error': 'Test ID is required'}, status=400)
+        
         test_ref = db.collection('Test').document(test_id)
         test_doc = test_ref.get()
         if not test_doc.exists:
             return JsonResponse({'error': 'Test not found'}, status=404)
+        
         test_data = test_doc.to_dict()
+        if not test_data:
+            return JsonResponse({'error': 'Test data is empty'}, status=404)
 
         # Procedures
         procedures = []
         assessors_map = {}
-        for proc_ref in test_data.get('procedureAssignments', []) or []:
+        
+        # Safely get procedureAssignments
+        procedure_assignments = test_data.get('procedureAssignments', []) or []
+        if not isinstance(procedure_assignments, list):
+            procedure_assignments = []
+        
+        for proc_ref in procedure_assignments:
+            if not proc_ref:
+                continue
             try:
                 proc_doc = proc_ref.get()
                 if not proc_doc.exists:
                     continue
                 proc_data = proc_doc.to_dict()
+                if not proc_data:
+                    continue
+                
+                # Get procedure
                 procedure_ref = proc_data.get('procedure')
                 if procedure_ref:
-                    pdoc = procedure_ref.get()
-                    if pdoc.exists:
-                        procedures.append({'id': procedure_ref.id, 'name': pdoc.to_dict().get('procedureName', 'Unknown')})
+                    try:
+                        pdoc = procedure_ref.get()
+                        if pdoc.exists:
+                            pdata = pdoc.to_dict()
+                            procedure_name = 'Unknown'
+                            if pdata:
+                                procedure_name = pdata.get('procedureName', 'Unknown')
+                            procedures.append({
+                                'id': procedure_ref.id, 
+                                'name': procedure_name
+                            })
+                    except Exception as e:
+                        # If procedure fetch fails, continue without it
+                        continue
+                
                 # Supervisors can be single 'supervisor' or list 'supervisors'
+                sup_list = []
                 if 'supervisors' in proc_data and isinstance(proc_data['supervisors'], list):
-                    sup_list = proc_data['supervisors']
-                else:
+                    sup_list = [s for s in proc_data['supervisors'] if s]  # Filter out None values
+                elif 'supervisor' in proc_data:
                     sup = proc_data.get('supervisor')
-                    sup_list = [sup] if sup else []
+                    if sup:
+                        sup_list = [sup]
+                
+                # Get assessors from supervisors
                 for sref in sup_list:
+                    if not sref:
+                        continue
                     try:
                         sdoc = sref.get()
                         if sdoc.exists:
                             sdata = sdoc.to_dict()
-                            assessors_map[sref.id] = {'id': sref.id, 'name': sdata.get('name', sdata.get('username', 'Assessor'))}
-                    except Exception:
+                            if sdata:
+                                assessor_name = sdata.get('name') or sdata.get('username') or 'Assessor'
+                                assessors_map[sref.id] = {
+                                    'id': sref.id, 
+                                    'name': assessor_name
+                                }
+                    except Exception as e:
+                        # If assessor fetch fails, continue without it
                         continue
-            except Exception:
+            except Exception as e:
+                # If procedure assignment processing fails, continue to next one
                 continue
+
+        # Safely format date
+        testdate_str = None
+        try:
+            testdate = test_data.get('testdate')
+            if testdate:
+                if hasattr(testdate, 'strftime'):
+                    testdate_str = testdate.strftime('%Y-%m-%d')
+                elif isinstance(testdate, str):
+                    testdate_str = testdate
+        except Exception as e:
+            # If date formatting fails, leave it as None
+            testdate_str = None
 
         response = {
             'id': test_id,
             'assessment_name': test_data.get('batchname') or test_data.get('skillathon') or '',
             'status': test_data.get('status', 'Not Completed'),
-            'testdate': (test_data.get('testdate').strftime('%Y-%m-%d') if test_data.get('testdate') else None),
+            'testdate': testdate_str,
             'procedures': procedures,
             'assessors': list(assessors_map.values()),
-            'skillathon': test_data.get('skillathon')
+            'skillathon': test_data.get('skillathon') or ''
         }
         return JsonResponse({'success': True, 'test': response})
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Error in get_test: {str(e)}\n{error_trace}")
+        return JsonResponse({'error': 'Failed to retrieve test data. Please try again.'}, status=500)
 
 @csrf_exempt
 def delete_test(request, test_id):

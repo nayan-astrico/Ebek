@@ -2,6 +2,89 @@
 
 {% block content %}
 {% load custom_filters %}
+{% load static %}
+<style>
+.btn-filter {
+    position: relative;
+}
+
+.filter-badge {
+    background: #F16564;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    position: absolute;
+    top: -5px;
+    right: -5px;
+}
+
+.filter-type {
+    position: relative;
+}
+
+.filter-type .filter-type-badge {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    padding: 0 6px;
+    border-radius: 9px;
+    background: #F16564;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    cursor: pointer;
+    width: 100%;
+    user-select: none;
+    margin: 0;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    pointer-events: auto;
+    position: relative;
+}
+
+.option-item:hover {
+    background-color: #f7fafc;
+}
+
+.option-item span {
+    pointer-events: none;
+    flex: 1;
+}
+
+.select-all-item {
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 12px;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.select-all-item span {
+    font-weight: 600;
+    color: #1a202c;
+}
+</style>
 
 {% if request.user|check_icon_navigation_permissions:'batches' %}
 <!-- Header -->
@@ -27,9 +110,10 @@
             <i class="fas fa-search"></i>
             <input type="text" id="searchInput" placeholder="Search batches...">
         </div>
-        <button class="btn-filter" onclick="toggleFilterPanel()">
+        <button class="btn-filter" onclick="toggleFilterPanel()" id="filterBtn">
             <i class="fas fa-filter"></i>
             Filters
+            <span class="filter-badge" id="filterBadge" style="display: none;">0</span>
         </button>
     </div>
 
@@ -166,16 +250,24 @@
                         <!-- Unit Type Content -->
                         <div class="filter-content active" id="unit-content">
                             <div class="filter-search">
-                                <input type="text" placeholder="Search unit types">
-                                <div class="selection-count">0 Unit selected</div>
+                                <input type="text" placeholder="Search unit types" onkeyup="filterOptions('unit')">
+                                <div class="selection-count" id="unitSelectionCount">0 Unit selected</div>
                             </div>
-                            <div class="options-list">
+                            <div class="options-list" id="unit-options">
+                                <label class="option-item select-all-item">
+                                    <input type="checkbox" id="selectAllUnits" onchange="toggleSelectAll('unit', this)">
+                                    <span><strong>Select All</strong></span>
+                                </label>
                                 <label class="option-item">
-                                    <input type="checkbox" name="unit" value="hospital">
+                                    <input type="checkbox" name="unit" value="hospital"
+                                           onchange="updateSelectionCount('unit')"
+                                           class="unit-checkbox">
                                     <span>Hospital</span>
                                 </label>
                                 <label class="option-item">
-                                    <input type="checkbox" name="unit" value="institution">
+                                    <input type="checkbox" name="unit" value="institution"
+                                           onchange="updateSelectionCount('unit')"
+                                           class="unit-checkbox">
                                     <span>Institution</span>
                                 </label>
                             </div>
@@ -186,6 +278,7 @@
                 <!-- Filter Actions -->
                 <div class="filter-actions">
                     <button type="button" class="btn btn-light" onclick="toggleFilterPanel()">Cancel</button>
+                    <button type="button" class="btn btn-light" onclick="clearAllFilters()">Clear All</button>
                     <button type="submit" class="btn btn-primary">Apply filter</button>
                 </div>
             </form>
@@ -1068,9 +1161,172 @@ let availableUnits = [];
 let selectedUnit = null;
 
 // Load batches on page load
+function filterOptions(category) {
+    const searchInput = document.querySelector(`#${category}-content .filter-search input`);
+    const searchTerm = searchInput.value.toLowerCase();
+    const options = document.querySelectorAll(`#${category}-options .option-item`);
+    
+    options.forEach(option => {
+        if (option.classList.contains('select-all-item')) {
+            option.style.display = '';
+            return;
+        }
+        const text = option.querySelector('span')?.textContent.toLowerCase() || '';
+        option.style.display = text.includes(searchTerm) ? '' : 'none';
+    });
+}
+
+function toggleSelectAll(category, selectAllCheckbox) {
+    let checkboxSelector;
+    if (category === 'unit') {
+        checkboxSelector = '.unit-checkbox';
+    } else {
+        checkboxSelector = `input[name="${category}"]`;
+    }
+    
+    const checkboxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}`);
+    const isChecked = selectAllCheckbox.checked;
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = isChecked;
+        const changeEvent = new Event('change', { bubbles: true });
+        checkbox.dispatchEvent(changeEvent);
+    });
+    
+    updateSelectionCount(category);
+}
+
+function updateSelectionCount(category) {
+    let checkboxSelector;
+    if (category === 'unit') {
+        checkboxSelector = '.unit-checkbox';
+    } else {
+        checkboxSelector = `input[name="${category}"]`;
+    }
+    
+    const checkboxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}`);
+    const checkedBoxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}:checked`);
+    const count = checkedBoxes.length;
+    
+    const countElement = document.getElementById(`${category}SelectionCount`) || document.querySelector(`#${category}-content .selection-count`);
+    const label = category.charAt(0).toUpperCase() + category.slice(1);
+    if (countElement) {
+        countElement.textContent = `${count} ${label} selected`;
+    }
+    
+    let selectAllId;
+    if (category === 'unit') {
+        selectAllId = 'selectAllUnits';
+    }
+    
+    if (selectAllId) {
+        const selectAllCheckbox = document.getElementById(selectAllId);
+        if (selectAllCheckbox && checkboxes.length > 0) {
+            selectAllCheckbox.checked = (count === checkboxes.length);
+            selectAllCheckbox.indeterminate = (count > 0 && count < checkboxes.length);
+        }
+    }
+    
+    updateFilterBadge();
+    setFilterTypeBadge(category, count);
+}
+
+function updateFilterBadge() {
+    let totalFilterCategories = 0;
+    
+    if (document.querySelectorAll('input[name="unit"]:checked').length > 0) {
+        totalFilterCategories++;
+    }
+    
+    const badge = document.getElementById('filterBadge');
+    if (badge) {
+        if (totalFilterCategories > 0) {
+            badge.textContent = totalFilterCategories;
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+function setFilterTypeBadge(category, count) {
+    const el = document.querySelector(`.filter-type[data-filter="${category}"]`);
+    if (!el) return;
+    let badge = el.querySelector('.filter-type-badge');
+    if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'filter-type-badge';
+        el.appendChild(badge);
+    }
+    if (count > 0) {
+        badge.textContent = String(count);
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function clearAllFilters() {
+    document.querySelectorAll('.filter-form input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+        cb.indeterminate = false;
+    });
+    
+    ['unit'].forEach(category => {
+        updateSelectionCount(category);
+    });
+    
+    updateFilterBadge();
+}
+
+// Make entire option row clickable to toggle checkbox
+document.addEventListener('click', function(e) {
+    const label = e.target.closest('label.option-item');
+    if (!label) return;
+    
+    if (label.classList.contains('select-all-item')) {
+        return;
+    }
+    
+    const checkbox = label.querySelector('input[type="checkbox"]');
+    if (!checkbox) return;
+    
+    if (e.target === checkbox || e.target.type === 'checkbox') {
+        setTimeout(function() {
+            const container = label.closest('.filter-content');
+            if (container) {
+                const category = container.id.replace('-content', '');
+                if (category) {
+                    updateSelectionCount(category);
+                }
+            }
+        }, 10);
+        return;
+    }
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    checkbox.checked = !checkbox.checked;
+    
+    const changeEvent = new Event('change', { bubbles: true, cancelable: false });
+    checkbox.dispatchEvent(changeEvent);
+    
+    const container = label.closest('.filter-content');
+    if (container) {
+        const category = container.id.replace('-content', '');
+        if (category) {
+            updateSelectionCount(category);
+        }
+    }
+}, true);
+
 document.addEventListener('DOMContentLoaded', function() {
     loadBatches();
     
+    // Initialize filter badge and selection counts
+    updateSelectionCount('unit');
+    updateFilterBadge();
     // Populate year dropdown (2025-2100)
     const yearSelect = document.getElementById('yearOfBatch');
     for (let year = 2025; year <= 2100; year++) {
