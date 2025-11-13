@@ -2351,11 +2351,16 @@
                 }
             });
         
+            console.log('Institution ID:', $('#institutionDropdownBtn').attr('data-institution-id'));
             // Fetch assessors
             $.ajax({
                 url: '/fetch-assessors/',
+                data: {
+                    institution_id: $('#institutionDropdownBtn').attr('data-institution-id')
+                },
                 type: 'GET',
                 success: function (response) {
+                    console.log('Assessors response:', response);
                     populateAssessorsForB2B(response.assessors);
                 },
                 error: function () {
@@ -2833,6 +2838,9 @@
         
         return $.ajax({
             url: '/fetch-assessors/',
+            data: {
+                institution_id: $('#institutionDropdownBtn').attr('data-institution-id')
+            },
             type: 'GET',
             dataType: 'json'
         }).then(function(response) {
@@ -3062,30 +3070,9 @@
         });
     });
 
-    // Populate assessors for a specific procedure (B2B) - OLD FUNCTION, KEPT FOR BACKWARD COMPATIBILITY
-    function populateAssessorsForProcedure(procedureId, assessors) {
-        const assessorList = $(`#assessorList-${procedureId}`);
-        assessorList.empty();
-        
-        if (!assessors || assessors.length === 0) {
-            assessorList.append('<li style="color:#888; padding:8px 12px;">No assessors available</li>');
-            return;
-        }
-        
-        assessors.forEach(assessor => {
-            assessorList.append(`
-                <li data-id="${assessor.id}" data-value="${assessor.name}">
-                    <label style="display: flex; align-items: center; width: 100%; margin: 0; cursor: pointer;">
-                        <input type="checkbox" value="${assessor.id}" style="margin-right: 8px;">
-                        <span>${assessor.name}</span>
-                    </label>
-                </li>
-            `);
-        });
-    }
-
     // Populate assessors for B2B (all procedures)
     function populateAssessorsForB2B(assessors) {
+        console.log('Assessors:', assessors);
         // This populates the global assessor list that can be used for all procedures
         const assessorList = $('#assessorDropdownList');
         assessorList.empty();
