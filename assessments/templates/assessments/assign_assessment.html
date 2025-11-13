@@ -1724,17 +1724,54 @@
         });
     
         // UNIVERSAL DROPDOWN HANDLER - FIXED VERSION
-        $(document).on('click', '.dropdown-btn', function(e) {
+        // Use namespace to prevent duplicate handlers
+        // Use event delegation with target to work reliably in all environments
+        $(document).off('click.dropdownHandler', '.dropdown-btn').on('click.dropdownHandler', '.dropdown-btn', function(e) {
             e.preventDefault();
             e.stopPropagation();
             
-            const $btn = $(this);
+            // Use event target as primary source (more reliable across environments)
+            // This works regardless of 'this' context issues in production
+            const $target = $(e.target);
+            let $btn = $target.closest('.dropdown-btn');
+            
+            // Fallback: if target is already the button, use it directly
+            if (!$btn.length && $target.hasClass('dropdown-btn')) {
+                $btn = $target;
+            }
+            
+            // Final fallback: use 'this' if event target doesn't work
+            if (!$btn.length) {
+                $btn = $(this);
+                if (!$btn.hasClass('dropdown-btn')) {
+                    $btn = $btn.closest('.dropdown-btn');
+                }
+            }
+            
+            // Validate we have a button
+            if (!$btn.length || !$btn.hasClass('dropdown-btn')) {
+                console.warn('Could not find dropdown button element. Target:', e.target, 'This:', this);
+                return;
+            }
+            
+            // Get the native DOM element for ID access
+            const btnElement = $btn[0];
+            
+            // Get ID - prioritize native property (most reliable)
+            const btnId = (btnElement && btnElement.id) || $btn.attr('id') || $btn.prop('id') || 'unknown';
+            
             const $container = $btn.closest('.dropdown-container');
             const $list = $container.find('.dropdown-list');
             const $search = $container.find('.dropdown-search');
             
-            console.log('Dropdown clicked:', $btn.attr('id'));
+            console.log('Dropdown clicked:', btnId, 'Target:', e.target, 'Button element:', btnElement);
             console.log('List found:', $list.length, 'Search found:', $search.length);
+            
+            // Validate we have the necessary elements
+            if (!$container.length) {
+                console.warn('Dropdown container not found for button:', btnId);
+                return;
+            }
             
             // Close all other dropdowns
             $('.dropdown-list').not($list).hide().removeClass('show');
@@ -1771,9 +1808,18 @@
     
         // Specific handler for assessor dropdown - fetch if empty
         // This handler runs first and ensures data is loaded before showing dropdown
-        $(document).on('click', '#assessorDropdownBtn', function(e) {
+        // Use namespace to prevent duplicate handlers
+        $(document).off('click.assessorHandler', '#assessorDropdownBtn').on('click.assessorHandler', '#assessorDropdownBtn', function(e) {
+            // Ensure we get the button element
+            const $btn = $(this).closest('.dropdown-btn').length ? $(this).closest('.dropdown-btn') : $(this);
+            const btnId = this.id || $btn.attr('id') || 'assessorDropdownBtn';
+            
+            // Only handle if this is actually the assessor button
+            if (btnId !== 'assessorDropdownBtn') {
+                return; // Let other handlers proceed
+            }
+            
             const $list = $('#assessorDropdownList');
-            const $btn = $(this);
             
             // Check if list is empty or has no valid items
             const listItems = $list.find('li');
