@@ -2250,52 +2250,92 @@
             $(this).closest('li').trigger('click');
         });
     
-        // Assessor dropdown for B2B procedures
-        // Use namespaced event to prevent conflicts
-        $(document).off('click.assessorDropdown', '.assessor-dropdown-btn').on('click.assessorDropdown', '.assessor-dropdown-btn', function(e) {
+        // Assessor dropdown for B2B procedures (per-procedure assessor selection)
+        // This handler manages assessor dropdowns for individual procedures in B2B mode
+        // It automatically fetches assessors if the list is empty
+        $(document).off('click.b2bAssessorDropdown', '.assessor-dropdown-btn').on('click.b2bAssessorDropdown', '.assessor-dropdown-btn', function(e) {
+            // Stop all event propagation to prevent conflicts with universal handler
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation();
             
+            // Get button and related elements
             const $btn = $(this);
-            const procedureId = $btn.data('procedure-id');
-            const dropdownList = $btn.next('.assessor-dropdown-list');
+            const procedureId = $btn.attr('data-procedure-id') || $btn.data('procedure-id');
+            const $dropdownList = $btn.next('.assessor-dropdown-list');
             
-            // Close all other assessor dropdowns
-            $('.assessor-dropdown-list').not(dropdownList).hide();
+            // Validate we have the necessary elements
+            if (!procedureId || !$dropdownList.length) {
+                console.warn('Invalid assessor dropdown: missing procedure-id or dropdown list');
+                return false;
+            }
             
-            // Check if list is empty or only has placeholder/error messages
-            const listItems = dropdownList.find('li');
-            const isEmpty = listItems.length === 0;
-            const hasOnlyPlaceholder = listItems.length === 1 && (
-                listItems.text().includes('No assessors available') || 
-                listItems.text().includes('Loading') ||
-                listItems.text().includes('Failed')
-            );
+            // Close all other assessor dropdowns first
+            $('.assessor-dropdown-list').not($dropdownList).hide().removeClass('show');
+            $('.assessor-dropdown-btn').not($btn).removeClass('active');
             
-            // If empty or only placeholder, fetch assessors first
-            if (isEmpty || hasOnlyPlaceholder) {
+            // Check current state of the dropdown
+            const isCurrentlyVisible = $dropdownList.is(':visible');
+            const listItems = $dropdownList.find('li');
+            const hasValidData = listItems.length > 0 && 
+                                !listItems.first().text().trim().match(/^(No assessors available|Loading|Failed)/i);
+            
+            // If dropdown is visible, just close it
+            if (isCurrentlyVisible) {
+                $dropdownList.hide().removeClass('show');
+                $btn.removeClass('active');
+                return false;
+            }
+            
+            // If list is empty or has placeholder, fetch assessors
+            if (!hasValidData) {
                 // Show loading state
-                dropdownList.empty().append('<li style="color:#888; padding:8px 12px;">Loading assessors...</li>');
-                dropdownList.show();
+                $dropdownList.html('<li style="color:#888; padding:8px 12px; text-align:center;"><i class="fas fa-spinner fa-spin"></i> Loading assessors...</li>');
+                $dropdownList.show().addClass('show');
+                $btn.addClass('active');
                 
-                // Fetch assessors
+                // Fetch assessors from server
                 $.ajax({
                     url: '/fetch-assessors/',
                     type: 'GET',
+                    dataType: 'json',
+                    timeout: 10000, // 10 second timeout
                     success: function(response) {
-                        populateAssessorsForProcedure(procedureId, response.assessors);
-                        // Ensure dropdown stays visible after populating
-                        dropdownList.show();
+                        if (response && response.assessors && Array.isArray(response.assessors)) {
+                            // Populate the dropdown with fetched assessors
+                            populateAssessorsForProcedure(procedureId, response.assessors);
+                            // Keep dropdown visible after populating
+                            $dropdownList.show().addClass('show');
+                            $btn.addClass('active');
+                        } else {
+                            // No assessors in response
+                            $dropdownList.html('<li style="color:#888; padding:8px 12px;">No assessors available</li>');
+                            $dropdownList.show().addClass('show');
+                            $btn.addClass('active');
+                        }
                     },
-                    error: function() {
-                        dropdownList.empty().append('<li style="color:#f44336; padding:8px 12px;">Failed to load assessors. Please try again.</li>');
-                        console.error('Failed to fetch assessors for procedure:', procedureId);
+                    error: function(xhr, status, error) {
+                        console.error('Failed to fetch assessors for procedure:', procedureId, error);
+                        let errorMsg = 'Failed to load assessors. ';
+                        if (status === 'timeout') {
+                            errorMsg += 'Request timed out.';
+                        } else if (xhr.status === 0) {
+                            errorMsg += 'Network error.';
+                        } else {
+                            errorMsg += 'Please try again.';
+                        }
+                        $dropdownList.html('<li style="color:#f44336; padding:8px 12px;">' + errorMsg + '</li>');
+                        $dropdownList.show().addClass('show');
+                        $btn.addClass('active');
                     }
                 });
             } else {
-                // List has data, just toggle
-                dropdownList.toggle();
+                // List has valid data, just show it
+                $dropdownList.show().addClass('show');
+                $btn.addClass('active');
             }
+            
+            return false;
         });
     
         // Assessor selection for specific procedures (B2B)
