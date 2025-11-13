@@ -1,0 +1,636 @@
+{% extends "assessments/base.html" %}
+{% load static %}
+
+{% block title %}Admin Report Portal{% endblock %}
+
+{% block content %}
+<style>
+    .admin-report-container {
+        padding: 20px;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+    
+    .report-header {
+        margin-bottom: 30px;
+    }
+    
+    .report-header h1 {
+        font-size: 28px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 10px;
+    }
+    
+    .filter-section {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 30px;
+    }
+    
+    .filter-section h3 {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 15px;
+        color: #333;
+    }
+    
+    .filter-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 15px;
+        margin-bottom: 15px;
+    }
+    
+    .filter-item {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .filter-item label {
+        font-size: 14px;
+        font-weight: 500;
+        margin-bottom: 5px;
+        color: #555;
+    }
+    
+    .filter-item select,
+    .filter-item input {
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+    
+    .filter-note {
+        font-size: 12px;
+        color: #666;
+        margin-top: 3px;
+        font-style: italic;
+    }
+    
+    .kpi-section {
+        margin-bottom: 30px;
+    }
+    
+    .kpi-section h3 {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 15px;
+        color: #333;
+    }
+    
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+    }
+    
+    .kpi-card {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .kpi-card h4 {
+        font-size: 14px;
+        font-weight: 500;
+        color: #666;
+        margin-bottom: 10px;
+    }
+    
+    .kpi-value {
+        font-size: 32px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 5px;
+    }
+    
+    .kpi-definition {
+        font-size: 12px;
+        color: #999;
+        font-style: italic;
+    }
+    
+    .table-section {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 30px;
+        overflow-x: auto;
+    }
+    
+    .table-section h3 {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 15px;
+        color: #333;
+    }
+    
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+    }
+    
+    .data-table th {
+        background: #4472C4;
+        color: white;
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 14px;
+    }
+    
+    .data-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #e0e0e0;
+        font-size: 14px;
+    }
+    
+    .data-table tr:hover {
+        background: #f5f5f5;
+    }
+    
+    .export-btn {
+        background: #4472C4;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        margin-bottom: 20px;
+    }
+    
+    .export-btn:hover {
+        background: #365a9f;
+    }
+    
+    .loading {
+        text-align: center;
+        padding: 20px;
+        color: #666;
+    }
+    
+    .error {
+        background: #fee;
+        color: #c33;
+        padding: 15px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+    }
+</style>
+
+<div class="admin-report-container">
+    <div class="report-header">
+        <h1>Admin Report Portal</h1>
+        <button class="export-btn" onclick="exportToExcel()">
+            <i class="fas fa-download"></i> Export to Excel
+        </button>
+    </div>
+    
+    <!-- Filter Section -->
+    <div class="filter-section">
+        <h3>Filter</h3>
+        <div class="filter-grid">
+            <div class="filter-item">
+                <label>Academic Year <span class="filter-note">(Default = current AY)</span></label>
+                <select id="academicYearFilter">
+                    <option value="">All</option>
+                </select>
+            </div>
+            
+            <div class="filter-item">
+                <label>Region / State <span class="filter-note">(Cascading Region → State)</span></label>
+                <select id="regionFilter" onchange="onRegionChange()">
+                    <option value="">All Regions</option>
+                </select>
+            </div>
+            
+            <div class="filter-item">
+                <label>State</label>
+                <select id="stateFilter">
+                    <option value="">All States</option>
+                </select>
+            </div>
+            
+            <div class="filter-item">
+                <label>Institution <span class="filter-note">(Searchable; 'All' by default)</span></label>
+                <select id="institutionFilter">
+                    <option value="All">All</option>
+                </select>
+            </div>
+            
+            <div class="filter-item">
+                <label>Semester <span class="filter-note">(I-VIII; 'All' by default)</span></label>
+                <select id="semesterFilter">
+                    <option value="All">All</option>
+                    <option value="1">I</option>
+                    <option value="2">II</option>
+                    <option value="3">III</option>
+                    <option value="4">IV</option>
+                    <option value="5">V</option>
+                    <option value="6">VI</option>
+                    <option value="7">VII</option>
+                    <option value="8">VIII</option>
+                </select>
+            </div>
+            
+            <div class="filter-item">
+                <label>OSCE Level</label>
+                <select id="osceLevelFilter">
+                    <option value="All">All</option>
+                    <option value="Classroom">Classroom</option>
+                    <option value="Mock">Mock</option>
+                    <option value="Final">Final</option>
+                </select>
+            </div>
+            
+            <div class="filter-item">
+                <label>Category</label>
+                <select id="categoryFilter">
+                    <option value="">All</option>
+                    <option value="Pre-procedure">Pre-procedure</option>
+                    <option value="Core Skills">Core Skills</option>
+                    <option value="Infection Control">Infection Control</option>
+                    <option value="Communication">Communication</option>
+                    <option value="Documentation">Documentation</option>
+                    <option value="Critical Thinking">Critical Thinking</option>
+                </select>
+            </div>
+            
+            <div class="filter-item">
+                <label>Skill <span class="filter-note">(Searchable)</span></label>
+                <select id="skillFilter">
+                    <option value="">All</option>
+                </select>
+            </div>
+            
+            <div class="filter-item">
+                <label>Date Range (optional) <span class="filter-note">(For time-series)</span></label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="date" id="dateFromFilter" style="flex: 1;">
+                    <input type="date" id="dateToFilter" style="flex: 1;">
+                </div>
+            </div>
+        </div>
+        <button class="export-btn" onclick="applyFilters()" style="margin-top: 10px;">
+            <i class="fas fa-filter"></i> Apply Filters
+        </button>
+    </div>
+    
+    <!-- KPI Section -->
+    <div class="kpi-section">
+        <h3>KPI</h3>
+        <div id="kpiContainer" class="kpi-grid">
+            <div class="loading">Loading KPIs...</div>
+        </div>
+    </div>
+    
+    <!-- Skills Metrics Table -->
+    <div class="table-section">
+        <h3>Skills Metrics</h3>
+        <div id="skillsMetricsContainer">
+            <div class="loading">Loading skills metrics...</div>
+        </div>
+    </div>
+    
+    <!-- Assessors Performance Table -->
+    <div class="table-section">
+        <h3>Assessors Performance</h3>
+        <div id="assessorsPerformanceContainer">
+            <div class="loading">Loading assessors performance...</div>
+        </div>
+    </div>
+    
+    <!-- Usage & Engagement Section -->
+    <div class="table-section">
+        <h3>Usage & Engagement</h3>
+        <div id="usageEngagementContainer">
+            <div class="loading">Loading usage & engagement data...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentFilters = {};
+let kpiData = null;
+
+// Load filter options on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadFilterOptions();
+    loadKPIs();
+    loadSkillsMetrics();
+    loadAssessorsPerformance();
+    loadUsageEngagement();
+});
+
+function loadFilterOptions() {
+    // Load all filter options from API
+    fetch('/api/admin-report/filter-options/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Load academic years
+                const yearSelect = document.getElementById('academicYearFilter');
+                data.academic_years.forEach(year => {
+                    const option = document.createElement('option');
+                    option.value = year;
+                    option.textContent = year;
+                    yearSelect.appendChild(option);
+                });
+                
+                // Set current year as default
+                const currentYear = new Date().getFullYear();
+                if (data.academic_years.includes(currentYear.toString())) {
+                    yearSelect.value = currentYear.toString();
+                }
+                
+                // Load institutions
+                const instSelect = document.getElementById('institutionFilter');
+                data.institutions.forEach(inst => {
+                    const option = document.createElement('option');
+                    option.value = inst.name;
+                    option.textContent = inst.name;
+                    instSelect.appendChild(option);
+                });
+                
+                // Load states
+                const stateSelect = document.getElementById('stateFilter');
+                data.states.forEach(state => {
+                    const option = document.createElement('option');
+                    option.value = state;
+                    option.textContent = state;
+                    stateSelect.appendChild(option);
+                });
+                
+                // Load skills/procedures
+                const skillSelect = document.getElementById('skillFilter');
+                data.skills.forEach(skill => {
+                    const option = document.createElement('option');
+                    option.value = skill;
+                    option.textContent = skill;
+                    skillSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading filter options:', error);
+        });
+}
+
+function onRegionChange() {
+    // Region → State cascading logic can be implemented here
+}
+
+function applyFilters() {
+    currentFilters = {
+        academic_year: document.getElementById('academicYearFilter').value,
+        region: document.getElementById('regionFilter').value,
+        state: document.getElementById('stateFilter').value,
+        institution: document.getElementById('institutionFilter').value,
+        semester: document.getElementById('semesterFilter').value,
+        osce_level: document.getElementById('osceLevelFilter').value,
+        category: document.getElementById('categoryFilter').value,
+        skill: document.getElementById('skillFilter').value,
+        date_from: document.getElementById('dateFromFilter').value,
+        date_to: document.getElementById('dateToFilter').value
+    };
+    
+    loadKPIs();
+    loadSkillsMetrics();
+    loadAssessorsPerformance();
+    loadUsageEngagement();
+}
+
+function loadKPIs() {
+    const params = new URLSearchParams(currentFilters);
+    fetch(`/api/admin-report/kpis/?${params}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayKPIs(data.kpis);
+                kpiData = data.kpis;
+            } else {
+                document.getElementById('kpiContainer').innerHTML = 
+                    `<div class="error">Error loading KPIs: ${data.error || 'Unknown error'}</div>`;
+            }
+        })
+        .catch(error => {
+            document.getElementById('kpiContainer').innerHTML = 
+                `<div class="error">Error loading KPIs: ${error.message}</div>`;
+        });
+}
+
+function displayKPIs(kpis) {
+    const kpiDefinitions = {
+        'institutions_active': 'Distinct institutions with at least 1 OSCE',
+        'students_assessed': 'Distinct students in scope',
+        'active_assessors': 'Distinct assessors who rated exams',
+        'osces_conducted': 'Count of OSCE events',
+        'avg_osce_score': 'Mean of student averages',
+        'pass_rate': 'Students ≥60% / total',
+        'inactive_institutions': 'Institutions with no activity in last 30 days'
+    };
+    
+    const kpiContainer = document.getElementById('kpiContainer');
+    kpiContainer.innerHTML = '';
+    
+    const kpiItems = [
+        { key: 'institutions_active', label: 'Institutions Active' },
+        { key: 'students_assessed', label: 'Students Assessed' },
+        { key: 'active_assessors', label: 'Active Assessors' },
+        { key: 'osces_conducted', label: 'OSCEs Conducted' },
+        { key: 'avg_osce_score', label: 'Avg OSCE Score', format: (v) => `${v}% (${kpis.avg_osce_grade || 'N/A'})` },
+        { key: 'pass_rate', label: 'Pass Rate (≥60%)', format: (v) => `${v}%` },
+        { key: 'inactive_institutions', label: 'Inactive Institutions (Last 30 days)' }
+    ];
+    
+    kpiItems.forEach(item => {
+        const value = kpis[item.key] || 0;
+        const card = document.createElement('div');
+        card.className = 'kpi-card';
+        card.innerHTML = `
+            <h4>${item.label}</h4>
+            <div class="kpi-value">${item.format ? item.format(value) : value.toLocaleString()}</div>
+            <div class="kpi-definition">${kpiDefinitions[item.key] || ''}</div>
+        `;
+        kpiContainer.appendChild(card);
+    });
+}
+
+function loadSkillsMetrics() {
+    const params = new URLSearchParams(currentFilters);
+    fetch(`/api/admin-report/skills-metrics/?${params}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displaySkillsMetrics(data.skills_metrics);
+            } else {
+                document.getElementById('skillsMetricsContainer').innerHTML = 
+                    `<div class="error">Error loading skills metrics: ${data.error || 'Unknown error'}</div>`;
+            }
+        })
+        .catch(error => {
+            document.getElementById('skillsMetricsContainer').innerHTML = 
+                `<div class="error">Error loading skills metrics: ${error.message}</div>`;
+        });
+}
+
+function displaySkillsMetrics(metrics) {
+    const container = document.getElementById('skillsMetricsContainer');
+    if (!metrics || metrics.length === 0) {
+        container.innerHTML = '<p>No skills metrics data available.</p>';
+        return;
+    }
+    
+    let html = '<table class="data-table"><thead><tr>';
+    html += '<th>Skill Name</th><th>Questions</th><th>Avg Score %</th><th>Total Students</th><th>Avg Score</th><th>Max Score</th>';
+    html += '</tr></thead><tbody>';
+    
+    metrics.forEach(metric => {
+        html += `<tr>
+            <td>${metric.skill_name}</td>
+            <td>${metric.questions_count}</td>
+            <td>${metric.avg_score_percentage}%</td>
+            <td>${metric.total_students}</td>
+            <td>${metric.avg_score}</td>
+            <td>${metric.max_score}</td>
+        </tr>`;
+    });
+    
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+function loadAssessorsPerformance() {
+    const params = new URLSearchParams(currentFilters);
+    fetch(`/api/admin-report/assessors-performance/?${params}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayAssessorsPerformance(data.assessors_performance);
+            } else {
+                document.getElementById('assessorsPerformanceContainer').innerHTML = 
+                    `<div class="error">Error loading assessors performance: ${data.error || 'Unknown error'}</div>`;
+            }
+        })
+        .catch(error => {
+            document.getElementById('assessorsPerformanceContainer').innerHTML = 
+                `<div class="error">Error loading assessors performance: ${error.message}</div>`;
+        });
+}
+
+function displayAssessorsPerformance(assessors) {
+    const container = document.getElementById('assessorsPerformanceContainer');
+    if (!assessors || assessors.length === 0) {
+        container.innerHTML = '<p>No assessors performance data available.</p>';
+        return;
+    }
+    
+    let html = '<table class="data-table"><thead><tr>';
+    html += '<th>Assessor</th><th>Inst.</th><th>OSCEs Rated</th><th>Students Rated</th><th>Mean Score</th>';
+    html += '<th>Δ vs Inst. Mean</th><th>Score SD</th><th>IRR</th><th>Last Calibration</th>';
+    html += '</tr></thead><tbody>';
+    
+    assessors.forEach(assessor => {
+        const delta = assessor.delta_vs_inst_mean;
+        const deltaDisplay = delta >= 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2);
+        html += `<tr>
+            <td>${assessor.assessor}</td>
+            <td>${assessor.institution}</td>
+            <td>${assessor.osces_rated}</td>
+            <td>${assessor.students_rated}</td>
+            <td>${assessor.mean_score}</td>
+            <td>${deltaDisplay}</td>
+            <td>${assessor.score_sd}</td>
+            <td>${assessor.irr}</td>
+            <td>${assessor.last_calibration}</td>
+        </tr>`;
+    });
+    
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+function loadUsageEngagement() {
+    const params = new URLSearchParams(currentFilters);
+    fetch(`/api/admin-report/usage-engagement/?${params}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayUsageEngagement(data);
+            } else {
+                document.getElementById('usageEngagementContainer').innerHTML = 
+                    `<div class="error">Error loading usage & engagement: ${data.error || 'Unknown error'}</div>`;
+            }
+        })
+        .catch(error => {
+            document.getElementById('usageEngagementContainer').innerHTML = 
+                `<div class="error">Error loading usage & engagement: ${error.message}</div>`;
+        });
+}
+
+function displayUsageEngagement(data) {
+    const container = document.getElementById('usageEngagementContainer');
+    let html = '';
+    
+    // Institution Last Access Date
+    html += '<h4 style="margin-top: 20px;">Institution Last Access Date</h4>';
+    html += '<table class="data-table"><thead><tr><th>Institution</th><th>Last Login</th><th>Status</th></tr></thead><tbody>';
+    if (data.institution_access && data.institution_access.length > 0) {
+        data.institution_access.forEach(item => {
+            html += `<tr>
+                <td>${item.institution}</td>
+                <td>${item.last_login}</td>
+                <td>${item.status}</td>
+            </tr>`;
+        });
+    }
+    html += '</tbody></table>';
+    
+    // OSCE Upload Timeliness
+    html += '<h4 style="margin-top: 30px;">OSCE Upload Timeliness</h4>';
+    html += '<table class="data-table"><thead><tr><th>OSCE Date</th><th>Upload Date</th><th>Delay (Days)</th><th>Institution</th></tr></thead><tbody>';
+    if (data.upload_timeliness && data.upload_timeliness.length > 0) {
+        data.upload_timeliness.forEach(item => {
+            html += `<tr>
+                <td>${item.osce_date}</td>
+                <td>${item.upload_date}</td>
+                <td>${item.delay_days}</td>
+                <td>${item.institution}</td>
+            </tr>`;
+        });
+    }
+    html += '</tbody></table>';
+    
+    // Checklist Versions Used
+    html += '<h4 style="margin-top: 30px;">Checklist Versions Used</h4>';
+    html += '<table class="data-table"><thead><tr><th>Skill</th><th>Version ID</th><th>Institutions</th></tr></thead><tbody>';
+    if (data.checklist_versions && data.checklist_versions.length > 0) {
+        data.checklist_versions.forEach(item => {
+            html += `<tr>
+                <td>${item.skill}</td>
+                <td>${item.version_id}</td>
+                <td>${item.institutions.join(', ')}</td>
+            </tr>`;
+        });
+    }
+    html += '</tbody></table>';
+    
+    container.innerHTML = html;
+}
+
+function exportToExcel() {
+    const params = new URLSearchParams(currentFilters);
+    window.location.href = `/api/admin-report/export-excel/?${params}`;
+}
+</script>
+{% endblock %}
+

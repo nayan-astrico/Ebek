@@ -1942,7 +1942,7 @@ function submitForm() {
         courseName: document.getElementById('courseName').value.trim(),
         description: document.getElementById('description').value.trim(),
         procedures: Array.from(document.querySelectorAll('#proceduresOptions input[type="checkbox"]:checked:not(#procSelectAll)')).map(cb => cb.value),
-        verificationRequired: document.getElementById('verification').checked
+        // verificationRequired: document.getElementById('verification').checked
     };
     
     $.ajax({
@@ -1986,7 +1986,7 @@ function submitForm() {
 function resetForm() {
     document.getElementById('courseForm').reset();
     document.getElementById('selectedTags').innerHTML = '';
-    document.getElementById('verificationField').style.display = 'none';
+    // document.getElementById('verificationField').style.display = 'none';
     clearAllErrors();
     
     // Remove success classes

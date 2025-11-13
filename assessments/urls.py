@@ -28,6 +28,16 @@ urlpatterns = [
     path('create-procedure-assignment-and-test/', views.create_procedure_assignment_and_test, name='create-procedure-assignment-and-test'),
     path('exam-reports/', views.render_exam_reports_page, name='exam_reports_page'),
     path('fetch-exam-reports/', views.fetch_exam_reports, name='fetch_exam_reports'),
+    path('api/osce-report/', views.fetch_osce_report, name='fetch_osce_report'),
+    path('api/skills-for-category/', views.fetch_skills_for_category, name='fetch_skills_for_category'),
+    path('api/institutions-hospitals-for-report/', views.fetch_institutions_hospitals_for_report, name='fetch_institutions_hospitals_for_report'),
+    path('admin-report-portal/', views.render_admin_report_portal, name='admin_report_portal'),
+    path('api/admin-report/filter-options/', views.fetch_admin_report_filter_options, name='fetch_admin_report_filter_options'),
+    path('api/admin-report/kpis/', views.fetch_admin_report_kpis, name='fetch_admin_report_kpis'),
+    path('api/admin-report/skills-metrics/', views.fetch_admin_report_skills_metrics, name='fetch_admin_report_skills_metrics'),
+    path('api/admin-report/assessors-performance/', views.fetch_admin_report_assessors_performance, name='fetch_admin_report_assessors_performance'),
+    path('api/admin-report/usage-engagement/', views.fetch_admin_report_usage_engagement, name='fetch_admin_report_usage_engagement'),
+    path('api/admin-report/export-excel/', views.export_admin_report_excel, name='export_admin_report_excel'),
     path('fetch-exam-metrics/', views.fetch_exam_metrics, name='fetch_exam_metrics'),
     path('fetch-student-metrics/', views.fetch_student_metrics, name='fetch_student_metrics'),
     path('fetch-particular-student/', views.fetch_particular_student, name='fetch_particular_student'),
@@ -88,6 +98,7 @@ urlpatterns = [
     path('courses/<str:course_id>/remove-procedure/', views.remove_procedure_from_course, name='remove_procedure_from_course'),
     path('create-roles/', views.create_roles, name='create_roles'),
     path('assign-roles/', views.assign_roles, name='assign_roles'),
+    path('fetch-assessments/',views.fetch_assessments),
     
     # Batch API endpoints
     path('api/batches/', views.fetch_batches, name='fetch_batches'),
@@ -102,6 +113,12 @@ urlpatterns = [
     path('api/fetch-learners/<str:unit_type>/<str:unit_id>/', views.fetch_learners, name='fetch_learners'),
     path('api/institute-based-skillathon/', views.institute_based_skillathon, name='institute_based_skillathon'),
     path('api/download-student-report/', views.download_student_report, name='download_student_report'),
+
+
+    path('upload-preview/', views.upload_preview, name='upload_preview'),
+    path('upload-excel/', views.upload_excel, name='upload_excel'),
+    path('api/procedure/<str:procedure_id>/edit/', views.get_procedure_for_edit, name='get_procedure_for_edit'),
+    path('api/procedure/update/', views.update_procedure, name='update_procedure'),
 
 
     # Batch Course API endpoints

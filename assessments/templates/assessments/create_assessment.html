@@ -5,247 +5,725 @@
 
 
 {% block content %}
-    <!-- Button to open modal -->
-    <button class="btn-create-assessment" id="createAssessmentBtn">+ Create Assessment</button>
 
-    <div>
-        <!-- Search Bar and Filter -->
-        <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
-            <div>
-                <input type="text" id="searchInput" placeholder="Search Procedures" 
-                       value="{{ query }}" style="padding: 8px; width: 300px; border: 1px solid #ddd; border-radius: 5px;">
-                <button onclick="applyFilter()" style="background-color: #f7a82d; color: white; border: none; padding: 8px 16px; border-radius: 5px;">
-                    Search
-                </button>
-            </div>
+<!-- Updated the upload procedure button with sidebar  -->
+<div class="header">
+    <div class="header-left">
+        <h1>Assessments</h1>
+        <p class="text-muted">Manage your assessments.</p>
+    </div>
+    <div class="header-right">
+        {% if "bulk_upload_learners" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        <button class="btn btn-primary" onclick="toggleUploadPanel()">
+            <i class="fas fa-plus"></i>
+            Create Assessment
+        </button>
+        {% endif %}
         </div>
-    
-        <!-- Procedures Table -->
-        <table style="width: 100%; border-collapse: collapse;">
+    </div>
+
+
+    <!-- Updated search and filter for procedures -->
+    <div>
+    <div class="search-filter-bar">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input 
+                type="text" 
+                placeholder="Search procedures..." 
+                id="procedureSearchInput" 
+                oninput="filterProcedures(this.value)"
+            >
+        </div>
+    <button class="btn-filter" onclick="toggleProcedureFilterPanel()" id="filterBtn">
+        <i class="fas fa-filter"></i>
+        Filters
+        <span class="filter-badge" id="filterBadge" style="display: none;">0</span>
+    </button>
+    </div>
+        
+    <!--Updated view of Procedures Table -->
+    <div class="card">
+        <table class="table">
             <thead>
-                <tr style="background-color: #f9f9f9; border-bottom: 2px solid #ddd;">
-                    <th style="padding: 10px;">Procedure</th>
-                    <th style="padding: 10px;">Questions</th>
-                    <th style="padding: 10px;">Mark as Active</th>
-                    <th style="padding: 10px;">Actions</th>
+                <tr>
+                    <th>Procedure</th>
+                    <th>Questions</th>
+                    <th>Category</th>
+                    <th>Active</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
-            <tbody>
-                {% for procedure in page_obj %}
-                    <tr style="border-bottom: 1px solid #eee;">
-                        <td style="padding: 10px;">{{ procedure.name }}</td>
-                        <td style="padding: 10px;">{{ procedure.questions }}</td>
-                        <td style="padding: 10px; text-align: center;">
-                            <label class="switch">
-                                <input type="checkbox" 
-                                       {% if procedure.active %}checked{% endif %} 
-                                       onchange="toggleActive('{{ procedure.id }}', this)">
-                                <span class="slider round"></span>
-                            </label>
-                        </td>
-                        <td style="padding: 10px;">
-                            
-                            <button onclick="deleteProcedure('{{ procedure.id }}')" style="border: none; background: none; cursor: pointer;">
-                                <i class="fas fa-trash" style="color: #ff4d4d;"></i>
-                            </button>
-                            <button onclick="downloadProcedure('{{ procedure.id }}')" style="border: none; background: none; cursor: pointer;">
-                                <i class="fas fa-download" style="color: #666;"></i>
-                            </button>
-                            <button onclick="viewProcedure('{{ procedure.id }}')" style="border: none; background: none; cursor: pointer;">
-                                <i class="fas fa-eye" style="color: #666;"></i>
-                            </button>
-
-                        </td>
-                    </tr>
-                {% empty %}
-                    <tr>
-                        <td colspan="4" style="text-align: center; padding: 20px; color: #999;">No procedures found.</td>
-                    </tr>
-                {% endfor %}
+            <tbody id="proceduresTableBody">
+                <!-- Procedures will be loaded dynamically -->
             </tbody>
         </table>
-    
-        <!-- Pagination -->
-        <div style="text-align: right; margin-top: 20px;">
-            {% if page_obj.paginator.num_pages > 1 %}
-                <span>
-                    <!-- Previous Button -->
-                    {% if page_obj.has_previous %}
-                        <a href="?page={{ page_obj.previous_page_number }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin-right: 10px;">Previous</a>
-                    {% endif %}
-        
-                    <!-- Page Links -->
-                    {% for page in page_obj.paginator.page_range %}
-                        {% if page <= 5 %}
-                            <a href="?page={{ page }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin: 0 5px;">{{ page }}</a>
-                        {% elif page >= page_obj.paginator.num_pages|subtract:1 %}
-                            <a href="?page={{ page }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin: 0 5px;">{{ page }}</a>
-                        {% elif page >= page_obj.number|subtract:2 %}
-                            {% if page <= page_obj.number|add:2 %}
-                                <a href="?page={{ page }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin: 0 5px;">{{ page }}</a>
-                            {% endif %}
-                        {% elif page == 6 %}
-                            <span style="margin: 0 5px;">...</span>
-                        {% endif %}
-                    {% endfor %}
-        
-                    <!-- Next Button -->
-                    {% if page_obj.has_next %}
-                        <a href="?page={{ page_obj.next_page_number }}&query={{ query }}" style="color: #f7a82d; text-decoration: none; margin-left: 10px;">Next</a>
-                    {% endif %}
-                </span>
+
+        <!-- Loading Spinner -->
+        <div id="proceduresLoadingSpinner" class="loading-spinner" style="display: none;">
+            <div class="spinner"></div>
+            <p>Loading procedures...</p>
+        </div>
+
+        <!-- Show More Button -->
+        <div style="text-align:center; margin: 20px 0;">
+            <button id="showMoreProceduresBtn" class="btn btn-primary" style="display:none;" onclick="loadMoreProcedures()">Show More</button>
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyProceduresState" class="empty-state" style="display: none;">
+            <div class="empty-icon">
+                <i class="fas fa-stethoscope"></i>
+            </div>
+            <h3>No procedures found</h3>
+            <p>Try creating or importing a procedure.</p>
+            {% if "create_procedure" in request.user.get_all_permissions or request.user.has_all_permissions %}
+            <button class="btn btn-primary" onclick="toggleAddProcedurePanel()">
+                <i class="fas fa-plus"></i>
+                Create Procedure
+            </button>
             {% endif %}
         </div>
     </div>
 
-    <!-- Modal for Upload Assessment -->
-    <div class="modal fade" id="createAssessmentModal" tabindex="-1" role="dialog" aria-labelledby="createAssessmentLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered" role="document">
-            <div class="modal-content" style="border-radius: 10px; background-color: white; border: none; width: 450px;">
-                <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
-                    <h5 class="modal-title" id="createAssessmentLabel" style="font-weight: bold; color: #333;">Upload Assessment</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="outline: none;">
-                        <span aria-hidden="true">&times;</span>
+
+ 
+<div class="filter-panel" id="procedureFilterPanel">
+    <div class="filter-header">
+        <h3>Filter Procedures</h3>
+        <button type="button" class="close" onclick="toggleProcedureFilterPanel()">
+            <span>&times;</span>
+        </button>
+    </div>
+
+    <form class="filter-form">
+        <div class="filter-layout">
+            <div class="filter-types">
+                <div class="filter-type active" data-filter="status" onclick="switchProcedureFilter('status')">
+                    <span>Status</span>
+                </div>
+                <div class="filter-type" data-filter="category" onclick="switchProcedureFilter('category')">
+                    <span>Category</span>
+                </div>
+            </div>
+
+            <div class="filter-content-wrapper">
+                <div class="filter-content active" id="procedure-status-content">
+                    <div class="filter-search">
+                        <input type="text" placeholder="Search status" id="procedureFilterStatusSearch" oninput="filterStatusOptions(this.value)">
+                        <div class="selection-count" id="procedureStatusSelectionCount">0 Status selected</div>
+                    </div>
+                    <div class="options-list" id="procedureFilterStatusOptions">
+                        <label class="option-item">
+                            <input type="checkbox" name="status" value="active" onchange="updateProcedureStatusSelectionCount()">
+                            <span>Active</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="status" value="inactive" onchange="updateProcedureStatusSelectionCount()">
+                            <span>Inactive</span>
+                        </label>
+                    </div>
+                </div>
+
+             <div class="filter-content" id="procedure-category-content">
+                    <div class="filter-search">
+                        <input type="text" placeholder="Search category" id="procedureFilterCategorySearch" oninput="filterProcedureCategoryOptions(this.value)">
+                        <div class="selection-count" id="procedureCategorySelectionCount">0 Categories selected</div>
+                    </div>
+                    <div class="options-list" id="procedureFilterCategoryOptions">
+                        <label class="option-item">
+                            <input type="checkbox" name="category" value="Core Skills" onchange="updateProcedureCategorySelectionCount()">
+                            <span>Core Skills</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="category" value="Infection Control" onchange="updateProcedureCategorySelectionCount()">
+                            <span>Infection Control</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="category" value="Communication" onchange="updateProcedureCategorySelectionCount()">
+                            <span>Communication</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="category" value="Documentation" onchange="updateProcedureCategorySelectionCount()">
+                            <span>Documentation</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="category" value="Pre-Procedure" onchange="updateProcedureCategorySelectionCount()">
+                            <span>Pre-Procedure</span>
+                        </label>
+                        <label class="option-item">
+                            <input type="checkbox" name="category" value="Critical Thinking" onchange="updateProcedureCategorySelectionCount()">
+                            <span>Critical Thinking</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="filter-actions">
+            <button type="button" class="btn btn-light" onclick="clearAllProcedureFilters()">Clear All</button>
+            <button type="button" class="btn btn-light" onclick="toggleProcedureFilterPanel()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="applyProcedureFilters()">Apply Filter</button>
+        </div>
+    </form>
+</div>
+
+
+    <!-- Side Panel for Viewing Procedure -->
+    <div id="viewProcedurePanel" class="side-panel">
+        <div class="side-panel-header">
+            <h3 id="procedureTitle">Procedure Details</h3>
+            <button class="close-btn" onclick="toggleViewProcedurePanel()">×</button>
+        </div>
+        <div id="procedureContent" class="side-panel-body"></div>
+    </div>
+
+    <!-- Edit Procedure Panel -->
+    <div id="editProcedurePanel" class="side-panel">
+        <div class="side-panel-header">
+            <h3>Edit Assessment</h3>
+            <button class="close-btn" onclick="toggleEditProcedurePanel()">×</button>
+        </div>
+        <div class="side-panel-body">
+            <form id="editProcedureForm">
+                <input type="hidden" id="editProcedureId" value="">
+                
+                <div class="form-group">
+                    <label for="editProcedureName"><strong>Procedure Name</strong></label>
+                    <input type="text" id="editProcedureName" class="form-control" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="editCategory"><strong>Category</strong></label>
+                    <select id="editCategory" class="form-control" required>
+                        <option value="">Select a category</option>
+                        <option value="Core Skills">Core Skills</option>
+                        <option value="Infection Control">Infection Control</option>
+                        <option value="Documentation">Documentation</option>
+                        <option value="Pre-Procedure">Pre-Procedure</option>
+                        <option value="Critical Thinking">Critical Thinking</option>
+                        <option value="Communication">Communication</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label><strong>Questions</strong></label>
+                    <div id="questionsContainer" class="questions-container">
+                        <!-- Questions will be dynamically added here -->
+                    </div>
+                    <button type="button" class="btn btn-add" onclick="addQuestion()">
+                        <i class="fas fa-plus"></i> Add Question
                     </button>
                 </div>
-                <div class="modal-body" style="text-align: center; padding: 20px;">
-                    <!-- Drag-and-Drop File Upload Area -->
-                    <form id="uploadForm" method="post" enctype="multipart/form-data" onsubmit="submitForm(event)">
-                        {% csrf_token %}
-                        <div style="border: 2px dashed #ddd; border-radius: 10px; padding: 20px; background-color: #f9f9f9;" 
-                             id="dropArea">
-                            <input type="file" name="file" id="fileInput" accept=".xlsx" style="display: none;" required onchange="showExcelFilePreview(event)">
-                            <div onclick="triggerFileInput()" style="cursor: pointer;">
-                                <svg height="30px" width="30px" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#aaa">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm1 7h-4V9h4zm-4-2V5h.01L17 9zM7 14h10v2H7zm0 4h10v2H7zm0-8h4v2H7zm-2 2h12v1H5zm0 3h10v1H5z" />
-                                </svg>
-                                <p style="margin: 10px 0; color: #666;">Drag & drop file or click to upload</p>
-                                <p style="font-size: 12px; color: #999;">Max 10 MB files are allowed</p>
-                            </div>
-                        </div>
-                        
-                        <!-- File Preview Section -->
-                        <div id="filePreview" style="display: none; margin-top: 20px;">
-                            <div style="display: flex; align-items: center; justify-content: space-between; border: 1px solid #ddd; padding: 10px; border-radius: 8px;">
-                                <div style="display: flex; align-items: center;">
-                                    <?xml version="1.0" encoding="utf-8"?><!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
-                                        <svg width="40px" height="40px" viewBox="-4 0 64 64" xmlns="http://www.w3.org/2000/svg">
-                                            <path d="M5.112.006c-2.802 0-5.073 2.273-5.073 5.074v53.841c0 2.803 2.271 5.074 5.073 5.074h45.774c2.801 0 5.074-2.271 5.074-5.074v-38.605l-18.902-20.31h-31.946z" fill-rule="evenodd" clip-rule="evenodd" fill="#45B058"/>
-                                            <path d="M19.429 53.938c-.216 0-.415-.09-.54-.27l-3.728-4.97-3.745 4.97c-.126.18-.324.27-.54.27-.396 0-.72-.306-.72-.72 0-.144.035-.306.144-.432l3.89-5.131-3.619-4.826c-.09-.126-.145-.27-.145-.414 0-.342.288-.72.721-.72.216 0 .432.108.576.288l3.438 4.628 3.438-4.646c.127-.18.324-.27.541-.27.378 0 .738.306.738.72 0 .144-.036.288-.127.414l-3.619 4.808 3.891 5.149c.09.126.125.27.125.414 0 .396-.324.738-.719.738zm9.989-.126h-5.455c-.595 0-1.081-.486-1.081-1.08v-10.317c0-.396.324-.72.774-.72.396 0 .721.324.721.72v10.065h5.041c.359 0 .648.288.648.648 0 .396-.289.684-.648.684zm6.982.216c-1.782 0-3.188-.594-4.213-1.495-.162-.144-.234-.342-.234-.54 0-.36.27-.756.702-.756.144 0 .306.036.433.144.828.738 1.98 1.314 3.367 1.314 2.143 0 2.826-1.152 2.826-2.071 0-3.097-7.111-1.386-7.111-5.672 0-1.98 1.764-3.331 4.123-3.331 1.548 0 2.881.468 3.853 1.278.162.144.253.342.253.54 0 .36-.307.72-.703.72-.145 0-.307-.054-.432-.162-.883-.72-1.98-1.044-3.079-1.044-1.44 0-2.467.774-2.467 1.909 0 2.701 7.112 1.152 7.112 5.636 0 1.748-1.188 3.53-4.43 3.53z" fill="#ffffff"/><path d="M55.953 20.352v1h-12.801s-6.312-1.26-6.127-6.707c0 0 .207 5.707 6.002 5.707h12.926z" fill-rule="evenodd" clip-rule="evenodd" fill="#349C42"/>
-                                            <path d="M37.049 0v14.561c0 1.656 1.104 5.791 6.104 5.791h12.801l-18.905-20.352z" opacity=".5" fill-rule="evenodd" clip-rule="evenodd" fill="#ffffff"/>
-                                        </svg>
-                                    <span id="fileName" style="color: #333; font-size: 14px;padding-left: 10px;"></span>
-                                </div>
-                                <button type="button" onclick="removeFile()" style="border: none; background: none; color: #ff4d4d; cursor: pointer; font-size: 16px;">
-                                    <i class="fa fa-trash"></i>
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <button type="submit" class="btn btn-warning" style="margin-top: 20px; background-color: #f7a82d; color: white; width: 100%; border-radius: 5px;">
-                            Upload
-                        </button>
-                    </form>
 
-                    <!-- Loader -->
-                    <div id="loader" style="display: none; margin-top: 20px;">
-                        <p style="color: #666;">Processing your file, please wait...</p>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-light" onclick="toggleEditProcedurePanel()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+<!-- Bulk Upload Panel -->
+<div class="upload-panel" id="uploadPanel">
+    <div class="upload-header">
+        <h3>Upload Assessment</h3>
+        <button type="button" class="btn-close" onclick="toggleUploadPanel()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <div class="upload-content">
+        <!-- Templates Section -->
+        <div class="upload-section">
+            <div class="section-header">
+                <i class="fas fa-file-download"></i>
+                <h4>Download Templates</h4>
+            </div>
+            <div class="template-buttons">
+                <a href="/media/excel_templates/Assessment-Creation-Template.xlsx" class="template-card" download>
+                    <div class="template-icon">
+                        <i class="fas fa-graduation-cap"></i>
                     </div>
+                    <div class="template-info">
+                        <h5>Assessment Template</h5>
+                        <p>For Creating assessments.</p>
+                    </div>
+                    <i class="fas fa-download"></i>
+                </a>
+            </div>
+        </div>
 
-                    <!-- File Format Information -->
-                    <p style="margin-top: 20px; font-size: 12px; color: #666;">Only supports .xlsx file</p>
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <div class="section-header">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <h4>Upload Excel File</h4>
+            </div>
+            <form id="uploadForm" method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+
+            <div class="form-group" style="margin-bottom: 15px;">
+            <label for="procedureName"><strong>Procedure Name</strong></label>
+            <input type="text" id="procedureName" name="procedure_name" class="form-control" 
+                   placeholder="Enter procedure name" required>
+            </div>
+
+            <!-- 🔹 NEW: Category Dropdown -->
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label for="category"><strong>Category</strong></label>
+                <select id="category" name="category" class="form-control" required>
+                    <option value="" disabled selected>Select a category</option>
+                    <option value="Core Skills">Core Skills</option>
+                    <option value="Infection Control">Infection Control</option>
+                    <option value="Documentation">Documentation</option>
+                    <option value="Pre-Procedure">Pre-Procedure</option>
+                    <option value="Critical Thinking">Critical Thinking</option>
+                </select>
+            </div>
+
+
+
+
+
+
+
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-placeholder">
+                        <div class="upload-icon">
+                            <i class="fas fa-file-excel"></i>
+                        </div>
+                        <h5>Drag and drop your Excel file here</h5>
+                        <p>or</p>
+                        <label class="btn btn-outline">
+                            Choose File
+                            <input type="file" id="fileInput" accept=".xlsx" hidden>
+                        </label>
+                        <p class="upload-hint">Supported format: Excel (.xlsx)</p>
+                    </div>
+                    <div class="upload-preview" style="display: none;">
+                        <div class="file-info">
+                            <i class="fas fa-file-excel"></i>
+                            <span class="filename">No file selected</span>
+                        </div>
+                        <button type="button" class="btn-icon" onclick="removeFile()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Preview Section -->
+        <div class="upload-section">
+            <div class="section-header">
+                <i class="fas fa-table"></i>
+                <h4>Data Preview</h4>
+            </div>
+            <div class="preview-container">
+                <div class="preview-table">
+                    <div class="table-wrapper">
+                        <!-- Table will be dynamically populated -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Validation Section -->
+        <div class="upload-section">
+            <div class="section-header">
+                <i class="fas fa-check-circle"></i>
+                <h4>Validation Results</h4>
+            </div>
+            <div class="validation-results">
+                <!-- Results will be dynamically populated -->
+            </div>
+        </div>
+
+        <!-- Progress Section -->
+        <div class="upload-section" id="progressSection" style="display: none;">
+            <div class="section-header">
+                <!-- <i class="fas fa-spinner fa-spin"></i> -->
+                <h4>Upload Progress</h4>
+            </div>
+            <div class="progress-container">
+                <div class="progress-bar-wrapper">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">0%</div>
+                </div>
+                <div class="progress-status" id="progressStatus">Preparing upload...</div>
+                <div class="progress-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Rows:</span>
+                        <span class="stat-value" id="totalRows">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Processed:</span>
+                        <span class="stat-value" id="processedRows">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Success:</span>
+                        <span class="stat-value success" id="successCount">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Updated:</span>
+                        <span class="stat-value updated" id="updateCount">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Errors:</span>
+                        <span class="stat-value error" id="errorCount">0</span>
+                    </div>
+                </div>
+                <div class="progress-details" id="progressDetails">
+                    <!-- Detailed progress information will be shown here -->
                 </div>
             </div>
         </div>
     </div>
 
-    <div id="procedureModal" style="display: none;">
-        <div style="text-align: right;">
-            <button class="close-modal-btn" onclick="document.getElementById('procedureModal').style.display='none'">&times;</button>
-        </div>
-        <h3 id="modalTitle"></h3>
-        <div id="modalBody"></div>
-        <button class="close-btn" onclick="document.getElementById('procedureModal').style.display='none'">Close</button>
+    <!-- Actions -->
+    <div class="upload-actions">
+        <button type="button" class="btn btn-light" onclick="toggleUploadPanel()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="uploadButton" onclick="submitUpload()">
+            <i class="fas fa-upload"></i>
+            Upload
+        </button>
+        <button type="button" class="btn btn-success" id="doneButton" onclick="completeUpload()" style="display: none;">
+            <i class="fas fa-check"></i>
+            Done
+        </button>
     </div>
-
-    <script>
-        const fileInput = document.getElementById('fileInput');
-        const filePreview = document.getElementById('filePreview');
-        const fileNameDisplay = document.getElementById('fileName');
-        const dropArea = document.getElementById('dropArea');
-
-        $(document).ready(function() {
-            $('#createAssessmentBtn').click(function() {
-                $('#createAssessmentModal').modal('show');
-            });
-        });
-
-        dropArea.addEventListener('dragover', (event) => {
-            event.preventDefault();
-            dropArea.style.borderColor = '#f7a82d';
-        });
-
-        dropArea.addEventListener('dragleave', () => {
-            dropArea.style.borderColor = '#ddd';
-        });
-
-        dropArea.addEventListener('drop', (event) => {
-            event.preventDefault();
-            dropArea.style.borderColor = '#ddd';
-            fileInput.files = event.dataTransfer.files;
-            showExcelFilePreview({ target: { files: event.dataTransfer.files } });
-        });
-
-        function triggerFileInput() {
-            fileInput.click();
-        }
-
-        function showExcelFilePreview(event) {
-            const file = event.target.files[0];
-            if (file) {
-                filePreview.style.display = 'block';
-                fileNameDisplay.textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
-            }
-        }
-
-        function removeFile() {
-            fileInput.value = ''; // Reset file input
-            filePreview.style.display = 'none';
-        }
-
-        function submitForm(event) {
-            event.preventDefault();
-            document.getElementById('loader').style.display = 'block';
-
-            const form = document.getElementById('uploadForm');
-            const formData = new FormData(form);
-
-            fetch("{% url 'upload_excel' %}", {
-                method: "POST",
-                body: formData,
-            })
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('loader').style.display = 'none';
-                if (data.error) {
-                    alert(`Error: ${data.error}`);
-                } else {
-                    alert("File uploaded and processed successfully!");
-                    location.reload();
-                }
-            })
-            .catch(error => {
-                document.getElementById('loader').style.display = 'none';
-                alert(`Error: ${error}`);
-            });
-        }
-    </script>
+</div>
 
 <script>
-    function applyFilter() {
-        const query = document.getElementById('searchInput').value;
-        window.location.href = `?query=${query}`;
+
+function resetUploadPanel() {
+    const previewContainer = document.querySelector('.table-wrapper');
+    const validationContainer = document.querySelector('.validation-results');
+    document.getElementById('uploadForm').reset();
+    previewContainer.innerHTML = '';
+    validationContainer.innerHTML = '';
+}
+
+// Toggle Upload Panel
+function toggleUploadPanel() {
+    const panel = document.getElementById('uploadPanel');
+    panel.classList.toggle('active');
+    document.body.style.overflow = panel.classList.contains('active') ? 'hidden' : '';
+}
+
+// DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+    const fileInput = document.getElementById('fileInput');
+    const uploadButton = document.getElementById('uploadButton');
+    const previewContainer = document.querySelector('.table-wrapper');
+    const validationContainer = document.querySelector('.validation-results');
+
+    let selectedFile = null;
+
+    // File select click only
+    fileInput.addEventListener('change', (e) => {
+        selectedFile = e.target.files[0];
+        if (!selectedFile || !selectedFile.name.endsWith('.xlsx')) {
+            alert('Please select a valid Excel file (.xlsx)');
+            return;
+        }
+        previewExcel(selectedFile);
+    });
+
+    // Remove file
+    window.removeFile = () => {
+        selectedFile = null;
+        fileInput.value = '';
+        previewContainer.innerHTML = '';
+        validationContainer.innerHTML = '';
     }
+
+    // Preview Excel
+    async function previewExcel(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const res = await fetch('/upload-preview/', {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin', // ensures cookies (CSRF) are sent
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+
+        // Check if response is JSON
+        const text = await res.text();
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (err) {
+            console.error('Invalid JSON:', text);
+            alert('Server returned invalid JSON. Check console.');
+            return;
+        }
+
+        renderPreviewData(data);
+
+    } catch (err) {
+        console.error('Fetch error:', err);
+        alert('Error fetching preview. Check console for details.');
+    }
+}
+
+    // Render preview and validation
+    function renderPreviewData(response) {
+        previewContainer.innerHTML = '';
+        validationContainer.innerHTML = '';
+
+        if (!response || response.status !== 'success') {
+            previewContainer.innerHTML = '<p style="color:red;">Upload failed. Please try again.</p>';
+            return;
+        }
+
+        const rows = response.preview || [];
+        if (!rows.length) {
+            previewContainer.innerHTML = '<p>No preview data available.</p>';
+        } else {
+            let tableHTML = '<table><thead><tr>';
+            Object.keys(rows[0]).forEach(k => tableHTML += `<th>${k}</th>`);
+            tableHTML += '</tr></thead><tbody>';
+            rows.forEach(row => {
+                tableHTML += '<tr>';
+                Object.values(row).forEach(v => tableHTML += `<td>${v === null || v === undefined || Number.isNaN(v) ? '-' : v}</td>`);
+                tableHTML += '</tr>';
+            });
+            tableHTML += '</tbody></table>';
+            previewContainer.innerHTML = tableHTML;
+        }
+
+        const validations = response.validation || [];
+        if (validations.length) {
+            let html = '<ul>';
+            validations.forEach(v => html += `<li>Row ${v.row}: ${v.message}</li>`);
+            html += '</ul>';
+            validationContainer.innerHTML = html;
+        } else {
+            validationContainer.innerHTML = '<p class="success">All rows valid ..</p>';
+        }
+    }
+
+    // Upload button click
+    uploadButton.addEventListener('click', async () => {
+        if (!selectedFile) return alert('Please select a file first');
+
+        const procedureName = document.getElementById('procedureName').value.trim();
+        const category = document.getElementById('category').value;
+
+        console.log(procedureName)
+        console.log(category)
+
+        // Basic validation
+        if (!procedureName) return alert('Please enter a procedure name.');
+        if (!category) return alert('Please select a category.');
+
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('procedure_name', procedureName);
+        formData.append('category', category);
+
+        try {
+            const res = await fetch('/upload-excel/', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': getCSRFToken() },
+                body: formData
+            });
+            const data = await res.json();
+            // ✅ Close sidebar no matter what
+            const panel = document.getElementById('uploadPanel');
+            if (panel && panel.classList.contains('active')) {
+                panel.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+
+            // Reset fields
+            resetUploadPanel();
+            alert(data.status === 'success' ? 'Upload successful ✅' : 'Upload failed ❌');
+        } catch (err) {
+            alert('Error uploading file.');
+            console.error(err);
+        }
+    });
+
+    function getCSRFToken() {
+        return document.querySelector('[name=csrfmiddlewaretoken]').value;
+    }
+});
+
+
+</script>
+
+
+<script>
+console.log("🚀 Script Loaded — Filters object check:", window.currentProcedureFilters);
+window.currentProcedureFilters = { status: [], category: [] };
+
+// ==================== APPLY FILTERS ====================
+function applyProcedureFilters() {
+    console.log("💡 APPLY FILTERS CALLED");
+
+    // 🟢 Capture Status
+    window.currentProcedureFilters.status = Array.from(
+        document.querySelectorAll('#procedureFilterStatusOptions input[type="checkbox"]:checked')
+    ).map(cb => cb.value);
+
+    // 🟣 Capture Category
+    window.currentProcedureFilters.category = Array.from(
+        document.querySelectorAll('#procedureFilterCategoryOptions input[type="checkbox"]:checked')
+    ).map(cb => cb.value);
+
+    console.log("🟢 Status Filters:", window.currentProcedureFilters.status);
+    console.log("🟣 Category Filters:", window.currentProcedureFilters.category);
+
+    const searchText = document.getElementById('procedureSearchInput')?.value || '';
+    console.log("🚀 Calling filterProcedures NOW...");
+    filterProcedures(searchText);
+    console.log("✅ filterProcedures() CALL DONE");
+
+    toggleProcedureFilterPanel();
+
+    const totalFilters =
+        window.currentProcedureFilters.status.length + window.currentProcedureFilters.category.length;
+    if (totalFilters > 0) {
+        if (typeof showSuccess === "function") {
+            showSuccess(`${totalFilters} filter(s) applied successfully!`);
+        } else {
+            console.log("✅ Filter applied successfully!");
+        }
+    }
+}
+
+function filterProcedures(searchText = '') {
+    const params = new URLSearchParams();
+    params.append('offset', 0);
+    params.append('limit', 10);
+    if (searchText) params.append('search', searchText);
+    window.currentProcedureFilters.status.forEach(status => params.append('status', status));
+    window.currentProcedureFilters.category.forEach(category => params.append('category', category));
+
+    console.log(params);
+
+    fetch(`/fetch-assessments/?${params.toString()}`)
+        .then(res => res.json())
+        .then(data => {
+            console.log('Filtered Procedures:', data);
+            // TODO: Update your procedure table/list here
+        });
+}
+
+
+
+// ==================== SEARCH HELPERS ====================
+function filterStatusOptions(searchText) {
+    const options = document.querySelectorAll('#procedureFilterStatusOptions .option-item');
+    options.forEach(option => {
+        const text = option.textContent.toLowerCase();
+        option.style.display = text.includes(searchText.toLowerCase()) ? 'flex' : 'none';
+    });
+}
+
+function filterProcedureCategoryOptions(searchText) {
+    const options = document.querySelectorAll('#procedureFilterCategoryOptions .option-item');
+    options.forEach(option => {
+        const text = option.textContent.toLowerCase();
+        option.style.display = text.includes(searchText.toLowerCase()) ? 'flex' : 'none';
+    });
+}
+
+// ==================== PANEL TOGGLE ====================
+function toggleProcedureFilterPanel() {
+    const panel = document.getElementById('procedureFilterPanel');
+    const overlayClass = 'procedure-filter-overlay';
+
+    panel.classList.toggle('active');
+    if (panel.classList.contains('active')) {
+        document.body.style.overflow = 'hidden';
+        if (!document.querySelector(`.${overlayClass}`)) {
+            const overlay = document.createElement('div');
+            overlay.className = `side-panel-overlay ${overlayClass}`;
+            overlay.onclick = toggleProcedureFilterPanel;
+            document.body.appendChild(overlay);
+        }
+    } else {
+        document.body.style.overflow = '';
+        const overlay = document.querySelector(`.${overlayClass}`);
+        if (overlay) overlay.remove();
+    }
+}
+
+// ==================== SWITCH FILTER TABS ====================
+function switchProcedureFilter(filterType) {
+    document.querySelectorAll('.filter-type').forEach(type => type.classList.remove('active'));
+    document.querySelectorAll('.filter-content').forEach(content => content.classList.remove('active'));
+
+    document.querySelector(`.filter-type[data-filter="${filterType}"]`).classList.add('active');
+    document.getElementById(`procedure-${filterType}-content`).classList.add('active');
+}
+
+// ==================== STATUS FILTER ====================
+function updateProcedureStatusSelectionCount() {
+    const checkedStatuses = document.querySelectorAll('#procedureFilterStatusOptions input[type="checkbox"]:checked');
+    document.getElementById('procedureStatusSelectionCount').textContent = `${checkedStatuses.length} Status selected`;
+}
+
+// ==================== CATEGORY FILTER ====================
+function updateProcedureCategorySelectionCount() {
+    const checkedCategories = document.querySelectorAll('#procedureFilterCategoryOptions input[type="checkbox"]:checked');
+    document.getElementById('procedureCategorySelectionCount').textContent = `${checkedCategories.length} Categories selected`;
+}
+// ==================== CLEAR FILTERS ====================
+function clearAllProcedureFilters() {
+    document.querySelectorAll('#procedureFilterStatusOptions input[type="checkbox"]').forEach(cb => cb.checked = false);
+    document.querySelectorAll('#procedureFilterCategoryOptions input[type="checkbox"]').forEach(cb => cb.checked = false);
+
+    updateProcedureStatusSelectionCount();
+    updateProcedureCategorySelectionCount();
+
+    window.currentProcedureFilters = { status: [], category: [] };
+
+    const searchText = document.getElementById('procedureSearchInput')?.value || '';
+    filterProcedures(searchText);
+
+    toggleProcedureFilterPanel();
+    showSuccess('All filters cleared!');
+}
+
+
+
+function showSuccess(message) {
+    // Create a simple notification
+    const notification = $(`
+        <div class="alert alert-success alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-check-circle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    
+    $('body').append(notification);
+    
+    // Auto remove after 5 seconds
+    setTimeout(function() {
+        notification.alert('close');
+    }, 2000);
+}
+
+</script>
+
+
+<script>
 
 
     function toggleActive(procedureId) {
@@ -291,192 +769,1028 @@
     function downloadProcedure(procedureId) {
         window.location.href = `/procedures/${procedureId}/download/`;
     }
+
+    // Edit Procedure Functions
+    async function editProcedure(procedureId) {
+        try {
+            const response = await fetch(`/api/procedure/${procedureId}/edit/`);
+            const data = await response.json();
+            
+            if (data.status !== 'success') {
+                alert('Error loading procedure: ' + (data.message || 'Unknown error'));
+                return;
+            }
+            
+            const procedure = data.procedure;
+            
+            // Set procedure ID
+            document.getElementById('editProcedureId').value = procedure.id;
+            document.getElementById('editProcedureName').value = procedure.procedureName || '';
+            document.getElementById('editCategory').value = procedure.category || '';
+            
+            // Load questions
+            loadQuestions(procedure.examMetaData || []);
+            
+            // Show edit panel
+            toggleEditProcedurePanel();
+            
+        } catch (error) {
+            console.error('Error loading procedure:', error);
+            alert('Error loading procedure for editing');
+        }
+    }
+
+    function toggleEditProcedurePanel() {
+        const panel = document.getElementById('editProcedurePanel');
+        panel.classList.toggle('active');
+        document.body.style.overflow = panel.classList.contains('active') ? 'hidden' : '';
+    }
+
+    function loadQuestions(examMetaData) {
+        const container = document.getElementById('questionsContainer');
+        container.innerHTML = '';
+        
+        if (!examMetaData || examMetaData.length === 0) {
+            return;
+        }
+        
+        const section = examMetaData[0];
+        const questions = section.section_questions || [];
+        
+        questions.forEach((question, index) => {
+            addQuestionToContainer(question, index);
+        });
+    }
+
+    function addQuestionToContainer(question, index) {
+        const container = document.getElementById('questionsContainer');
+        const questionDiv = document.createElement('div');
+        questionDiv.className = 'question-item';
+        questionDiv.dataset.index = index;
+        
+        questionDiv.innerHTML = `
+            <div class="question-header">
+                <strong>Question ${index + 1}</strong>
+                <button type="button" class="btn-icon btn-danger btn-sm" onclick="deleteQuestion(this)" title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+            <div class="form-group">
+                <label>Question Text</label>
+                <input type="text" class="form-control question-text" value="${question.question || ''}" placeholder="Enter question text" required>
+            </div>
+            <div class="form-group">
+                <label>Marks</label>
+                <input type="number" class="form-control question-marks" value="${question.right_marks_for_question || 0}" min="0" required>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" class="question-critical" ${question.critical ? 'checked' : ''}>
+                    Critical
+                </label>
+            </div>
+            ${question.sub_section_questions_present ? `
+                <div class="sub-questions">
+                    <label><strong>Sub-questions:</strong></label>
+                    <div class="sub-questions-list" data-question-index="${index}">
+                        ${(question.sub_section_questions || []).map((subQ, subIndex) => `
+                            <div class="sub-question-item">
+                                <input type="text" class="form-control sub-question-text" value="${subQ.question || ''}" placeholder="Sub-question text">
+                                <input type="number" class="form-control sub-question-marks" value="${subQ.right_marks_for_question || 0}" min="0" placeholder="Marks">
+                                <button type="button" class="btn-icon btn-danger btn-sm" onclick="deleteSubQuestion(this)" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="addSubQuestion(this)">
+                        <i class="fas fa-plus"></i> Add Sub-question
+                    </button>
+                </div>
+            ` : `
+                <button type="button" class="btn btn-sm btn-secondary" onclick="enableSubQuestions(this)">
+                    <i class="fas fa-plus"></i> Add Sub-questions
+                </button>
+            `}
+        `;
+        
+        container.appendChild(questionDiv);
+    }
+
+    function addQuestion() {
+        const newQuestion = {
+            question: '',
+            right_marks_for_question: 0,
+            answer_scored: 0,
+            sub_section_questions_present: false,
+            sub_section_questions: [],
+            category: document.getElementById('editCategory').value || '',
+            critical: false
+        };
+        
+        const container = document.getElementById('questionsContainer');
+        const index = container.children.length;
+        addQuestionToContainer(newQuestion, index);
+    }
+
+    function deleteQuestion(button) {
+        if (confirm('Are you sure you want to delete this question?')) {
+            button.closest('.question-item').remove();
+            // Re-index questions
+            reindexQuestions();
+        }
+    }
+
+    function reindexQuestions() {
+        const container = document.getElementById('questionsContainer');
+        const questions = container.querySelectorAll('.question-item');
+        questions.forEach((q, index) => {
+            q.dataset.index = index;
+            const header = q.querySelector('.question-header strong');
+            if (header) header.textContent = `Question ${index + 1}`;
+        });
+    }
+
+    function addSubQuestion(button) {
+        const questionItem = button.closest('.question-item');
+        if (!questionItem) return;
+        
+        let subQuestionsList = questionItem.querySelector('.sub-questions-list');
+        
+        // If sub-questions section doesn't exist, create it
+        if (!subQuestionsList) {
+            const subQuestionsHTML = `
+                <div class="sub-questions">
+                    <label><strong>Sub-questions:</strong></label>
+                    <div class="sub-questions-list" data-question-index="${questionItem.dataset.index}">
+                    </div>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="addSubQuestion(this)">
+                        <i class="fas fa-plus"></i> Add Sub-question
+                    </button>
+                </div>
+            `;
+            questionItem.insertAdjacentHTML('beforeend', subQuestionsHTML);
+            subQuestionsList = questionItem.querySelector('.sub-questions-list');
+        }
+        
+        const subQuestionDiv = document.createElement('div');
+        subQuestionDiv.className = 'sub-question-item';
+        subQuestionDiv.innerHTML = `
+            <input type="text" class="form-control sub-question-text" placeholder="Sub-question text">
+            <input type="number" class="form-control sub-question-marks" value="0" min="0" placeholder="Marks">
+            <button type="button" class="btn-icon btn-danger btn-sm" onclick="deleteSubQuestion(this)" title="Delete">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+        subQuestionsList.appendChild(subQuestionDiv);
+    }
+
+    function deleteSubQuestion(button) {
+        button.closest('.sub-question-item').remove();
+    }
+
+    function enableSubQuestions(button) {
+        const questionItem = button.closest('.question-item');
+        if (!questionItem) return;
+        
+        const subQuestionsHTML = `
+            <div class="sub-questions">
+                <label><strong>Sub-questions:</strong></label>
+                <div class="sub-questions-list" data-question-index="${questionItem.dataset.index}">
+                </div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="addSubQuestion(this)">
+                    <i class="fas fa-plus"></i> Add Sub-question
+                </button>
+            </div>
+        `;
+        button.outerHTML = subQuestionsHTML;
+    }
+
+    // Handle form submission
+    document.getElementById('editProcedureForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const procedureId = document.getElementById('editProcedureId').value;
+        const procedureName = document.getElementById('editProcedureName').value.trim();
+        const category = document.getElementById('editCategory').value;
+        
+        if (!procedureName) {
+            alert('Please enter a procedure name');
+            return;
+        }
+        
+        if (!category) {
+            alert('Please select a category');
+            return;
+        }
+        
+        // Collect questions
+        const questions = collectQuestions();
+        
+        // Prepare data
+        const data = {
+            procedure_id: procedureId,
+            procedure_name: procedureName,
+            category: category,
+            exam_meta_data: questions
+        };
+        
+        try {
+            const response = await fetch('/api/procedure/update/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken()
+                },
+                body: JSON.stringify(data)
+            });
+            
+            const result = await response.json();
+            
+            if (result.status === 'success') {
+                alert('Assessment updated successfully!');
+                toggleEditProcedurePanel();
+                // Reload procedures list
+                if (window.resetProceduresAndLoad) {
+                    resetProceduresAndLoad();
+                }
+            } else {
+                alert('Error updating assessment: ' + (result.message || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error updating procedure:', error);
+            alert('Error updating assessment');
+        }
+    });
+
+    function collectQuestions() {
+        const container = document.getElementById('questionsContainer');
+        const questionItems = container.querySelectorAll('.question-item');
+        const questions = [];
+        
+        questionItems.forEach((item) => {
+            const questionText = item.querySelector('.question-text').value.trim();
+            const marks = parseInt(item.querySelector('.question-marks').value) || 0;
+            const critical = item.querySelector('.question-critical').checked;
+            const category = document.getElementById('editCategory').value;
+            
+            if (!questionText) return; // Skip empty questions
+            
+            const question = {
+                question: questionText,
+                right_marks_for_question: marks,
+                answer_scored: 0,
+                category: category,
+                critical: critical,
+                sub_section_questions_present: false,
+                sub_section_questions: []
+            };
+            
+            // Check for sub-questions
+            const subQuestionsList = item.querySelector('.sub-questions-list');
+            if (subQuestionsList && subQuestionsList.children.length > 0) {
+                question.sub_section_questions_present = true;
+                const subQuestions = [];
+                
+                subQuestionsList.querySelectorAll('.sub-question-item').forEach((subItem) => {
+                    const subText = subItem.querySelector('.sub-question-text').value.trim();
+                    const subMarks = parseFloat(subItem.querySelector('.sub-question-marks').value) || 0;
+                    
+                    if (subText) {
+                        subQuestions.push({
+                            question: subText,
+                            right_marks_for_question: subMarks,
+                            answer_scored: 0,
+                            category: category,
+                            critical: critical
+                        });
+                    }
+                });
+                
+                question.sub_section_questions = subQuestions;
+                
+                // Recalculate total marks if sub-questions exist
+                if (subQuestions.length > 0) {
+                    question.right_marks_for_question = subQuestions.reduce((sum, sq) => sum + sq.right_marks_for_question, 0);
+                }
+            }
+            
+            questions.push(question);
+        });
+        
+        return [{
+            section_name: '',
+            section_questions: questions
+        }];
+    }
+
+    function getCSRFToken() {
+        return document.querySelector('[name=csrfmiddlewaretoken]').value;
+    }
 </script>
 
 <script>
-    function viewProcedure(procedureId) {
-        // Fetch the procedure details via AJAX
-        fetch(`/procedures/${procedureId}/view/`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    alert(data.error);
-                    return;
-                }
-                // Populate the modal with the fetched data
-                populateModal(data);
-                // Show the modal
-                document.getElementById('procedureModal').style.display = 'block';
-            })
-            .catch(error => {
-                alert("An error occurred while fetching the procedure details.");
-                console.error(error);
-            });
-    }
-    
-    function populateModal(procedure) {
-        const modalTitle = document.getElementById('modalTitle');
-        const modalBody = document.getElementById('modalBody');
 
-        modalTitle.textContent = procedure.procedureName;
-        modalBody.innerHTML = '';
-
-        procedure.examMetaData.forEach((section, sectionIndex) => {
-            const sectionDiv = document.createElement('div');
-            sectionDiv.className = 'section';
-
-            const sectionHeader = document.createElement('h4');
-            if(section.section_name != ""){
-                sectionHeader.textContent = `Section ${sectionIndex + 1}: ${section.section_name || 'Unnamed Section'}`;
-            }else{
-                sectionHeader.textContent = ""
+function viewProcedure(procedureId) {
+    // Fetch the procedure details via AJAX
+    fetch(`/procedures/${procedureId}/view/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+                return;
             }
-            
-            sectionDiv.appendChild(sectionHeader);
 
-            section.section_questions.forEach((question, questionIndex) => {
-                const questionDiv = document.createElement('div');
-                questionDiv.className = 'question';
+            // Populate the side panel with fetched data
+            populateSidePanel(data);
 
-                const questionText = document.createElement('p');
-                questionText.textContent = `${questionIndex + 1}. ${question.question}`;
-                questionDiv.appendChild(questionText);
-
-                const yesButton = createToggleButton('Yes', `yes-btn-${sectionIndex}-${questionIndex}`);
-                const noButton = createToggleButton('No', `no-btn-${sectionIndex}-${questionIndex}`);
-                questionDiv.appendChild(yesButton);
-                questionDiv.appendChild(noButton);
-
-                if (question.sub_section_questions_present) {
-                    question.sub_section_questions.forEach((subQuestion, subIndex) => {
-                        const subQuestionDiv = document.createElement('div');
-                        subQuestionDiv.className = 'sub-question';
-
-                        const subQuestionText = document.createElement('p');
-                        subQuestionText.textContent = `${String.fromCharCode(97 + subIndex)}. ${subQuestion.question}`;
-                        subQuestionDiv.appendChild(subQuestionText);
-
-                        const subYesButton = createToggleButton('Yes', `sub-yes-btn-${sectionIndex}-${questionIndex}-${subIndex}`);
-                        const subNoButton = createToggleButton('No', `sub-no-btn-${sectionIndex}-${questionIndex}-${subIndex}`);
-                        subQuestionDiv.appendChild(subYesButton);
-                        subQuestionDiv.appendChild(subNoButton);
-
-                        questionDiv.appendChild(subQuestionDiv);
-                    });
-                }
-
-                sectionDiv.appendChild(questionDiv);
-            });
-
-            modalBody.appendChild(sectionDiv);
+            // Show side panel
+            toggleProcedurePanel(true);
+        })
+        .catch(error => {
+            alert("An error occurred while fetching the procedure details.");
+            console.error(error);
         });
+}
+
+function populateSidePanel(procedure) {
+    let panel = document.getElementById('procedurePanel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'procedurePanel';
+        panel.className = 'side-panel';
+        panel.innerHTML = `
+            <div class="side-panel-header">
+                <h2 id="procedurePanelTitle"></h2>
+                <button class="close-btn" onclick="toggleProcedurePanel(false)">×</button>
+            </div>
+            <div class="side-panel-body" id="procedurePanelBody"></div>
+        `;
+        document.body.appendChild(panel);
     }
-    
-    function createToggleButton(label, id = null) {
-        const button = document.createElement('button');
-        button.textContent = label;
-        button.className = 'toggle-btn'; // Add a class for styling
-        if (id) {
-            button.id = id; // Optionally set an ID if passed
+
+    const panelTitle = document.getElementById('procedurePanelTitle');
+    const panelBody = document.getElementById('procedurePanelBody');
+
+    panelTitle.textContent = procedure.procedureName;
+    panelBody.innerHTML = '';
+
+    procedure.examMetaData.forEach((section, sectionIndex) => {
+        const sectionDiv = document.createElement('div');
+        sectionDiv.className = 'section';
+
+        const sectionHeader = document.createElement('h4');
+        sectionHeader.textContent = section.section_name 
+            ? `Section ${sectionIndex + 1}: ${section.section_name}` 
+            : '';
+        sectionDiv.appendChild(sectionHeader);
+
+        section.section_questions.forEach((question, questionIndex) => {
+            const questionDiv = document.createElement('div');
+            questionDiv.className = 'question';
+
+            const questionText = document.createElement('p');
+            questionText.textContent = `${questionIndex + 1}. ${question.question}`;
+            questionDiv.appendChild(questionText);
+
+            const yesButton = createToggleButton('Yes', `yes-btn-${sectionIndex}-${questionIndex}`);
+            const noButton = createToggleButton('No', `no-btn-${sectionIndex}-${questionIndex}`);
+            questionDiv.appendChild(yesButton);
+            questionDiv.appendChild(noButton);
+
+            if (question.sub_section_questions_present) {
+                question.sub_section_questions.forEach((subQuestion, subIndex) => {
+                    const subDiv = document.createElement('div');
+                    subDiv.className = 'sub-question';
+
+                    const subText = document.createElement('p');
+                    subText.textContent = `${String.fromCharCode(97 + subIndex)}. ${subQuestion.question}`;
+                    subDiv.appendChild(subText);
+
+                    const subYes = createToggleButton('Yes', `sub-yes-btn-${sectionIndex}-${questionIndex}-${subIndex}`);
+                    const subNo = createToggleButton('No', `sub-no-btn-${sectionIndex}-${questionIndex}-${subIndex}`);
+                    subDiv.appendChild(subYes);
+                    subDiv.appendChild(subNo);
+
+                    questionDiv.appendChild(subDiv);
+                });
+            }
+
+            sectionDiv.appendChild(questionDiv);
+        });
+
+        panelBody.appendChild(sectionDiv);
+    });
+}
+
+function toggleProcedurePanel(show = null) {
+    const panel = document.getElementById('procedurePanel');
+    if (!panel) return;
+
+    const overlay = document.querySelector('.procedure-overlay');
+
+    if (show === true || (!show && !panel.classList.contains('active'))) {
+        // Show
+        panel.classList.add('active');
+        document.body.style.overflow = 'hidden';
+
+        if (!overlay) {
+            const newOverlay = document.createElement('div');
+            newOverlay.className = 'procedure-overlay';
+            newOverlay.onclick = () => toggleProcedurePanel(false);
+            document.body.appendChild(newOverlay);
+
+            setTimeout(() => newOverlay.classList.add('active'), 10);
         }
+    } else {
+        // Hide
+        panel.classList.remove('active');
+        document.body.style.overflow = '';
 
-        // Add hover and click effects via CSS
-        button.addEventListener('click', () => {
-            const isSelected = button.classList.contains('selected');
-            if (isSelected) {
-                button.classList.remove('selected');
-            } else {
-                button.classList.add('selected');
-            }
-        });
+        if (overlay) {
+            overlay.classList.remove('active');
+            setTimeout(() => overlay.remove(), 300);
+        }
+    }
+}
 
-        return button;
+function createToggleButton(label, id = null) {
+    const button = document.createElement('button');
+    button.textContent = label;
+    button.className = 'toggle-btn';
+    if (id) button.id = id;
+
+    button.addEventListener('click', () => {
+        button.classList.toggle('selected');
+    });
+
+    return button;
 }
 
 </script>
-    
+
+<script>
+let allProcedures = [];
+let procedureOffset = 0;
+const procedureLimit = 10;
+let proceduresLoading = false;
+let allProceduresLoaded = false;
+let firstProcedureLoad = true;
+let currentProcedureSearch = '';
+
+
+
+function renderProcedureRow(proc) {
+    const row = document.createElement('tr');
+    row.className = 'procedure-row clickable';
+    row.innerHTML = `
+        <td style="cursor: pointer;">${proc.name}</td>
+        <td>${proc.questions}</td>
+        <td>${proc.category}</td>
+        <td>
+            <label class="switch">
+                <input type="checkbox" ${proc.active ? 'checked' : ''} onchange="toggleActive('${proc.id}', this)">
+                <span class="slider round"></span>
+            </label>
+        </td>
+        <td>
+            <div class="actions">
+                <button class="btn-icon" onclick="event.stopPropagation(); editProcedure('${proc.id}')" title="Edit">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn-icon btn-danger" onclick="event.stopPropagation(); deleteProcedure('${proc.id}')" title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+                <button class="btn-icon" onclick="event.stopPropagation(); downloadProcedure('${proc.id}')" title="Download">
+                    <i class="fas fa-download"></i>
+                </button>
+            </div>
+        </td>
+    `;
+
+    // Make the whole row clickable
+    row.addEventListener('click', (e) => {
+        // Prevent click if it originated from buttons or checkbox
+        if (
+            e.target.closest('button') ||
+            e.target.closest('input[type="checkbox"]') ||
+            e.target.closest('.actions')
+        ) return;
+
+        viewProcedure(proc.id);
+    });
+
+    return row;
+}
+
+function buildProcedureQueryParams() {
+    const params = new URLSearchParams();
+
+    // Pagination
+    params.append('offset', procedureOffset);
+    params.append('limit', procedureLimit);
+
+    // Search text
+    if (currentProcedureSearch) {
+        params.append('search', currentProcedureSearch.trim());
+    }
+
+    // Status filters
+    if (currentProcedureFilters.status && currentProcedureFilters.status.length > 0) {
+        currentProcedureFilters.status.forEach(status => {
+            params.append('status', status);
+        });
+    }
+
+    // Category filters
+    if (currentProcedureFilters.category && currentProcedureFilters.category.length > 0) {
+        currentProcedureFilters.category.forEach(cat => {
+            params.append('category', cat);
+        });
+    }
+
+    const queryString = params.toString();
+    return queryString;
+}
+
+
+function loadMoreProcedures() {
+    if (proceduresLoading || allProceduresLoaded) return;
+    proceduresLoading = true;
+
+    const spinner = document.getElementById('proceduresLoadingSpinner');
+    const showMoreBtn = document.getElementById('showMoreProceduresBtn');
+
+    if (firstProcedureLoad) {
+        spinner.style.display = 'flex';
+        showMoreBtn.style.display = 'none';
+    } else {
+        showMoreBtn.innerText = 'Loading...';
+        showMoreBtn.disabled = true;
+    }
+
+    fetch(`/fetch-assessments/?${buildProcedureQueryParams()}`)
+        .then(response => response.json())
+        .then(data => {
+            const procedures = data.assessments || [];
+
+            if (procedures.length < procedureLimit || data.all_loaded) {
+                allProceduresLoaded = true;
+                showMoreBtn.style.display = 'none';
+            }
+
+            procedureOffset += procedures.length;
+            allProcedures = allProcedures.concat(procedures);
+            const tbody = document.getElementById('proceduresTableBody');
+
+            procedures.forEach(proc => tbody.appendChild(renderProcedureRow(proc)));
+
+            if (procedureOffset === 0 && procedures.length === 0) {
+                tbody.innerHTML = '';
+                document.getElementById('emptyProceduresState').style.display = 'block';
+                showMoreBtn.style.display = 'none';
+            } else {
+                document.getElementById('emptyProceduresState').style.display = 'none';
+            }
+
+            if (!allProceduresLoaded && allProcedures.length > 0) {
+                showMoreBtn.style.display = 'inline-block';
+                showMoreBtn.innerText = 'Show More';
+                showMoreBtn.disabled = false;
+            }
+        })
+        .finally(() => {
+            proceduresLoading = false;
+            spinner.style.display = 'none';
+            firstProcedureLoad = false;
+        });
+}
+
+function resetProceduresAndLoad() {
+    procedureOffset = 0;
+    allProceduresLoaded = false;
+    allProcedures = [];
+    firstProcedureLoad = true;
+    document.getElementById('proceduresTableBody').innerHTML = '';
+    document.getElementById('showMoreProceduresBtn').style.display = 'none';
+    document.getElementById('proceduresLoadingSpinner').style.display = 'flex';
+    loadMoreProcedures();
+}
+
+// Filter / search support
+function filterProcedures(query) {
+    currentProcedureSearch = query.trim();
+    resetProceduresAndLoad();
+}
+
+// Initialize Procedures table
+document.addEventListener('DOMContentLoaded', function() {
+    procedureOffset = 0;
+    allProceduresLoaded = false;
+    allProcedures = [];
+    firstProcedureLoad = true;
+    currentProcedureSearch = '';
+    document.getElementById('proceduresTableBody').innerHTML = '';
+    document.getElementById('showMoreProceduresBtn').style.display = 'none';
+    document.getElementById('proceduresLoadingSpinner').style.display = 'flex';
+    loadMoreProcedures();
+
+    // Hook up procedure search input
+    const searchInput = document.getElementById('procedureSearchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            filterProcedures(this.value);
+        });
+    }
+});
+
+</script>
 
 <style>
-    .switch {
-        position: relative;
-        display: inline-block;
-        width: 34px;
-        height: 20px;
-    }
 
-    .switch input {
-        display: none;
-    }
 
-    .slider {
-        position: absolute;
-        cursor: pointer;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: #ccc;
-        transition: 0.4s;
-        border-radius: 20px;
-    }
 
-    .slider:before {
-        position: absolute;
-        content: "";
-        height: 14px;
-        width: 14px;
-        left: 3px;
-        bottom: 3px;
-        background-color: white;
-        transition: 0.4s;
-        border-radius: 50%;
-    }
 
-    input:checked + .slider {
-        background-color: #4caf50;
-    }
+/* Upload Panel */
+.upload-panel {
+    position: fixed;
+    top: 0;
+    right: -800px;
+    width: 800px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
 
-    input:checked + .slider:before {
-        transform: translateX(14px);
-    }
+.upload-panel.active {
+    right: 0;
+}
 
-    table {
+.upload-header {
+    padding: 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8fafc;
+}
+
+.upload-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: #1a202c;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.btn-close {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: none;
+    color: #64748b;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.btn-close:hover {
+    background: #e2e8f0;
+    color: #1a202c;
+}
+
+.upload-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+}
+
+.upload-section {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.section-header i {
+    font-size: 20px;
+    color: #F16564;
+}
+
+.section-header h4 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a202c;
+}
+
+.template-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+.template-card {
+    display: flex;
+    align-items: center;
+    padding: 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    text-decoration: none;
+    color: #1a202c;
+    transition: all 0.2s;
+}
+
+.template-card:hover {
+    border-color: #F16564;
+    background: #fff5f5;
+}
+
+.template-icon {
+    width: 40px;
+    height: 40px;
+    background: #F16564;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 20px;
+}
+
+.template-info {
+    flex: 1;
+    margin-left: 16px;
+}
+
+.template-info h5 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.template-info p {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: #64748b;
+}
+
+.template-card i.fa-download {
+    color: #64748b;
+    font-size: 16px;
+}
+
+.upload-zone {
+    border: 2px dashed #e2e8f0;
+    border-radius: 12px;
+    padding: 32px;
+    transition: all 0.2s;
+    background: #f8fafc;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.upload-zone.dragover {
+    border-color: #F16564;
+    background: #fff5f5;
+}
+
+.upload-placeholder {
+    color: #4a5568;
+    width: 100%;
+    text-align: center;
+}
+
+.upload-icon {
+    width: 64px;
+    height: 64px;
+    background: #F16564;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+}
+
+.upload-icon i {
+    font-size: 32px;
+    color: white;
+}
+
+.upload-placeholder h5 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a202c;
+}
+
+.upload-placeholder p {
+    margin: 8px 0;
+    color: #64748b;
+}
+
+.upload-hint {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 16px;
+}
+
+.btn-outline {
+    padding: 8px 24px;
+    border: 2px solid #F16564;
+    border-radius: 6px;
+    background: none;
+    color: #F16564;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: fit-content;
+    margin: 0 auto;
+    display: inline-block;
+}
+
+.btn-outline:hover {
+    background: #F16564;
+    color: white;
+}
+
+.upload-preview {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.file-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.file-info i {
+    font-size: 24px;
+    color: #F16564;
+}
+
+.filename {
+    font-size: 14px;
+    color: #1a202c;
+}
+
+.preview-container {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.table-wrapper {
+    overflow-x: auto;
+    max-height: 300px;
+}
+
+.table-wrapper table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table-wrapper th {
+    background: #f8fafc;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5568;
+    position: sticky;
+    top: 0;
+}
+
+.table-wrapper td {
+    padding: 12px 16px;
+    border-top: 1px solid #e2e8f0;
+    font-size: 14px;
+}
+
+.validation-results {
+    padding: 16px;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.alert {
+    padding: 16px;
+    border-radius: 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.alert-danger {
+    background: #fff5f5;
+    color: #c53030;
+}
+
+.alert-success {
+    background: #f0fff4;
+    color: #2f855a;
+}
+
+.alert i {
+    font-size: 20px;
+}
+
+.alert ul {
+    margin: 8px 0 0;
+    padding-left: 20px;
+}
+
+.upload-actions {
+    padding: 20px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    background: white;
+}
+
+
+
+.btn-primary:hover {
+    background: #e45857;
+}
+
+.btn-light {
+    background: #f1f5f9;
+    border: none;
+    color: #4a5568;
+}
+
+.btn-light:hover {
+    background: #e2e8f0;
+}
+
+@media (max-width: 992px) {
+    .upload-panel {
         width: 100%;
-        border-collapse: collapse;
+        right: -100%;
     }
+    
+    .template-buttons {
+        grid-template-columns: 1fr;
+    }
+}
 
-    th, td {
-        padding: 10px;
-        text-align: center; /* Center horizontally */
-        vertical-align: middle; /* Center vertically */
-    }
+.preview-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
 
-    th {
-        background-color: #f9f9f9;
-        border-bottom: 2px solid #ddd;
-        font-weight: bold;
-    }
+.preview-table th, .preview-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+}
 
-    td {
-        border-bottom: 1px solid #eee;
-    }
+.preview-table th {
+    background-color: #f4f4f4;
+    text-align: left;
+}
 
-    /* Optional: Adjust table column widths for better spacing */
-    th:nth-child(1), td:nth-child(1) {
-        width: 20%; /* Procedure column */
-    }
 
-    th:nth-child(2), td:nth-child(2) {
-        width: 20%; /* Questions column */
-    }
 
-    th:nth-child(3), td:nth-child(3) {
-        width: 20%; /* Mark as Active column */
-    }
 
-    th:nth-child(4), td:nth-child(4) {
-        width: 20%; /* Actions column */
-    }
+
+
+
+
+
+
+
+
+
 
     /* Modal Styling */
     #procedureModal {
@@ -517,7 +1831,7 @@
         cursor: pointer;
         font-size: 14px;
         transition: all 0.2s ease-in-out;
-        border-color: #f7a82d;
+        border-color: #F16564;
         font-weight: bold;
     }
 
@@ -527,9 +1841,9 @@
 
     /* Selected State */
     .toggle-btn.selected {
-        background-color: #f7a82d; /* Orange */
+        background-color: #F16564; /* Orange */
         color: #fff;
-        border-color: #f7a82d;
+        border-color: #F16564;
     }
 
     /* Modal Close Button */
@@ -547,7 +1861,7 @@
     #procedureModal .close-btn {
         display: block;
         margin: 20px auto 0;
-        background-color: #f7a82d;
+        background-color: #F16564;
         color: white;
         border: none;
         padding: 10px 20px;
@@ -564,5 +1878,1211 @@
         border-bottom: 1px solid #ddd;
         padding-bottom: 10px;
     }
+       
+/* Basic Layout */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.header-left h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.header-left p {
+    margin: 4px 0 0;
+    color: #666;
+}
+
+.btn-success {
+    background: #48BB78;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+    text-decoration: none;
+}
+
+.btn-success:hover {
+    background: #38A169;
+    text-decoration: none;
+    color: white;
+}
+
+/* Filters */
+.filters {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 24px;
+}
+
+.filters .form-group {
+    margin-bottom: 0;
+}
+
+.filters label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5568;
+    margin-bottom: 4px;
+}
+
+.filters .form-control {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.filters .btn-block {
+    margin-top: 24px;
+}
+
+/* Table Styles */
+.card {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table th {
+    background: #f8fafc;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5568;
+    text-transform: uppercase;
+}
+
+.table td {
+    padding: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.course-row {
+    cursor: pointer;
+}
+
+.course-row:hover {
+    background-color: #f7fafc;
+}
+
+/* Toggle Switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: #1AA09A;
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* Action Buttons */
+.actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    background: #edf2f7;
+    color: #4a5568;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.btn-icon:hover {
+    background: #e2e8f0;
+}
+
+.btn-icon.btn-danger {
+    color: #c53030;
+    background: #fff5f5;
+}
+
+.btn-icon.btn-danger:hover {
+    background: #fed7d7;
+}
+
+/* Overlay */
+.side-panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+}
+
+.side-panel-overlay.active {
+    display: block;
+}
+
+/* Filter Panel */
+.filter-panel {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+}
+
+.filter-panel.active {
+    right: 0;
+}
+
+.filter-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.filter-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.filter-layout {
+    display: flex;
+    height: calc(100vh - 140px);
+}
+
+.filter-types {
+    width: 30%;
+    border-right: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.filter-type {
+    padding: 16px 20px;
+    cursor: pointer;
+    border-bottom: 1px solid #e2e8f0;
+    font-weight: 500;
+    color: #4a5568;
+}
+
+.filter-type.active {
+    background: white;
+    color: #F16564;
+    border-right: 2px solid #F16564;
+}
+
+.filter-content-wrapper {
+    width: 70%;
+    position: relative;
+}
+
+.filter-content {
+    display: none;
+    height: 100%;
+    flex-direction: column;
+}
+
+.filter-content.active {
+    display: flex;
+}
+
+.filter-search {
+    padding: 20px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.filter-search input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin-bottom: 12px;
+}
+
+.selection-count {
+    font-size: 12px;
+    color: #666;
+}
+
+.options-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 20px;
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    cursor: pointer;
+}
+
+.option-item input[type="checkbox"] {
+    margin: 0;
+}
+
+.filter-actions {
+    padding: 16px 20px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .header-right {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .header-right .btn {
+        width: 100%;
+    }
+
+    .filters .row {
+        margin: 0;
+    }
+
+    .filters [class*="col-"] {
+        padding: 0;
+        margin-bottom: 16px;
+    }
+
+    .filters .btn-block {
+        margin-top: 0;
+    }
+
+    .card {
+        overflow-x: auto;
+    }
+
+    .table {
+        min-width: 800px;
+    }
+}
+
+/* Search and Filter Bar */
+.search-filter-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.search-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 16px;
+}
+
+.search-box input {
+    border: none;
+    outline: none;
+    width: 100%;
+    font-size: 14px;
+}
+
+.btn-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #4a5568;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-filter:hover {
+    background: #f7fafc;
+}
+
+/* Updated Filter Panel Styles */
+.filter-panel {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+}
+
+.filter-panel.active {
+    right: 0;
+}
+
+.filter-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.filter-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: #1a202c;
+}
+
+.filter-form {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 64px); /* Header height */
+}
+
+.filter-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Filter Types (30%) */
+.filter-types {
+    width: 30%;
+    background: #f8fafc;
+    border-right: 1px solid #e2e8f0;
+}
+
+.filter-type {
+    padding: 16px 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    color: #4a5568;
+}
+
+.filter-type:hover {
+    background: #f1f5f9;
+}
+
+.filter-type.active {
+    background: white;
+    color: #F16564;
+}
+
+.filter-type.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: #F16564;
+}
+
+/* Filter Content (70%) */
+.filter-content-wrapper {
+    width: 70%;
+    display: flex;
+    flex-direction: column;
+    background: white;
+}
+
+.filter-content {
+    display: none;
+    height: 100%;
+    flex-direction: column;
+}
+
+.filter-content.active {
+    display: flex;
+}
+
+.filter-search {
+    padding: 20px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.filter-search input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+    margin-bottom: 12px;
+}
+
+.filter-search input:focus {
+    outline: none;
+    border-color: #F16564;
+    box-shadow: 0 0 0 2px rgba(241, 101, 100, 0.1);
+}
+
+.selection-count {
+    font-size: 14px;
+    color: #4a5568;
+}
+
+.options-list {
+    padding: 16px 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    cursor: pointer;
+}
+
+.option-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #cbd5e0;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.option-item input[type="checkbox"]:checked {
+    background-color: #F16564;
+    border-color: #F16564;
+}
+
+.option-item span {
+    font-size: 14px;
+    color: #4a5568;
+}
+
+.filter-actions {
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    background: white;
+    margin-top: auto;
+}
+
+
+.btn-light {
+    background: #f1f5f9;
+    border: none;
+    padding: 8px 24px;
+    border-radius: 6px;
+    color: #4a5568;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.btn-light:hover {
+    background: #e2e8f0;
+}
+
+/* Edit Panel Styles */
+#editProcedurePanel {
+    position: fixed;
+    top: 0;
+    right: -800px;
+    width: 800px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+#editProcedurePanel.active {
+    right: 0;
+}
+
+.questions-container {
+    margin: 16px 0;
+}
+
+.question-item {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.question-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.question-header strong {
+    color: #1a202c;
+    font-size: 14px;
+}
+
+.sub-questions {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.sub-questions-list {
+    margin: 12px 0;
+}
+
+.sub-question-item {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    align-items: center;
+}
+
+.sub-question-item .form-control {
+    flex: 1;
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    padding: 16px 0;
+    border-top: 1px solid #e2e8f0;
+    margin-top: 24px;
+}
+
+.btn-primary {
+    background: #F16564;
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-primary:hover {
+    background: #e45857;
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.btn-secondary:hover {
+    background: #5a6268;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .filter-panel {
+        width: 100%;
+        right: -100%;
+    }
+    #editProcedurePanel {
+        width: 100%;
+        right: -100%;
+    }
+}
+
+/* Upload Panel */
+.upload-panel {
+    position: fixed;
+    top: 0;
+    right: -800px;
+    width: 800px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
+
+.upload-panel.active {
+    right: 0;
+}
+
+.upload-header {
+    padding: 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8fafc;
+}
+
+.upload-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: #1a202c;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.btn-close {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: none;
+    color: #64748b;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.btn-close:hover {
+    background: #e2e8f0;
+    color: #1a202c;
+}
+
+.upload-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+}
+
+.upload-section {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.section-header i {
+    font-size: 20px;
+    color: #F16564;
+}
+
+.section-header h4 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a202c;
+}
+
+.template-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+.template-card {
+    display: flex;
+    align-items: center;
+    padding: 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    text-decoration: none;
+    color: #1a202c;
+    transition: all 0.2s;
+}
+
+.template-card:hover {
+    border-color: #F16564;
+    background: #fff5f5;
+}
+
+.template-icon {
+    width: 40px;
+    height: 40px;
+    background: #F16564;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 20px;
+}
+
+.template-info {
+    flex: 1;
+    margin-left: 16px;
+}
+
+.template-info h5 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.template-info p {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: #64748b;
+}
+
+.template-card i.fa-download {
+    color: #64748b;
+    font-size: 16px;
+}
+
+.upload-zone {
+    border: 2px dashed #e2e8f0;
+    border-radius: 12px;
+    padding: 32px;
+    transition: all 0.2s;
+    background: #f8fafc;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.upload-zone.dragover {
+    border-color: #F16564;
+    background: #fff5f5;
+}
+
+.upload-placeholder {
+    color: #4a5568;
+    width: 100%;
+    text-align: center;
+}
+
+.upload-icon {
+    width: 64px;
+    height: 64px;
+    background: #F16564;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+}
+
+.upload-icon i {
+    font-size: 32px;
+    color: white;
+}
+
+.upload-placeholder h5 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a202c;
+}
+
+.upload-placeholder p {
+    margin: 8px 0;
+    color: #64748b;
+}
+
+.upload-hint {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 16px;
+}
+
+.btn-outline {
+    padding: 8px 24px;
+    border: 2px solid #F16564;
+    border-radius: 6px;
+    background: none;
+    color: #F16564;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: fit-content;
+    margin: 0 auto;
+    display: inline-block;
+}
+
+.btn-outline:hover {
+    background: #F16564;
+    color: white;
+}
+
+.upload-preview {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.file-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.file-info i {
+    font-size: 24px;
+    color: #F16564;
+}
+
+.filename {
+    font-size: 14px;
+    color: #1a202c;
+}
+
+.preview-container {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.table-wrapper {
+    overflow-x: auto;
+    max-height: 300px;
+}
+
+.table-wrapper table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table-wrapper th {
+    background: #f8fafc;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5568;
+    position: sticky;
+    top: 0;
+}
+
+.table-wrapper td {
+    padding: 12px 16px;
+    border-top: 1px solid #e2e8f0;
+    font-size: 14px;
+}
+
+.validation-results {
+    padding: 16px;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.alert {
+    padding: 16px;
+    border-radius: 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.alert-danger {
+    background: #fff5f5;
+    color: #c53030;
+}
+
+.alert-success {
+    background: #f0fff4;
+    color: #2f855a;
+}
+
+.alert i {
+    font-size: 20px;
+}
+
+.alert ul {
+    margin: 8px 0 0;
+    padding-left: 20px;
+}
+
+.upload-actions {
+    padding: 20px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    background: white;
+}
+
+
+.btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: #F16564;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #e45857;
+}
+
+.btn-light {
+    background: #f1f5f9;
+    border: none;
+    color: #4a5568;
+}
+
+.btn-light:hover {
+    background: #e2e8f0;
+}
+
+@media (max-width: 992px) {
+    .upload-panel {
+        width: 100%;
+        right: -100%;
+    }
+    
+    .template-buttons {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* Side Panel Styles */
+.side-panel {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
+
+.side-panel.active {
+    right: 0;
+}
+
+.side-panel-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.side-panel-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+}
+
+/* .side-panel-form {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+} */
+.side-panel-body {
+    padding: 20px 24px;
+    overflow-y: auto;
+    flex: 1;
+    background-color: #fafafa;
+}
+
+/* started from here  */
+.filter-panel {
+   position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
+
+.filter-panel.active {
+    right: 0;
+}
+
+.filter-header {
+    padding: 20px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+}
+
+.filter-form {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.filter-search {
+    margin-bottom: 10px;
+}
+
+.selection-count {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.filter-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-top: auto;
+    padding-top: 10px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.side-panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.3);
+    z-index: 999;
+}
+
 </style>
 {% endblock %}

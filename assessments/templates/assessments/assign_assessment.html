@@ -1805,6 +1805,60 @@
             e.stopPropagation();
         });
     
+        // Specific handler for assessor dropdown - fetch if empty
+        // This handler runs first and ensures data is loaded before showing dropdown
+        $(document).on('click', '#assessorDropdownBtn', function(e) {
+            const $list = $('#assessorDropdownList');
+            const $btn = $(this);
+            
+            // Check if list is empty or has no valid items
+            const listItems = $list.find('li');
+            const hasItems = listItems.length > 0 && 
+                           !listItems.first().text().includes('No options available') &&
+                           !listItems.first().text().includes('No assessors available') &&
+                           !listItems.first().text().includes('Error loading') &&
+                           !listItems.first().text().includes('Loading assessors');
+            
+            if (!hasItems) {
+                // Stop event propagation to prevent universal handler from toggling empty dropdown
+                e.stopImmediatePropagation();
+                
+                // Show loading state immediately
+                $list.html('<li style="color:#888; cursor:default; padding: 8px 12px; text-align: center;"><i class="fas fa-spinner fa-spin"></i> Loading assessors...</li>');
+                $list.show().addClass('show');
+                $btn.addClass('active');
+                
+                // Fetch assessors
+                $.ajax({
+                    url: '/fetch-assessors/',
+                    type: 'GET',
+                    success: function (response) {
+                        console.log('Assessors API response:', response);
+                        if (response && response.assessors && Array.isArray(response.assessors) && response.assessors.length > 0) {
+                            populateDropdown('assessorDropdownList', response.assessors, 'name');
+                            // Ensure dropdown stays visible after populating
+                            $list.show().addClass('show');
+                            $btn.addClass('active');
+                        } else {
+                            console.warn('No assessors in response:', response);
+                            $list.html('<li style="color:#888; cursor:default; padding: 8px 12px;">No assessors available</li>');
+                            $list.show().addClass('show');
+                            $btn.addClass('active');
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        console.error('Failed to fetch assessors:', error, 'Status:', status, 'Response:', xhr.responseText);
+                        $list.html('<li style="color:#f44336; cursor:default; padding: 8px 12px;">Error loading assessors. Please try again.</li>');
+                        $list.show().addClass('show');
+                        $btn.addClass('active');
+                    }
+                });
+                
+                return false; // Prevent further event handling
+            }
+            // If items exist, let the universal handler proceed normally
+        });
+    
         // Type selection - FIXED
         $(document).on('click', '#typeDropdownList li', function(e) {
             e.preventDefault();
@@ -2779,7 +2833,7 @@
         
         if (testType === 'B2B') {
             // B2B: Use per-procedure assessor selection (inline rows)
-            $('#selectedProceduresList [data-procedure-id]').each(function() {
+            $('#selectedProceduresList .assessor-selection-row').each(function() {
                 const container = $(this);
                 const procedureId = container.data('procedure-id');
                 const procedureName = container.find('.procedure-name').text();
@@ -2814,6 +2868,28 @@
                 return false;
             }
 
+            // Deduplicate mappings by procedureId and union assessorIds
+            (function dedupeProcedureMappings(){
+                const byId = new Map();
+                procedureAssessorMappings.forEach(m => {
+                    const pid = String(m.procedureId || '').trim();
+                    const name = m.procedureName || '';
+                    const ids = Array.isArray(m.assessorIds) ? m.assessorIds.map(String) : [];
+                    if (!byId.has(pid)) {
+                        byId.set(pid, { procedureId: pid, procedureName: name, assessorIds: new Set(ids) });
+                    } else {
+                        const entry = byId.get(pid);
+                        ids.forEach(id => entry.assessorIds.add(id));
+                        if (!entry.procedureName && name) entry.procedureName = name; // prefer any non-empty name
+                    }
+                });
+                procedureAssessorMappings = Array.from(byId.values()).map(e => ({
+                    procedureId: e.procedureId,
+                    procedureName: e.procedureName,
+                    assessorIds: Array.from(e.assessorIds)
+                }));
+            })();
+
             // Ensure each selected procedure has at least one assessor; report names
             const missing = procedureAssessorMappings
                 .filter(m => !m.assessorIds || m.assessorIds.length === 0)
@@ -2831,14 +2907,14 @@
                 }
                 return false;
             }
-            
+
             // For B2B, also gather all assessors for backward compatibility
             const allAssessors = [];
             procedureAssessorMappings.forEach(mapping => {
                 allAssessors.push(...mapping.assessorIds);
             });
             assessors = [...new Set(allAssessors)];
-            
+
             console.log('B2B - Procedures:', procedureAssessorMappings);
         } else {
             // B2C: Use original logic
