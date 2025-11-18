@@ -443,8 +443,8 @@
                     </div>
                 </div>
                 
-                <!-- Grade Distribution Pie Chart (Right Half) -->
-                <div class="grade-chart-half">
+                <!-- Grade Distribution Pie Chart (Right Half) - Only shown in filtered view -->
+                <div id="osceGradeChartContainer" class="grade-chart-half" style="display: none;">
                     <h3 class="section-title">Overall Grade Distribution (Student Performance Pie Chart) - Institutional level</h3>
                     <div class="chart-wrapper">
                         <canvas id="osceGradeDistributionChart"></canvas>
@@ -4480,6 +4480,8 @@
                 }
                 
                 if (data.success) {
+                    // Store data globally for skills drill-down
+                    window.currentOsceReportData = data;
                     displayOsceKPIs(data);
                 } else {
                     const metricsSection = document.querySelector('#osce-tab .metrics-section');
@@ -4518,71 +4520,138 @@
     }
 
     function displayOsceKPIs(data) {
-        // Update metric values
-        const totalEnrolled = data.total_students_enrolled || 0;
-        const studentsAssessed = data.students_assessed || 0;
-        const averageScore = data.average_institution_score || 0;
-        const gradeLetter = data.grade_letter || '-';
-        const passRate = data.pass_rate || 0;
-        const totalConducted = data.total_osce_conducted || 0;
-        const assessmentRate = data.assessment_rate || (totalEnrolled > 0 ? Math.round((studentsAssessed / totalEnrolled) * 100) : 0);
-        const skillsEvaluated = data.skills_evaluated || 0;
+        const displayMode = data.display_mode || 'overall';  // 'overall', 'semester', or 'filtered'
         
-        document.getElementById('osceTotalStudentsEnrolled').textContent = totalEnrolled.toLocaleString();
-        document.getElementById('osceStudentsAssessed').textContent = studentsAssessed.toLocaleString();
-        document.getElementById('osceTotalConducted').textContent = totalConducted.toLocaleString();
-        document.getElementById('osceAssessmentRate').textContent = `${assessmentRate}%`;
-        document.getElementById('osceSkillsEvaluated').textContent = skillsEvaluated.toLocaleString();
-        
-        // Update new metrics
-        document.getElementById('osceAverageScore').textContent = `${averageScore}%`;
-        const gradeSpan = document.getElementById('osceGradeLetter');
-        if (gradeSpan) {
-            gradeSpan.textContent = gradeLetter !== '-' ? `(Grade ${gradeLetter})` : '';
-        }
-        document.getElementById('oscePassRate').textContent = `${passRate}%`;
-        
-        // Always display semester-wise performance (data is already filtered by applied filters)
-        // Shows overall data when no filters are applied, filtered data when filters are applied
-        displaySemesterWisePerformance(data.semester_wise_performance || []);
-        
-        // Always display category-wise performance and grade distribution chart
-        // Both are in the same section (osceCategoryWiseSection)
-        // Data is already filtered by applied filters (semester, osce_level, skill)
-        // Shows overall data when no filters are applied, filtered data when filters are applied
-        displayCategoryWisePerformance(data.category_wise_performance || []);
-        
-        // Display grade distribution chart (data is already filtered by applied filters)
-        if (data.completed_exam_scores && data.completed_exam_scores.length > 0) {
-            displayGradeDistributionChart(data.completed_exam_scores);
-        } else {
-            // Clear chart if no data
-            if (window.osceGradeChart) {
-                window.osceGradeChart.destroy();
-                window.osceGradeChart = null;
-            }
-        }
-        
-        // Display semester dashboard (only when semester filter is applied)
-        const semesterFilter = document.getElementById('osceSemesterFilter').value;
-        const semesterFilterApplied = semesterFilter && semesterFilter !== '';
-        if (semesterFilterApplied && data.semester_dashboard) {
-            displaySemesterDashboard(data.semester_dashboard);
-        } else {
-            // Hide semester dashboard sections
-            const semesterDashboardSection = document.getElementById('osceSemesterDashboardSection');
-            const studentPerformanceSection = document.getElementById('osceStudentPerformanceSection');
-            const batchReportSection = document.getElementById('osceBatchReportSection');
-            if (semesterDashboardSection) semesterDashboardSection.style.display = 'none';
-            if (studentPerformanceSection) studentPerformanceSection.style.display = 'none';
-            if (batchReportSection) batchReportSection.style.display = 'none';
-        }
-        
-        // Show metrics section and hide no data message
-        const metricsSection = document.querySelector('#osce-tab .metrics-section');
+        // Get all section elements
+        const metricsSection = document.querySelector('#osce-tab .metrics-section');  // Top KPI cards
+        const semesterWiseSection = document.getElementById('osceSemesterWiseSection');  // Semester-wise table
+        const semesterDashboardSection = document.getElementById('osceSemesterDashboardSection');  // Semester Dashboard
+        const studentPerformanceSection = document.getElementById('osceStudentPerformanceSection');  // Student Performance
+        const batchReportSection = document.getElementById('osceBatchReportSection');  // Batch Report
+        const categoryWiseSection = document.getElementById('osceCategoryWiseSection');  // Category-wise performance
+        const gradeChartContainer = document.getElementById('osceGradeChartContainer');  // Grade distribution chart
         const noDataMessage = document.getElementById('osceNoDataFound');
-        if (metricsSection) metricsSection.style.display = 'flex';
+        
+        // Hide all sections first
+        if (metricsSection) metricsSection.style.display = 'none';
+        if (semesterWiseSection) semesterWiseSection.style.display = 'none';
+        if (semesterDashboardSection) semesterDashboardSection.style.display = 'none';
+        if (studentPerformanceSection) studentPerformanceSection.style.display = 'none';
+        if (batchReportSection) batchReportSection.style.display = 'none';
+        if (categoryWiseSection) categoryWiseSection.style.display = 'none';
+        if (gradeChartContainer) gradeChartContainer.style.display = 'none';
         if (noDataMessage) noDataMessage.style.display = 'none';
+        
+        // Show sections based on display mode
+        if (displayMode === 'overall') {
+            // OVERALL VIEW: Institution + Year only
+            // SHOW: Top KPI cards, Semester-wise table, Category performance
+            
+            // Update KPI cards
+            document.getElementById('osceTotalStudentsEnrolled').textContent = (data.total_students_enrolled || 0).toLocaleString();
+            document.getElementById('osceStudentsAssessed').textContent = (data.students_assessed || 0).toLocaleString();
+            document.getElementById('osceTotalConducted').textContent = (data.total_osce_conducted || 0).toLocaleString();
+            document.getElementById('osceAssessmentRate').textContent = `${data.assessment_rate || 0}%`;
+            document.getElementById('osceSkillsEvaluated').textContent = (data.skills_evaluated || 0).toLocaleString();
+            document.getElementById('osceAverageScore').textContent = `${data.average_institution_score || 0}%`;
+            document.getElementById('oscePassRate').textContent = `${data.pass_rate || 0}%`;
+            
+            const gradeSpan = document.getElementById('osceGradeLetter');
+            if (gradeSpan) {
+                gradeSpan.textContent = data.grade_letter && data.grade_letter !== '-' ? `(Grade ${data.grade_letter})` : '';
+            }
+            
+            // Show sections
+            if (metricsSection) metricsSection.style.display = 'flex';
+            displaySemesterWisePerformance(data.semester_wise_performance || []);
+            displayCategoryWisePerformance(data.category_wise_performance || []);
+            if (categoryWiseSection) categoryWiseSection.style.display = 'block';
+            // Don't show grade distribution chart in overall view
+            
+        } else if (displayMode === 'semester') {
+            // SEMESTER VIEW: Institution + Year + Semester
+            // SHOW: Semester Dashboard, OSCE Activity Timeline, Student Performance, Category performance, Skills
+            // DON'T SHOW: Grade distribution pie chart
+            
+            if (data.semester_dashboard) {
+                displaySemesterDashboard(data.semester_dashboard);
+                if (semesterDashboardSection) semesterDashboardSection.style.display = 'block';
+                if (studentPerformanceSection) studentPerformanceSection.style.display = 'block';
+                if (batchReportSection) batchReportSection.style.display = 'block';
+            }
+            
+            displayCategoryWisePerformance(data.category_wise_performance || []);
+            if (categoryWiseSection) categoryWiseSection.style.display = 'block';
+            // Don't show grade distribution chart in semester view
+            
+        } else if (displayMode === 'filtered') {
+            // FILTERED VIEW: Institution + Year + Semester + OSCE Level/Procedure
+            // SHOW: Metrics table (in semester dashboard), Student Performance (pie chart), Category performance, Skills, Grade Distribution
+            
+            if (data.semester_dashboard) {
+                // Display only the metrics table from semester dashboard
+                displayFilteredMetricsTable(data.semester_dashboard, data.filter_applied);
+                if (semesterDashboardSection) semesterDashboardSection.style.display = 'block';
+            }
+            
+            displayCategoryWisePerformance(data.category_wise_performance || []);
+            if (categoryWiseSection) categoryWiseSection.style.display = 'block';
+            
+            // Show student performance section for pie chart
+            if (studentPerformanceSection) studentPerformanceSection.style.display = 'block';
+            
+            // Show grade distribution chart only in filtered view
+            // Note: Grade distribution requires individual exam scores, which may not be available in filtered view
+            // We'll show it if data is available, otherwise hide it
+            if (data.completed_exam_scores && data.completed_exam_scores.length > 0) {
+                if (gradeChartContainer) gradeChartContainer.style.display = 'block';
+                displayGradeDistributionChart(data.completed_exam_scores);
+            } else if (data.grade_distribution && Object.keys(data.grade_distribution).length > 0) {
+                if (gradeChartContainer) gradeChartContainer.style.display = 'block';
+                displayGradeDistributionFromObject(data.grade_distribution);
+            }
+            // If no grade data available, gradeChartContainer stays hidden
+        }
+    }
+    
+    // New function to display filtered metrics table (for OSCE Level/Procedure filters)
+    function displayFilteredMetricsTable(semesterDashboard, filterApplied) {
+        // This creates a simplified metrics display for filtered view
+        // Based on the screenshot showing: Semester, OSCE Level, Date, Total Stations, Students, Avg Score, Pass Rate
+        
+        const container = document.getElementById('osceSemesterDashboard');
+        if (!container) return;
+        
+        const osceLevel = filterApplied?.osce_level || 'All';
+        const procedure = filterApplied?.procedure || '';
+        
+        container.innerHTML = `
+            <h3>Metrics Table</h3>
+            <table class="osce-metrics-table">
+                <thead>
+                    <tr>
+                        <th>Semester</th>
+                        <th>OSCE Level</th>
+                        <th>Date Conducted</th>
+                        <th>Total Stations (Skills)</th>
+                        <th>Total Students Appeared</th>
+                        <th>Average Batch Score</th>
+                        <th>Pass Rate (≥80%)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>${semesterDashboard.semester_name || 'N/A'}</td>
+                        <td>${osceLevel}</td>
+                        <td>${semesterDashboard.latest_osce || 'N/A'}</td>
+                        <td>${semesterDashboard.osces_conducted || 0}</td>
+                        <td>${semesterDashboard.total_students || 0}</td>
+                        <td>${semesterDashboard.average_score || 0}% (Grade ${semesterDashboard.grade_letter || '-'})</td>
+                        <td>${semesterDashboard.pass_rate || 0}%</td>
+                    </tr>
+                </tbody>
+            </table>
+        `;
     }
 
     function displaySemesterWisePerformance(semesterData) {
@@ -4669,6 +4738,63 @@
         section.style.display = 'block';
     }
 
+    function displayGradeDistributionFromObject(gradeDistribution) {
+        // Display grade distribution from pre-computed object
+        // gradeDistribution format: { 'A': count, 'B': count, 'C': count, 'D': count, 'E': count }
+        const canvas = document.getElementById('osceGradeDistributionChart');
+        if (!canvas) return;
+        
+        // Destroy existing chart if it exists
+        if (window.osceGradeChart) {
+            window.osceGradeChart.destroy();
+            window.osceGradeChart = null;
+        }
+        
+        const grades = {
+            'A (>= 90%)': gradeDistribution['A'] || 0,
+            'B (>= 80%)': gradeDistribution['B'] || 0,
+            'C (>= 70%)': gradeDistribution['C'] || 0,
+            'D (>= 60%)': gradeDistribution['D'] || 0,
+            'E (< 60%)': gradeDistribution['E'] || 0
+        };
+        
+        const labels = Object.keys(grades);
+        const data = Object.values(grades);
+        const colors = ['#4CAF50', '#8BC34A', '#FFC107', '#FF9800', '#F44336'];
+        
+        const ctx = canvas.getContext('2d');
+        window.osceGradeChart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: colors,
+                    borderColor: '#ffffff',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { position: 'right' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                return `${label}: ${value} students (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
     function displayGradeDistributionChart(completedScores) {
         // Get or create chart canvas
         const canvas = document.getElementById('osceGradeDistributionChart');
@@ -4845,9 +4971,9 @@
                 <td>${index + 1}</td>
                 <td>${student.name || 'Unknown'}</td>
                 <td>${student.overall_grade || '-'} (${student.overall_avg || 0}%)</td>
-                <td>${student.classroom || '-'}</td>
-                <td>${student.mock || '-'}</td>
-                <td>${student.final || '-'}</td>
+                <td>${student.classroom_grade || '-'}</td>
+                <td>${student.mock_grade || '-'}</td>
+                <td>${student.final_grade || '-'}</td>
             `;
             tbody.appendChild(row);
         });
@@ -4891,9 +5017,9 @@
                 <td>${index + 1}</td>
                 <td>${student.name || 'Unknown'}</td>
                 <td>${student.overall_grade || '-'} (${student.overall_avg || 0}%)</td>
-                <td>${student.classroom || '-'}</td>
-                <td>${student.mock || '-'}</td>
-                <td>${student.final || '-'}</td>
+                <td>${student.classroom_grade || '-'}</td>
+                <td>${student.mock_grade || '-'}</td>
+                <td>${student.final_grade || '-'}</td>
             `;
             tbody.appendChild(row);
         });
@@ -4904,65 +5030,106 @@
     let currentSkillsSort = 'category';
 
     function loadSkillsForCategory(category) {
-        // Get current filter values
-        const institutionValue = document.getElementById('osceInstitutionFilter').value;
-        const academicYear = document.getElementById('osceAcademicYearFilter').value;
-        const semester = document.getElementById('osceSemesterFilter').value;
-        const osceLevel = document.getElementById('osceLevelFilter').value;
-        
-        if (!institutionValue || !academicYear) {
-            alert('Please select Institution/Hospital and Academic Year first');
+        // Use pre-computed data from the main report
+        if (!window.currentOsceReportData || !window.currentOsceReportData.skills_by_category) {
+            alert('Please load the OSCE report first by applying filters');
             return;
         }
         
-        // Parse institution value
-        const [institutionId, institutionType] = institutionValue.split('|');
+        const skillsByCategory = window.currentOsceReportData.skills_by_category;
+        const categorySkills = skillsByCategory[category] || [];
         
-        // Build query parameters
-        const params = new URLSearchParams();
-        params.append('category', category);
-        params.append('academic_year', academicYear);
-        params.append('institution_id', institutionId);
-        params.append('institution_type', institutionType);
-        if (semester) params.append('semester', semester);
-        if (osceLevel && osceLevel !== 'All') params.append('osce_level', osceLevel);
-        
-        // Show complete loader overlay
-        const loader = document.getElementById('osceReportLoader');
-        if (loader) {
-            loader.style.display = 'flex';
+        if (categorySkills.length === 0) {
+            alert(`No skills found for category: ${category}`);
+            return;
         }
         
-        // Fetch skills data
-        fetch(`/api/skills-for-category/?${params.toString()}`)
-            .then(response => response.json())
-            .then(data => {
-                // Hide loader
-                if (loader) {
-                    loader.style.display = 'none';
-                }
-                
-                if (data.success) {
-                    const section = document.getElementById('osceSkillsReportSection');
-                    if (section) {
-                        section.style.display = 'block';
-                        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                    displaySkillsReport(data, category);
-                } else {
-                    alert(`Error: ${data.error || 'Failed to fetch skills data'}`);
-                }
-            })
-            .catch(error => {
-                console.error('Error fetching skills data:', error);
-                
-                // Hide loader
-                if (loader) {
-                    loader.style.display = 'none';
-                }
-                
-                alert('Failed to fetch skills data');
+        // Calculate summary data
+        const totalSkills = categorySkills.length;
+        let highestSkill = null;
+        let lowestSkill = null;
+        let highestScore = -1;
+        let lowestScore = 101;
+        
+        categorySkills.forEach(skill => {
+            if (skill.avg_score > highestScore) {
+                highestScore = skill.avg_score;
+                highestSkill = {
+                    name: skill.skill_name,
+                    average_score: skill.avg_score,
+                    grade: _getGradeForScore(skill.avg_score)
+                };
+            }
+            if (skill.avg_score < lowestScore) {
+                lowestScore = skill.avg_score;
+                lowestSkill = {
+                    name: skill.skill_name,
+                    average_score: skill.avg_score,
+                    grade: _getGradeForScore(skill.avg_score)
+                };
+            }
+        });
+        
+        // Build distribution data
+        const distribution = {};
+        categorySkills.forEach(skill => {
+            const osce_types = skill.osce_types || [];
+            osce_types.forEach(type => {
+                distribution[type] = (distribution[type] || 0) + 1;
             });
+        });
+        
+        // Display the skills section
+        const section = document.getElementById('osceSkillsReportSection');
+        if (section) {
+            section.style.display = 'block';
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        
+        // Map skills data to match frontend expectations
+        const mappedSkills = categorySkills.map(skill => ({
+            name: skill.skill_name || 'Unknown',
+            category: skill.category || category,
+            osce_levels: (skill.osce_types || []).join(', ') || 'N/A',
+            students_attempted: skill.students_attempted || 0,
+            average_score: skill.avg_score || 0,
+            grade: _getGradeForScore(skill.avg_score || 0),
+            procedure_id: skill.skill_id || skill.procedure_id || '',
+            attempts: skill.attempts || 0,
+            pass_rate: skill.pass_rate || 0,
+            highest_score: skill.highest_score || 0,
+            lowest_score: skill.lowest_score || 0
+        }));
+        
+        // Build distribution data for pie chart
+        const distributionData = {
+            above_90: mappedSkills.filter(s => s.average_score >= 90).length,
+            between_80_90: mappedSkills.filter(s => s.average_score >= 80 && s.average_score < 90).length,
+            between_70_80: mappedSkills.filter(s => s.average_score >= 70 && s.average_score < 80).length,
+            between_60_70: mappedSkills.filter(s => s.average_score >= 60 && s.average_score < 70).length,
+            below_60: mappedSkills.filter(s => s.average_score < 60).length
+        };
+        
+        // Display data
+        const reportData = {
+            success: true,
+            total_skills: totalSkills,
+            highest_skill: highestSkill,
+            lowest_skill: lowestSkill,
+            skills: mappedSkills,
+            distribution: distributionData
+        };
+        
+        displaySkillsReport(reportData, category);
+    }
+    
+    // Helper function to get grade from score
+    function _getGradeForScore(score) {
+        if (score >= 90) return 'A';
+        if (score >= 80) return 'B';
+        if (score >= 70) return 'C';
+        if (score >= 60) return 'D';
+        return 'E';
     }
 
     function displaySkillsReport(data, category) {
@@ -5116,10 +5283,10 @@
                 sortedData.sort((a, b) => (b.average_score || 0) - (a.average_score || 0));
                 break;
             case 'grade':
-                const gradeOrder = {'A+': 1, 'A': 2, 'B+': 3, 'B': 4, 'C+': 5, 'C': 6, 'D': 7, '-': 8};
+                const gradeOrder = {'A': 1, 'B': 2, 'C': 3, 'D': 4, 'E': 5, '-': 6};
                 sortedData.sort((a, b) => {
-                    const gradeA = gradeOrder[a.grade] || 8;
-                    const gradeB = gradeOrder[b.grade] || 8;
+                    const gradeA = gradeOrder[a.grade] || 6;
+                    const gradeB = gradeOrder[b.grade] || 6;
                     return gradeA - gradeB;
                 });
                 break;

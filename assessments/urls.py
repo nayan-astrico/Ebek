@@ -28,7 +28,8 @@ urlpatterns = [
     path('create-procedure-assignment-and-test/', views.create_procedure_assignment_and_test, name='create-procedure-assignment-and-test'),
     path('exam-reports/', views.render_exam_reports_page, name='exam_reports_page'),
     path('fetch-exam-reports/', views.fetch_exam_reports, name='fetch_exam_reports'),
-    path('api/osce-report/', views.fetch_osce_report, name='fetch_osce_report'),
+    # OSCE Report API - Complete Analytics Pre-Computed System
+    path('api/osce-report/', views.fetch_osce_report_optimized, name='fetch_osce_report'),
     path('api/skills-for-category/', views.fetch_skills_for_category, name='fetch_skills_for_category'),
     path('api/institutions-hospitals-for-report/', views.fetch_institutions_hospitals_for_report, name='fetch_institutions_hospitals_for_report'),
     path('admin-report-portal/', views.render_admin_report_portal, name='admin_report_portal'),
