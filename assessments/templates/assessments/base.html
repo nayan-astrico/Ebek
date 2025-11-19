@@ -699,6 +699,15 @@
         </div>
         {% endif %}
 
+        {% if request.user.is_staff or request.user.is_superuser %}
+        <div class="nav-item">
+            <a href="{% url 'view_metrics_data' %}" class="nav-link" title="View Metrics Data">
+                <i class="fas fa-database"></i>
+                <span>Metrics Viewer</span>
+            </a>
+        </div>
+        {% endif %}
+
         {% if request.user|check_icon_navigation_permissions:'courses' %}
         <div class="nav-item">
             <a href="{% url 'course_management' %}" class="nav-link" title="Manage Courses">

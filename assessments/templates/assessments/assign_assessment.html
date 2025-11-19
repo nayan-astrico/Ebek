@@ -366,10 +366,22 @@
             </div>
 
             <div id="external-assessment-container" style="display: none;">
+                <!-- Select Unit Type (Institute or Hospital) -->
+                <div class="form-group">
+                    <label id="unitTypeLabel" class="form-label">Unit Type</label>
+                    <div class="dropdown-container">
+                        <button class="dropdown-btn" id="unitTypeDropdownBtn" aria-labelledby="unitTypeLabel">Select Unit Type</button>
+                        <ul class="dropdown-list" id="unitTypeDropdownList">
+                            <li data-value="institution" data-id="institution">Institution</li>
+                            <li data-value="hospital" data-id="hospital">Hospital</li>
+                        </ul>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label id="instituteLabel" class="form-label">Institute/Hospital</label>
                     <div class="dropdown-container">
-                        <button class="dropdown-btn" id="institutionDropdownBtn" aria-labelledby="instituteLabel">Select Institution</button>
+                        <button class="dropdown-btn" id="institutionDropdownBtn" aria-labelledby="instituteLabel" disabled>Select Institution</button>
                         <div class="dropdown-search" id="institutionSearchContainer">
                             <input type="text" id="institutionSearch" placeholder="Search institution">
                         </div>
@@ -2142,16 +2154,26 @@
                 $('#selectedProceduresContainer').hide();
                 $('#assessorSelectionContainer').hide();
                 $('#examTypeContainer').show();
-                fetchB2BInstitutesAndHospitals();
+
+                // Reset unit type and institution selections
+                $('#unitTypeDropdownBtn').text('Select Unit Type').removeAttr('data-unit-type');
+                $('#institutionDropdownBtn').text('Select Institution').removeAttr('data-institution-id').prop('disabled', true);
+                $('#instituteLabel').text('Institute/Hospital');
+                $('#institutionDropdownList').empty();
+                $('#institutionChipsContainer').empty();
+                // Don't auto-fetch - wait for unit type selection
             }
         });
 
         // Fetch institutes and hospitals with B2B onboarding type
-        function fetchB2BInstitutesAndHospitals() {
+        function fetchB2BInstitutesAndHospitals(unitType = null) {
             $.ajax({
                 url: '/fetch-institutes/',
                 type: 'GET',
-                data: { onboarding_type: 'b2b' },
+                data: {
+                    onboarding_type: 'b2b',
+                    unit_type: unitType  // Pass the unit type filter
+                },
                 success: function (response) {
                     const institutes = response.institutes.map(inst => ({
                         id: inst.id,
@@ -2166,6 +2188,45 @@
             });
         }
 
+        // Unit Type selection handler
+        $(document).on('click', '#unitTypeDropdownList li', function(e) {
+            e.preventDefault();
+            const unitType = $(this).data('value');
+            const unitTypeText = $(this).text();
+
+            // Update button text
+            $('#unitTypeDropdownBtn').text(unitTypeText).attr('data-unit-type', unitType);
+            $('#unitTypeDropdownList').hide().removeClass('show');
+            $('#unitTypeDropdownBtn').removeClass('active');
+
+            console.log('Unit Type selected:', unitType);
+
+            // Update the label for institute/hospital dropdown
+            if (unitType === 'institution') {
+                $('#instituteLabel').text('Institute');
+                $('#institutionDropdownBtn').text('Select Institute');
+                $('#institutionSearch').attr('placeholder', 'Search institute');
+            } else if (unitType === 'hospital') {
+                $('#instituteLabel').text('Hospital');
+                $('#institutionDropdownBtn').text('Select Hospital');
+                $('#institutionSearch').attr('placeholder', 'Search hospital');
+            }
+
+            // Clear previous selections
+            $('#institutionDropdownBtn').removeAttr('data-institution-id').prop('disabled', false);
+            $('#institutionDropdownList').empty();
+            $('#institutionChipsContainer').empty();
+            $('#batchDropdownList').empty();
+            $('#batchChipsContainer').empty();
+            $('#courseDropdownList').empty();
+            $('#courseDropdownBtn').text('Select Course');
+            $('#procedureDropdownList').empty();
+            $('#procedureChipsContainer').empty();
+
+            // Fetch filtered institutes/hospitals based on unit type
+            fetchB2BInstitutesAndHospitals(unitType);
+        });
+
 
         // Skillathon selection 
         $(document).on('click', '#skillathonDropdownList li', function(e) {
@@ -2175,7 +2236,8 @@
             
             // Store both text and ID
             $('#skillathonDropdownBtn').text(value).attr('data-skillathon-id', id);
-            $('#skillathonDropdownList').hide();
+            $('#skillathonDropdownList').hide().removeClass('show');
+            $('#skillathonDropdownBtn').removeClass('active');
             
             console.log('Skillathon selected:', value, 'ID:', id); // For debugging
         });
@@ -2190,7 +2252,8 @@
             
             // Store both text and ID on the button
             $('#institutionDropdownBtn').text(institutionName).attr('data-institution-id', institutionId);
-            $('#institutionDropdownList').hide();
+            $('#institutionDropdownList').hide().removeClass('show');
+            $('#institutionDropdownBtn').removeClass('active');
             $('#institutionSearchContainer').hide();
 
             console.log('Institution selected:', institutionName, 'ID:', institutionId);
@@ -2636,8 +2699,14 @@
             e.preventDefault();
             const examType = $(this).data('value');
             $('#examTypeDropdownBtn').text(examType);
-            $('#examTypeDropdownList').hide();
+            $('#examTypeDropdownList').hide().removeClass('show');
+            $('#examTypeDropdownBtn').removeClass('active');
         });
+
+        // Set minimum date to today for date inputs
+        const today = new Date().toISOString().split('T')[0];
+        $('#date').attr('min', today);
+        $('#editDate').attr('min', today);
     });
 
     function populateProcedureDropdownWithCheckboxes(items) {
@@ -3313,9 +3382,24 @@
                 return false;
             }
 
+            // Get unit type from the dropdown selection
+            const unitType = $('#unitTypeDropdownBtn').attr('data-unit-type');
+
+            // Validation: Check if unit type is selected
+            if (!unitType || unitType === 'Select Unit Type') {
+                alert('Please select a Unit Type (Institute or Hospital)');
+                button.prop('disabled', false);
+                spinner.hide();
+                button.contents().filter(function () {
+                    return this.nodeType === 3;
+                }).first().replaceWith('Assign Assessment');
+                return false;
+            }
+
             // B2B: Send procedure-assessor mappings and related data
             requestData.batch_ids = batchIds;
             requestData.institution_id = institutionId;
+            requestData.unit_type = unitType;
             requestData.course_id = courseId;
             requestData.exam_type = examType;
             requestData.procedure_assessor_mappings = JSON.stringify(procedureAssessorMappings);

@@ -32,6 +32,10 @@ urlpatterns = [
     path('api/osce-report/', views.fetch_osce_report_optimized, name='fetch_osce_report'),
     path('api/skills-for-category/', views.fetch_skills_for_category, name='fetch_skills_for_category'),
     path('api/institutions-hospitals-for-report/', views.fetch_institutions_hospitals_for_report, name='fetch_institutions_hospitals_for_report'),
+    # Metrics Viewer - View pre-computed SemesterMetrics and UnitMetrics
+    path('metrics-viewer/', views.view_metrics_data, name='view_metrics_data'),
+    path('api/semester-metrics/', views.fetch_semester_metrics, name='fetch_semester_metrics'),
+    path('api/unit-metrics/', views.fetch_unit_metrics, name='fetch_unit_metrics'),
     path('admin-report-portal/', views.render_admin_report_portal, name='admin_report_portal'),
     path('api/admin-report/filter-options/', views.fetch_admin_report_filter_options, name='fetch_admin_report_filter_options'),
     path('api/admin-report/kpis/', views.fetch_admin_report_kpis, name='fetch_admin_report_kpis'),

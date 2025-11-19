@@ -59,7 +59,7 @@ class Command(BaseCommand):
         cutoff_time = datetime.now() - timedelta(minutes=300)
         
         queue_ref = db.collection('MetricUpdateQueue')\
-            .where('processed', '==', True)\
+            .where('processed', '==', False)\
             .limit(1000)
         
         queue_items = list(queue_ref.stream())
@@ -216,7 +216,8 @@ class Command(BaseCommand):
             'skill_name': '',
             'category': '',
             'osce_types': set(),
-            'station_scores': defaultdict(list)
+            'station_scores': defaultdict(list),
+            'student_marks': {}  # NEW: {user_id: {'obtained': int, 'max': int}}
         })
         category_scores = defaultdict(list)
         osce_timeline = []
@@ -295,12 +296,20 @@ class Command(BaseCommand):
                         students_data[user_id] = {
                             'name': user_name,
                             'scores_by_type': {'Classroom': [], 'Mock': [], 'Final': []},
+                            'marks_by_type': {
+                                'Classroom': {'obtained': 0, 'max': 0},
+                                'Mock': {'obtained': 0, 'max': 0},
+                                'Final': {'obtained': 0, 'max': 0}
+                            },
                             'all_scores': [],
                             'category_scores': defaultdict(list),
+                            'category_marks': defaultdict(lambda: {'obtained': 0, 'max': 0}),
                             'exam_attempts': [],
                             'skills_attempted': set(),
                             'skills_passed': set(),
-                            'total_osces': 0
+                            'total_osces': 0,
+                            'total_marks_obtained': 0,
+                            'total_max_marks': 0
                         }
                     
                     students_data[user_id]['total_osces'] += 1
@@ -333,14 +342,21 @@ class Command(BaseCommand):
                         
                         if max_marks > 0:
                             percentage = round((total_score / max_marks) * 100, 2)
-                            
+
                             # Track overall
                             all_scores.append(percentage)
                             students_data[user_id]['all_scores'].append(percentage)
+
+                            # Track marks obtained and max marks
+                            students_data[user_id]['total_marks_obtained'] += total_score
+                            students_data[user_id]['total_max_marks'] += max_marks
                             
-                            # Track by exam type
+                            # Track by exam type (both percentage and marks)
                             if exam_type in students_data[user_id]['scores_by_type']:
                                 students_data[user_id]['scores_by_type'][exam_type].append(percentage)
+                                # Track marks by type
+                                students_data[user_id]['marks_by_type'][exam_type]['obtained'] += total_score
+                                students_data[user_id]['marks_by_type'][exam_type]['max'] += max_marks
                             
                             # Track grade distribution
                             grade = self._get_grade(percentage)
@@ -353,6 +369,9 @@ class Command(BaseCommand):
                             if procedure_category:
                                 category_scores[procedure_category].append(percentage)
                                 students_data[user_id]['category_scores'][procedure_category].append(percentage)
+                                # Track category marks for student-level calculation
+                                students_data[user_id]['category_marks'][procedure_category]['obtained'] += total_score
+                                students_data[user_id]['category_marks'][procedure_category]['max'] += max_marks
                             
                             # Track per-exam breakdown for the student
                             students_data[user_id]['exam_attempts'].append({
@@ -361,6 +380,8 @@ class Command(BaseCommand):
                                 'category': procedure_category,
                                 'exam_type': exam_type,
                                 'score': percentage,
+                                'marks_obtained': total_score,
+                                'max_marks': max_marks,
                                 'test_date': test_date.isoformat() if test_date else None,
                                 'pass': percentage >= 80
                             })
@@ -373,11 +394,17 @@ class Command(BaseCommand):
                                 skills_data[procedure_id]['skill_name'] = procedure_name
                                 skills_data[procedure_id]['category'] = procedure_category
                                 skills_data[procedure_id]['osce_types'].add(exam_type)
-                                
+
+                                # NEW: Track student-level marks for this skill
+                                if user_id not in skills_data[procedure_id]['student_marks']:
+                                    skills_data[procedure_id]['student_marks'][user_id] = {'obtained': 0, 'max': 0}
+                                skills_data[procedure_id]['student_marks'][user_id]['obtained'] += total_score
+                                skills_data[procedure_id]['student_marks'][user_id]['max'] += max_marks
+
                                 # Track station scores for this skill
                                 for station, score in station_scores.items():
                                     skills_data[procedure_id]['station_scores'][station].append(score)
-                                
+
                                 students_data[user_id]['skills_attempted'].add(procedure_id)
                                 if percentage >= 80:
                                     students_data[user_id]['skills_passed'].add(procedure_id)
@@ -407,10 +434,24 @@ class Command(BaseCommand):
                 except:
                     date_str = str(test_date)
             
+            # Fetch batch name from Batches collection
+            batch_name = 'N/A'
+            batch_id = bas_data.get('batch_id', '')
+            if batch_id:
+                try:
+                    batch_doc = db.collection('Batches').document(batch_id).get()
+                    if batch_doc.exists:
+                        batch_data = batch_doc.to_dict()
+                        batch_name = batch_data.get('batchName', batch_id)
+                except Exception as e:
+                    print(f"Error fetching batch name for {batch_id}: {str(e)}")
+                    batch_name = batch_id
+            
             # Get stats from batch assignments for this OSCE
+            # Track marks per student (Total Marks Method - consistent with category performance)
             procedure_mappings = bas_data.get('procedure_assessor_mappings', [])
             osce_students = set()
-            osce_scores_list = []
+            student_osce_marks = {}  # {user_id: {'obtained': X, 'max': Y}}
             
             for mapping in procedure_mappings:
                 if isinstance(mapping, dict):
@@ -426,27 +467,49 @@ class Command(BaseCommand):
                                     exam_doc = exam_ref.get()
                                     if exam_doc.exists:
                                         exam_data = exam_doc.to_dict()
-                                        if exam_data.get('user'):
-                                            osce_students.add(exam_data['user'].id)
+                                        user_ref = exam_data.get('user')
                                         
-                                        if str(exam_data.get('status', '')).lower() == 'completed':
-                                            marks = exam_data.get('marks', 0)
-                                            metadata = exam_data.get('examMetaData', [])
-                                            max_m = sum(
-                                                q.get('right_marks_for_question', 0)
-                                                for sec in metadata
-                                                for q in sec.get('section_questions', [])
-                                            )
-                                            if max_m > 0:
-                                                osce_scores_list.append(round((marks / max_m) * 100, 2))
+                                        if user_ref:
+                                            user_id = user_ref.id
+                                            osce_students.add(user_id)
+                                            
+                                            if str(exam_data.get('status', '')).lower() == 'completed':
+                                                marks = exam_data.get('marks', 0)
+                                                metadata = exam_data.get('examMetaData', [])
+                                                max_m = sum(
+                                                    q.get('right_marks_for_question', 0)
+                                                    for sec in metadata
+                                                    for q in sec.get('section_questions', [])
+                                                )
+                                                
+                                                if max_m > 0:
+                                                    # Track total marks per student
+                                                    if user_id not in student_osce_marks:
+                                                        student_osce_marks[user_id] = {'obtained': 0, 'max': 0}
+                                                    
+                                                    student_osce_marks[user_id]['obtained'] += marks
+                                                    student_osce_marks[user_id]['max'] += max_m
                         except:
                             pass
             
-            avg_score = round(sum(osce_scores_list) / len(osce_scores_list), 2) if osce_scores_list else 0
-            pass_rate = round((sum(1 for s in osce_scores_list if s >= 80) / len(osce_scores_list) * 100), 2) if osce_scores_list else 0
+            # Calculate student-level percentages using Total Marks Method
+            student_percentages = []
+            students_passing = 0
+            
+            for user_id, marks_data in student_osce_marks.items():
+                if marks_data['max'] > 0:
+                    student_pct = round((marks_data['obtained'] / marks_data['max']) * 100, 2)
+                    student_percentages.append(student_pct)
+                    if student_pct >= 80:
+                        students_passing += 1
+            
+            # Calculate OSCE-level metrics (student-centric with total marks)
+            avg_score = round(sum(student_percentages) / len(student_percentages), 2) if student_percentages else 0
+            pass_rate = round((students_passing / len(student_percentages) * 100), 2) if student_percentages else 0
             
             osce_timeline.append({
                 'osce_level': osce_level,
+                'batch_name': batch_name,
                 'date_conducted': date_str,
                 'num_students': len(osce_students),
                 'avg_score': avg_score,
@@ -472,11 +535,24 @@ class Command(BaseCommand):
         avg_score = round(sum(all_scores) / len(all_scores), 2) if all_scores else 0
         pass_rate = round((pass_count / len(all_scores) * 100), 2) if all_scores else 0
         
-        # Category performance
+        # Category performance (Student-Average Method with Total Marks)
+        # Calculate using total marks per student (consistent with overall_grade calculation)
         category_performance = {}
         for category in ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Pre-Procedure', 'Critical Thinking']:
-            if category in category_scores and category_scores[category]:
-                category_performance[category] = round(sum(category_scores[category]) / len(category_scores[category]), 2)
+            student_category_averages = []
+            
+            # Calculate each student's category percentage using total marks
+            for user_id, student_data in students_data.items():
+                if category in student_data['category_marks']:
+                    obtained = student_data['category_marks'][category]['obtained']
+                    max_marks = student_data['category_marks'][category]['max']
+                    if max_marks > 0:
+                        student_category_percentage = (obtained / max_marks) * 100
+                        student_category_averages.append(student_category_percentage)
+            
+            # Average all student category percentages
+            if student_category_averages:
+                category_performance[category] = round(sum(student_category_averages) / len(student_category_averages), 2)
             else:
                 category_performance[category] = None
         
@@ -486,7 +562,17 @@ class Command(BaseCommand):
             if skill_data['scores']:
                 avg_skill_score = round(sum(skill_data['scores']) / len(skill_data['scores']), 2)
                 skill_pass_rate = round((sum(1 for s in skill_data['scores'] if s >= 80) / len(skill_data['scores']) * 100), 2)
-                
+
+                # NEW: Calculate avg_score using Student-Average Method (for category drill-down)
+                # This ensures alignment with category_performance calculation
+                student_skill_averages = []
+                for student_id, marks in skill_data['student_marks'].items():
+                    if marks['max'] > 0:
+                        student_skill_pct = (marks['obtained'] / marks['max']) * 100
+                        student_skill_averages.append(student_skill_pct)
+
+                avg_skill_score_student_method = round(sum(student_skill_averages) / len(student_skill_averages), 2) if student_skill_averages else avg_skill_score
+
                 # Station breakdown
                 station_breakdown = {}
                 for station, scores in skill_data['station_scores'].items():
@@ -495,13 +581,14 @@ class Command(BaseCommand):
                             'avg_score': round(sum(scores) / len(scores), 2),
                             'attempts': len(scores)
                         }
-                
+
                 skills_performance[skill_id] = {
                     'skill_name': skill_data['skill_name'],
                     'category': skill_data['category'],
                     'attempts': skill_data['attempts'],
                     'students_attempted': len(skill_data['students']),
-                    'avg_score': avg_skill_score,
+                    'avg_score': avg_skill_score,  # Exam-average (for skills table)
+                    'avg_score_student_method': avg_skill_score_student_method,  # NEW: Student-average (for category drill-down)
                     'pass_rate': skill_pass_rate,
                     'highest_score': max(skill_data['scores']),
                     'lowest_score': min(skill_data['scores']),
@@ -516,13 +603,19 @@ class Command(BaseCommand):
                 # Skip students with no completed exams
                 continue
             
-            overall_avg = round(sum(student_data['all_scores']) / len(student_data['all_scores']), 2) if student_data['all_scores'] else 0
+            # Calculate overall average from total marks (not averaging percentages)
+            overall_avg = round((student_data['total_marks_obtained'] / student_data['total_max_marks']) * 100, 2) if student_data['total_max_marks'] > 0 else 0
             overall_grade = self._get_grade(overall_avg)
             
-            # Get best and worst OSCE
-            classroom_avg = round(sum(student_data['scores_by_type']['Classroom']) / len(student_data['scores_by_type']['Classroom']), 2) if student_data['scores_by_type']['Classroom'] else None
-            mock_avg = round(sum(student_data['scores_by_type']['Mock']) / len(student_data['scores_by_type']['Mock']), 2) if student_data['scores_by_type']['Mock'] else None
-            final_avg = round(sum(student_data['scores_by_type']['Final']) / len(student_data['scores_by_type']['Final']), 2) if student_data['scores_by_type']['Final'] else None
+            # Get type averages from total marks (not averaging percentages)
+            classroom_marks = student_data['marks_by_type']['Classroom']
+            classroom_avg = round((classroom_marks['obtained'] / classroom_marks['max']) * 100, 2) if classroom_marks['max'] > 0 else None
+
+            mock_marks = student_data['marks_by_type']['Mock']
+            mock_avg = round((mock_marks['obtained'] / mock_marks['max']) * 100, 2) if mock_marks['max'] > 0 else None
+
+            final_marks = student_data['marks_by_type']['Final']
+            final_avg = round((final_marks['obtained'] / final_marks['max']) * 100, 2) if final_marks['max'] > 0 else None
             
             # Determine best performing OSCE
             osce_avgs = {}
@@ -562,7 +655,9 @@ class Command(BaseCommand):
                 'best_performing_osce': best_osce,
                 'worst_performing_osce': worst_osce,
                 'category_breakdown': category_breakdown,
-                'exam_attempts': student_data['exam_attempts']
+                'exam_attempts': student_data['exam_attempts'],
+                'total_marks_obtained': student_data['total_marks_obtained'],
+                'total_max_marks': student_data['total_max_marks']
             })
         
         # Sort student report by overall average (descending)
