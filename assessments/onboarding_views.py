@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Q
-from .models import Group, Institution, Hospital, Learner, Assessor, SkillathonEvent, EbekUser
+from .models import Group, Institution, Hospital, Learner, Assessor, SkillathonEvent, EbekUser, SchedularObject
 from .onboarding_forms import (
     GroupForm, InstitutionForm, HospitalForm, LearnerForm,
     AssessorForm, SkillathonEventForm, BulkLearnerUploadForm
@@ -823,14 +823,17 @@ def learner_create(request):
                 learner.learner_user = user
             learner.save()
 
-            # Create test and exam assignments if skillathon is assigned (run in background)
-            if learner.skillathon_event:
-                thread = threading.Thread(
-                    target=create_test_and_exam_assignments,
-                    args=(learner, learner.skillathon_event)
+            # Create scheduler object for exam assignments if skillathon is assigned
+            if learner.skillathon_event and learner.learner_user:
+                import json
+                scheduler_data = {
+                    "learner_ids": [learner.learner_user.id],
+                    "skillathon_name": learner.skillathon_event.name
+                }
+                SchedularObject.objects.create(
+                    data=json.dumps(scheduler_data),
+                    is_completed=False
                 )
-                thread.daemon = True
-                thread.start()
 
             messages.success(request, 'Learner created successfully.')
             return HttpResponse('OK')
