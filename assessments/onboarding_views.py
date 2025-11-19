@@ -928,14 +928,17 @@ def learner_edit(request, pk):
             learner = form.save(commit=False)
             learner.save()
 
-            # Create test and exam assignments if skillathon is assigned (run in background)
-            if learner.skillathon_event:
-                thread = threading.Thread(
-                    target=create_test_and_exam_assignments,
-                    args=(learner, learner.skillathon_event)
+            # Create scheduler object for exam assignments if skillathon is assigned
+            if learner.skillathon_event and learner.learner_user:
+                import json
+                scheduler_data = {
+                    "learner_ids": [learner.learner_user.id],
+                    "skillathon_name": learner.skillathon_event.name
+                }
+                SchedularObject.objects.create(
+                    data=json.dumps(scheduler_data),
+                    is_completed=False
                 )
-                thread.daemon = True
-                thread.start()
 
             messages.success(request, 'Learner updated successfully.')
             return HttpResponse('OK')
