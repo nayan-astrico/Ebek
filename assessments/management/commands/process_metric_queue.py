@@ -59,7 +59,7 @@ class Command(BaseCommand):
         cutoff_time = datetime.now() - timedelta(minutes=300)
         
         queue_ref = db.collection('MetricUpdateQueue')\
-            .where('processed', '==', False)\
+            .where('processed', '==', True)\
             .limit(1000)
         
         queue_items = list(queue_ref.stream())
@@ -373,6 +373,24 @@ class Command(BaseCommand):
                                 students_data[user_id]['category_marks'][procedure_category]['obtained'] += total_score
                                 students_data[user_id]['category_marks'][procedure_category]['max'] += max_marks
                             
+                            # Parse checklist summary from examMetaData
+                            checklist_summary = self._parse_checklist_summary(exam_metadata)
+
+                            # Get notes/comments from exam assignment
+                            notes = exam_data.get('notes', '')
+
+                            # Get assessor names from batchassignment assessorlist
+                            assessor_names = []
+                            for assessor_ref in ba_data.get('assessorlist', []):
+                                try:
+                                    assessor_doc = assessor_ref.get()
+                                    if assessor_doc.exists:
+                                        assessor_data = assessor_doc.to_dict()
+                                        assessor_name = assessor_data.get('name', 'Unknown')
+                                        assessor_names.append(assessor_name)
+                                except:
+                                    pass
+
                             # Track per-exam breakdown for the student
                             students_data[user_id]['exam_attempts'].append({
                                 'procedure_id': procedure_id,
@@ -383,7 +401,12 @@ class Command(BaseCommand):
                                 'marks_obtained': total_score,
                                 'max_marks': max_marks,
                                 'test_date': test_date.isoformat() if test_date else None,
-                                'pass': percentage >= 80
+                                'pass': percentage >= 80,
+                                'station_scores': station_scores,  # Station-by-station breakdown
+                                'checklist_summary': checklist_summary,  # Detailed checklist statistics
+                                'notes': notes,  # Examiner notes/comments
+                                'assessor_names': assessor_names,  # List of assessor names
+                                'exam_assignment_id': exam_doc.id  # Reference to exam assignment
                             })
                             
                             # Track by skill
@@ -529,11 +552,22 @@ class Command(BaseCommand):
         # ============================================
         # PHASE 4: COMPUTE AGGREGATIONS
         # ============================================
-        
-        # Overall metrics
-        pass_count = sum(1 for s in all_scores if s >= 80)
-        avg_score = round(sum(all_scores) / len(all_scores), 2) if all_scores else 0
-        pass_rate = round((pass_count / len(all_scores) * 100), 2) if all_scores else 0
+
+        # Overall metrics - Calculate from STUDENT overall grades (not exam-wise)
+        # This ensures consistency with grade_distribution and category_performance
+        student_overall_percentages = []
+        for user_id, student_data in students_data.items():
+            if student_data['total_max_marks'] > 0:
+                # Calculate this student's overall percentage from total marks
+                student_overall_pct = round((student_data['total_marks_obtained'] / student_data['total_max_marks']) * 100, 2)
+                student_overall_percentages.append(student_overall_pct)
+
+        # Average all student overall percentages
+        avg_score = round(sum(student_overall_percentages) / len(student_overall_percentages), 2) if student_overall_percentages else 0
+
+        # Calculate pass rate from student overall percentages (students with >= 80% overall)
+        pass_count = sum(1 for s in student_overall_percentages if s >= 80)
+        pass_rate = round((pass_count / len(student_overall_percentages) * 100), 2) if student_overall_percentages else 0
         
         # Category performance (Student-Average Method with Total Marks)
         # Calculate using total marks per student (consistent with overall_grade calculation)
@@ -662,7 +696,130 @@ class Command(BaseCommand):
         
         # Sort student report by overall average (descending)
         student_batch_report.sort(key=lambda x: x['overall_avg'], reverse=True)
-        
+
+        # ============================================
+        # PHASE 4B: PRE-COMPUTE OSCE TYPE BREAKDOWN
+        # ============================================
+        # Calculate separate metrics for each OSCE type (Classroom, Mock, Final)
+        # This allows the API to return filtered metrics without recalculating
+
+        osce_type_breakdown = {}
+        for osce_type in ['Classroom', 'Mock', 'Final']:
+            type_student_overall_percentages = []
+            type_completed_students = set()
+            type_grade_dist = Counter()
+            type_category_scores = defaultdict(list)
+            type_skills_perf = {}
+            type_osce_timeline = []
+            type_student_batch_report = []
+
+            # Collect data for this OSCE type only
+            for user_id, student_data in students_data.items():
+                # Check if student has this exam type
+                type_marks = student_data['marks_by_type'].get(osce_type, {})
+                if type_marks and type_marks.get('max', 0) > 0:
+                    type_completed_students.add(user_id)
+                    # Calculate this student's percentage for this OSCE type
+                    type_student_pct = round((type_marks['obtained'] / type_marks['max']) * 100, 2)
+                    type_student_overall_percentages.append(type_student_pct)
+                    type_grade_dist[self._get_grade(type_student_pct)] += 1
+
+            # Calculate category performance for this OSCE type
+            for user_id, student_data in students_data.items():
+                type_marks = student_data['marks_by_type'].get(osce_type, {})
+                if type_marks and type_marks.get('max', 0) > 0:
+                    # Get category scores for exams of this type
+                    for exam in student_data['exam_attempts']:
+                        if exam.get('exam_type') == osce_type:
+                            category = exam.get('category')
+                            if category:
+                                type_category_scores[category].append(exam.get('score', 0))
+
+            # Calculate category performance
+            type_category_performance = {}
+            for category in ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Pre-Procedure', 'Critical Thinking']:
+                if category in type_category_scores and type_category_scores[category]:
+                    type_category_performance[category] = round(sum(type_category_scores[category]) / len(type_category_scores[category]), 2)
+                else:
+                    type_category_performance[category] = None
+
+            # Filter skills for this OSCE type
+            for skill_id, skill_data in skills_data.items():
+                if osce_type in skill_data['osce_types'] and skill_data['scores']:
+                    avg_score = round(sum(skill_data['scores']) / len(skill_data['scores']), 2)
+                    pass_rate = round((sum(1 for s in skill_data['scores'] if s >= 80) / len(skill_data['scores']) * 100), 2)
+                    type_skills_perf[skill_id] = {
+                        'skill_name': skill_data['skill_name'],
+                        'category': skill_data['category'],
+                        'attempts': skill_data['attempts'],
+                        'students_attempted': len(skill_data['students']),
+                        'avg_score': avg_score,
+                        'pass_rate': pass_rate,
+                        'highest_score': max(skill_data['scores']),
+                        'lowest_score': min(skill_data['scores']),
+                        'osce_types': [osce_type]
+                    }
+
+            # Filter OSCE timeline for this type
+            for osce in osce_timeline:
+                if osce.get('osce_level') == osce_type:
+                    type_osce_timeline.append(osce)
+
+            # Build student batch report for this OSCE type
+            for user_id, student_data in students_data.items():
+                type_marks = student_data['marks_by_type'].get(osce_type, {})
+                if type_marks and type_marks.get('max', 0) > 0:
+                    type_overall_avg = round((type_marks['obtained'] / type_marks['max']) * 100, 2)
+                    type_overall_grade = self._get_grade(type_overall_avg)
+
+                    # Get category breakdown for this type
+                    type_cat_breakdown = {}
+                    for exam in student_data['exam_attempts']:
+                        if exam.get('exam_type') == osce_type:
+                            category = exam.get('category')
+                            if category not in type_cat_breakdown:
+                                type_cat_breakdown[category] = []
+                            type_cat_breakdown[category].append(exam.get('score', 0))
+
+                    type_category_breakdown = {}
+                    for category, scores in type_cat_breakdown.items():
+                        if scores:
+                            type_category_breakdown[category] = {
+                                'attempts': len(scores),
+                                'avg_score': round(sum(scores) / len(scores), 2)
+                            }
+
+                    type_student_batch_report.append({
+                        'user_id': user_id,
+                        'name': student_data['name'],
+                        'overall_avg': type_overall_avg,
+                        'overall_grade': type_overall_grade,
+                        'total_marks_obtained': type_marks['obtained'],
+                        'total_max_marks': type_marks['max'],
+                        'category_breakdown': type_category_breakdown,
+                        'exam_attempts': [e for e in student_data['exam_attempts'] if e.get('exam_type') == osce_type]
+                    })
+
+            # Calculate metrics for this OSCE type
+            type_avg_score = round(sum(type_student_overall_percentages) / len(type_student_overall_percentages), 2) if type_student_overall_percentages else 0
+            type_pass_count = sum(1 for s in type_student_overall_percentages if s >= 80)
+            type_pass_rate = round((type_pass_count / len(type_student_overall_percentages) * 100), 2) if type_student_overall_percentages else 0
+
+            # Store OSCE type breakdown
+            osce_type_breakdown[osce_type] = {
+                'total_students': len(type_student_overall_percentages),
+                'students_assessed': len(type_completed_students),
+                'avg_score': type_avg_score,
+                'pass_rate': type_pass_rate,
+                'grade_letter': self._get_grade(type_avg_score),
+                'grade_distribution': dict(type_grade_dist),
+                'category_performance': type_category_performance,
+                'skills_performance': type_skills_perf,
+                'osce_activity_timeline': type_osce_timeline,
+                'student_batch_report': type_student_batch_report,
+                'raw_scores': type_student_overall_percentages
+            }
+
         # ============================================
         # PHASE 5: STORE IN FIRESTORE
         # ============================================
@@ -684,6 +841,7 @@ class Command(BaseCommand):
             'category_performance': category_performance,
             'skills_performance': skills_performance,
             'grade_distribution': dict(grade_distribution),
+            'osce_type_breakdown': osce_type_breakdown,  # NEW: Pre-computed breakdown by OSCE type
             'osce_activity_timeline': osce_timeline,
             'student_batch_report': student_batch_report,
             'latest_osce': osce_timeline[0] if osce_timeline else None,
@@ -694,7 +852,7 @@ class Command(BaseCommand):
         
         doc_id = f"{unit_name}_{year}_{semester}"
         db.collection('SemesterMetrics').document(doc_id).set(semester_metrics)
-        
+
         self.stdout.write(f"    ✅ FINAL METRICS:")
         self.stdout.write(f"       Total Students (from Batches): {len(enrolled_student_ids)}")
         self.stdout.write(f"       Students Assessed (took exams): {len(students_data)}")
@@ -702,7 +860,7 @@ class Command(BaseCommand):
         self.stdout.write(f"       Skills Evaluated: {len(evaluated_procedures)}")
         self.stdout.write(f"       Avg Score: {avg_score}%")
         self.stdout.write(f"       Pass Rate: {pass_rate}%")
-        
+
         # Update unit metrics (works for both institution and hospital)
         self._update_unit_metrics(unit_name, unit_type, year)
 
@@ -710,44 +868,82 @@ class Command(BaseCommand):
         """
         Aggregate all semester metrics into unit-level metrics
         Works for both institutions and hospitals
+
+        IMPORTANT: enrolled students count uses same logic as SemesterMetrics:
+        - Query Batches for unit/year (no semester filter)
+        - Count unique learner IDs
         """
-        
+
+        # Get all enrolled students for this unit/year (same logic as SemesterMetrics, but without semester filter)
+        enrolled_student_ids = set()
+        batches_query = db.collection('Batches')\
+            .where('yearOfBatch', '==', year)
+
+        for batch_doc in batches_query.stream():
+            batch_data = batch_doc.to_dict()
+            batch_unit_name = batch_data.get('unit_name')
+
+            # Fall back to extracting from unit reference if unit_name not present
+            if not batch_unit_name:
+                unit_ref = batch_data.get('unit')
+                if unit_ref:
+                    try:
+                        unit_doc = unit_ref.get()
+                        if unit_doc.exists:
+                            unit_doc_data = unit_doc.to_dict()
+                            batch_unit_name = (
+                                unit_doc_data.get('instituteName') or
+                                unit_doc_data.get('hospitalName') or
+                                unit_doc_data.get('name') or
+                                ''
+                            )
+                    except:
+                        pass
+
+            # Only count learners from batches belonging to this unit
+            if batch_unit_name == unit_name:
+                for learner_ref in batch_data.get('learners', []):
+                    if learner_ref:
+                        learner_id = learner_ref.id if hasattr(learner_ref, 'id') else str(learner_ref).split('/')[-1]
+                        enrolled_student_ids.add(learner_id)
+
         semester_docs = db.collection('SemesterMetrics')\
             .where('unit_name', '==', unit_name)\
             .where('year', '==', year)\
             .stream()
-        
-        all_scores = []
+
+        # Student-level aggregation (same as METRICS_CALCULATION_GUIDE.md)
+        # Collect each student's overall percentage, then average across all students
+        student_overall_percentages = []
         total_osces = 0
-        all_students_enrolled = set()
-        all_students_assessed = set()
-        all_skills_evaluated = set()
         assessed_student_ids = set()
+        all_skills_evaluated = set()
         all_category_scores = defaultdict(list)
         semester_breakdown = {}
         total_grade_dist = Counter()
-        
+
         for sem_doc in semester_docs:
             sem_data = sem_doc.to_dict()
             semester_num = sem_data.get('semester')
-            
-            all_scores.extend(sem_data.get('raw_scores', []))
+
+            # Collect student percentages from this semester
+            student_overall_percentages.extend(sem_data.get('raw_scores', []))
             total_osces += sem_data.get('osces_conducted', 0)
-            
+
             # Track students assessed and skills evaluated from each semester
             # Note: We track unique skills across all semesters
             all_skills_evaluated.update(sem_data.get('skills_performance', {}).keys())
             assessed_student_ids.update(sem_data.get('assessed_student_ids', []))
-            
-            # Aggregate categories
+
+            # Aggregate categories - collect scores and average later
             for category, score in sem_data.get('category_performance', {}).items():
                 if score is not None:
                     all_category_scores[category].append(score)
-            
+
             # Aggregate grade distribution
             for grade, count in sem_data.get('grade_distribution', {}).items():
                 total_grade_dist[grade] += count
-            
+
             # Store semester breakdown
             semester_breakdown[semester_num] = {
                 'total_students': sem_data.get('total_students', 0),
@@ -757,38 +953,95 @@ class Command(BaseCommand):
                 'osces_conducted': sem_data.get('osces_conducted', 0),
                 'skills_evaluated': sem_data.get('skills_evaluated', 0)
             }
-        
-        # Compute unit-level aggregations
+
+        # Compute unit-level aggregations using STUDENT-LEVEL AVERAGING
+        # Average category scores across all students in all semesters
         category_performance = {}
         for category, scores in all_category_scores.items():
             category_performance[category] = round(sum(scores) / len(scores), 2) if scores else None
-        
-        pass_count = sum(1 for s in all_scores if s >= 80)
-        
+
+        # Calculate average score from student percentages (TOTAL MARKS METHOD per METRICS_CALCULATION_GUIDE.md)
+        avg_score = round(sum(student_overall_percentages) / len(student_overall_percentages), 2) if student_overall_percentages else 0
+        pass_count = sum(1 for s in student_overall_percentages if s >= 80)
+        pass_rate = round((pass_count / len(student_overall_percentages) * 100), 2) if student_overall_percentages else 0
+
         # Aggregate students_assessed: count unique student IDs who attempted at least one OSCE
         total_students_assessed = len(assessed_student_ids) if assessed_student_ids else sum(
             s.get('students_assessed', 0) for s in semester_breakdown.values()
         )
-        
+
         unit_metrics = {
             'unit_name': unit_name,
             'unit_type': unit_type,  # 'institute' or 'hospital'
             'year': year,
-            'total_students': sum(s.get('total_students', 0) for s in semester_breakdown.values()),
+            'total_students': len(enrolled_student_ids),  # Unique learners from Batches (same logic as SemesterMetrics)
             'students_assessed': total_students_assessed,  # Total students who took at least 1 OSCE
             'skills_evaluated': len(all_skills_evaluated),  # Unique skills across all semesters
             'total_osces': total_osces,
-            'avg_score': round(sum(all_scores) / len(all_scores), 2) if all_scores else 0,
-            'pass_rate': round((pass_count / len(all_scores) * 100), 2) if all_scores else 0,
+            'avg_score': avg_score,  # Student-level average of overall percentages
+            'pass_rate': pass_rate,  # Pass rate from student percentages
+            'grade_letter': self._get_grade(avg_score),  # Grade based on avg_score
             'category_performance': category_performance,
             'semester_breakdown': semester_breakdown,
             'grade_distribution': dict(total_grade_dist),
+            'raw_scores': student_overall_percentages,  # Store raw student percentages
             'last_updated': firestore.SERVER_TIMESTAMP
         }
         
         doc_id = f"{unit_name}_{year}"
         # Store in unified collection (works for both institutions and hospitals)
         db.collection('UnitMetrics').document(doc_id).set(unit_metrics)
+
+
+    def _parse_checklist_summary(self, exam_metadata):
+        """
+        Parse examMetaData to compute checklist summary statistics
+        Returns dict with total_steps, steps_completed, critical_steps, etc.
+        """
+        total_steps = 0
+        steps_completed = 0
+        critical_steps_total = 0
+        critical_steps_missed = 0
+        missed_critical_steps_list = []
+
+        for section in exam_metadata:
+            for question in section.get('section_questions', []):
+                total_steps += 1
+
+                # Check if step was completed (has marks_obtained > 0 or answer_scored > 0)
+                marks_obtained = question.get('marks_obtained') or question.get('answer_scored', 0)
+                if marks_obtained > 0:
+                    steps_completed += 1
+
+                # Check if critical step
+                if question.get('critical', False):
+                    critical_steps_total += 1
+                    if marks_obtained == 0:
+                        critical_steps_missed += 1
+                        missed_critical_steps_list.append(question.get('question', 'Unknown step'))
+
+                # Process sub-section questions if present
+                if question.get('sub_section_questions_present', False):
+                    for sub_q in question.get('sub_section_questions', []):
+                        total_steps += 1
+                        sub_marks = sub_q.get('marks_obtained') or sub_q.get('answer_scored', 0)
+                        if sub_marks > 0:
+                            steps_completed += 1
+
+                        if sub_q.get('critical', False):
+                            critical_steps_total += 1
+                            if sub_marks == 0:
+                                critical_steps_missed += 1
+                                missed_critical_steps_list.append(sub_q.get('question', 'Unknown step'))
+
+        return {
+            'total_steps': total_steps,
+            'steps_completed': steps_completed,
+            'steps_missed': total_steps - steps_completed,
+            'critical_steps_total': critical_steps_total,
+            'critical_steps_missed': critical_steps_missed,
+            'missed_critical_steps_list': missed_critical_steps_list
+        }
 
     def _get_grade(self, percentage):
         """Convert percentage to grade letter"""

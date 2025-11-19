@@ -900,6 +900,226 @@
         grid-template-columns: 1fr !important;
         gap: 15px;
     }
+
+    /* Sliding Modal Styles */
+    .procedure-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+        animation: fadeIn 0.3s ease;
+    }
+
+    .procedure-modal-slider {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 600px;
+        max-width: 90vw;
+        background: white;
+        box-shadow: 2px 0 10px rgba(0,0,0,0.3);
+        animation: slideInFromLeft 0.3s ease;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+    }
+
+    @keyframes slideInFromLeft {
+        from { transform: translateX(-100%); }
+        to { transform: translateX(0); }
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    .modal-header-custom {
+        padding: 20px;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        background: white;
+        z-index: 10;
+    }
+
+    .modal-header-custom h3 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+        color: #1a202c;
+    }
+
+    .modal-close-btn {
+        background: none;
+        border: none;
+        font-size: 32px;
+        cursor: pointer;
+        color: #6b7280;
+        line-height: 1;
+        padding: 0;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-close-btn:hover {
+        color: #1a202c;
+    }
+
+    .modal-body-custom {
+        padding: 20px;
+        flex: 1;
+    }
+
+    .aggregated-score-card {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 24px;
+        text-align: center;
+    }
+
+    .aggregated-score-card h4 {
+        margin: 0 0 16px 0;
+        color: #374151;
+        font-size: 14px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .score-display {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .score-number {
+        font-size: 36px;
+        font-weight: bold;
+        color: #1a202c;
+    }
+
+    .attempts-list h4 {
+        margin: 0 0 16px 0;
+        color: #374151;
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    .attempt-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        overflow: hidden;
+    }
+
+    .attempt-header {
+        padding: 16px;
+        background: #f9fafb;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: background-color 0.2s;
+    }
+
+    .attempt-header:hover {
+        background: #f3f4f6;
+    }
+
+    .attempt-header strong {
+        display: block;
+        margin-bottom: 4px;
+        color: #1a202c;
+        font-size: 14px;
+    }
+
+    .attempt-header-info {
+        color: #6b7280;
+        font-size: 13px;
+        display: block;
+    }
+
+    .attempt-header-score {
+        color: #1a202c;
+        font-weight: 600;
+    }
+
+    .attempt-details {
+        padding: 20px;
+        border-top: 1px solid #e5e7eb;
+        display: none;
+        background: white;
+    }
+
+    .attempt-details.expanded {
+        display: block;
+    }
+
+    .detail-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+
+    .detail-table tr {
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .detail-table tr:last-child {
+        border-bottom: none;
+    }
+
+    .detail-table td {
+        padding: 12px 8px;
+    }
+
+    .detail-table td:first-child {
+        font-weight: 600;
+        color: #374151;
+        width: 40%;
+        vertical-align: top;
+    }
+
+    .detail-table td:last-child {
+        color: #1a202c;
+        word-break: break-word;
+    }
+
+    .missed-steps-list {
+        list-style: decimal;
+        padding-left: 20px;
+        margin: 0;
+    }
+
+    .missed-steps-list li {
+        margin-bottom: 6px;
+        color: #1a202c;
+        font-style: italic;
+    }
+
+    .procedure-cell-hover {
+        cursor: pointer;
+        color: #2563eb;
+    }
+
+    .procedure-cell-hover:hover {
+        background-color: #eff6ff;
+        text-decoration: underline;
+    }
 </style>
 
 <div class="metrics-dashboard">
@@ -1378,8 +1598,33 @@ async function applySemesterFilters() {
 
         if (data.success && data.count > 0) {
             if (data.count === 1) {
-                semesterMetricsData = data.documents[0].data;
-                
+                let dashboardData = data.documents[0].data;
+
+                // If OSCE level filter is applied, extract data from osce_type_breakdown
+                if (osceLevel && osceLevel !== 'All') {
+                    const osce_type_breakdown = dashboardData.osce_type_breakdown || {};
+                    if (osce_type_breakdown[osceLevel]) {
+                        const typeData = osce_type_breakdown[osceLevel];
+                        // Replace dashboard data with OSCE type specific data
+                        dashboardData = {
+                            ...dashboardData,
+                            total_students: typeData.total_students,
+                            students_assessed: typeData.students_assessed,
+                            avg_score: typeData.avg_score,
+                            pass_rate: typeData.pass_rate,
+                            grade_letter: typeData.grade_letter,
+                            grade_distribution: typeData.grade_distribution,
+                            category_performance: typeData.category_performance,
+                            skills_performance: typeData.skills_performance,
+                            osce_activity_timeline: typeData.osce_activity_timeline,
+                            student_batch_report: typeData.student_batch_report,
+                            raw_scores: typeData.raw_scores
+                        };
+                    }
+                }
+
+                semesterMetricsData = dashboardData;
+
                 // Pass filter state to control what sections are displayed
                 const filterState = {
                     semester: semester && semester !== '',
@@ -1387,7 +1632,7 @@ async function applySemesterFilters() {
                     skill: skill && skill !== '',
                     studentSearch: studentSearch && studentSearch !== ''
                 };
-                
+
                 renderSemesterDashboard(semesterMetricsData, filterState);
             } else {
                 renderMultipleSemesterDocuments(data.documents);
@@ -1538,7 +1783,30 @@ function renderSemesterDashboard(data, filterState = {}) {
                 <p class="empty-subtitle">Select Semester, OSCE Level, Skill/Procedure, or search for a student to see OSCE timeline, skills performance, and student reports</p>
             </div>
         ` : `
-            <!-- OSCE Timeline (Level 3) -->
+            <!-- Skills Analysis Table (Level 3) -->
+            <div class="chart-section">
+                <h3 class="section-title">Skills Analysis</h3>
+                <input type="text" id="skillsAnalysisSearch" class="search-box" placeholder="Search by skill name..." onkeyup="filterSkillsAnalysis()">
+                <div style="overflow-x: auto;">
+                    <table class="data-table" id="skillsAnalysisTable">
+                        <thead>
+                            <tr>
+                                <th>Skill Name</th>
+                                <th>Category</th>
+                                <th>OSCE Types</th>
+                                <th>Students Attempted</th>
+                                <th style="cursor: pointer;" onclick="sortSkillsTable('score')">Average Score <span id="scoreSort"></span></th>
+                                <th style="cursor: pointer;" onclick="sortSkillsTable('grade')">Grade <span id="gradeSort"></span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${renderSkillsAnalysisTable(data.skills_performance || {})}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- OSCE Timeline (Level 4) -->
             <div class="chart-section">
                 <h3 class="section-title">OSCE Activity Timeline</h3>
                 <div style="overflow-x: auto;">
@@ -1560,12 +1828,6 @@ function renderSemesterDashboard(data, filterState = {}) {
                 </div>
             </div>
 
-            <!-- Skills Performance (Level 4) -->
-            <div class="chart-section">
-                <h3 class="section-title">Skills Performance</h3>
-                ${renderSkillsPerformance(data.skills_performance || {})}
-            </div>
-
             <!-- Student Batch Report (Level 5) -->
             <div class="chart-section">
                 <h3 class="section-title">Student Batch Report</h3>
@@ -1574,19 +1836,35 @@ function renderSemesterDashboard(data, filterState = {}) {
                     <table class="data-table" id="studentTable">
                         <thead>
                             <tr>
-                                <th>Name</th>
-                                <th>Overall</th>
-                                <th>Marks</th>
-                                <th>Classroom</th>
-                                <th>Mock</th>
-                                <th>Final</th>
-                                <th>Skills</th>
-                                <th>OSCEs</th>
-                                <th>Details</th>
+                                ${(() => {
+                                    const osceLevel = filterState.osceLevel ? document.getElementById('semOsceLevelFilter').value : null;
+                                    if (osceLevel && osceLevel !== 'All') {
+                                        // Generate dynamic headers for procedure report
+                                        const procedures = extractUniqueProcedures(data.student_batch_report || [], osceLevel);
+                                        let headerHtml = '<th>Name</th>';
+                                        procedures.forEach(proc => {
+                                            headerHtml += `<th>${proc} (%)</th>`;
+                                        });
+                                        headerHtml += '<th style="cursor: pointer; text-align: center;" onclick="sortStudentTable(\'overall\')">Average (%) <span id="overallSort"></span></th>';
+                                        headerHtml += '<th style="text-align: center;">Grade</th>';
+                                        return headerHtml;
+                                    } else {
+                                        // Default headers for overall report
+                                        return `
+                                            <th>Name</th>
+                                            <th style="cursor: pointer;" onclick="sortStudentTable('overall')">Overall <span id="overallSort"></span></th>
+                                            <th>Marks</th>
+                                            <th>Classroom</th>
+                                            <th>Mock</th>
+                                            <th>Final</th>
+                                            <th>Details</th>
+                                        `;
+                                    }
+                                })()}
                             </tr>
                         </thead>
                         <tbody>
-                            ${renderStudentBatchReport(data.student_batch_report || [])}
+                            ${renderStudentBatchReport(data.student_batch_report || [], filterState.osceLevel ? document.getElementById('semOsceLevelFilter').value : null)}
                         </tbody>
                     </table>
                 </div>
@@ -1772,7 +2050,7 @@ function renderSkillGradeDistributionChart(categoryName, semesterData) {
     const counts = grades.map(g => gradeDistribution[g] || 0);
 
     new Chart(ctx, {
-        type: 'doughnut',
+        type: 'pie',
         data: {
             labels: grades,
             datasets: [{
@@ -1873,30 +2151,175 @@ function renderSkillsPerformance(skillsPerf) {
 }
 
 // Render Student Batch Report
-function renderStudentBatchReport(students) {
+// Helper: Extract unique procedures from student exam attempts
+function extractUniqueProcedures(students, osceType = null) {
+    const procedures = new Set();
+
+    students.forEach(student => {
+        if (student.exam_attempts && Array.isArray(student.exam_attempts)) {
+            student.exam_attempts.forEach(attempt => {
+                // Filter by OSCE type if specified
+                if (osceType && attempt.exam_type !== osceType) {
+                    return;
+                }
+
+                // Extract procedure name
+                if (attempt.procedure_name) {
+                    procedures.add(attempt.procedure_name);
+                }
+            });
+        }
+    });
+
+    // Return sorted array for consistent column ordering
+    return Array.from(procedures).sort();
+}
+
+// Helper: Get student's procedure scores (aggregated if multiple attempts)
+// Returns both individual procedure percentages and total marks for average calculation
+function getStudentProcedureScores(student, osceType) {
+    const procedureScores = {};
+    const procedureMarks = {}; // {procName: {obtained: X, max: Y}}
+    const procedureAttempts = {};
+
+    if (!student.exam_attempts || !Array.isArray(student.exam_attempts)) {
+        return { scores: procedureScores, marks: procedureMarks };
+    }
+
+    student.exam_attempts.forEach(attempt => {
+        if (attempt.exam_type !== osceType) {
+            return;
+        }
+
+        const procName = attempt.procedure_name;
+        if (procName) {
+            // Initialize if not exists
+            if (!procedureScores[procName]) {
+                procedureScores[procName] = 0;
+                procedureAttempts[procName] = 0;
+                procedureMarks[procName] = { obtained: 0, max: 0 };
+            }
+
+            // Aggregate marks
+            procedureMarks[procName].obtained += attempt.marks_obtained || 0;
+            procedureMarks[procName].max += attempt.max_marks || 0;
+            procedureScores[procName] += attempt.score; // Use overall exam score
+            procedureAttempts[procName] += 1;
+        }
+    });
+
+    // Calculate average percentage for each procedure (from aggregated marks)
+    Object.keys(procedureMarks).forEach(proc => {
+        const marks = procedureMarks[proc];
+        if (marks.max > 0) {
+            procedureScores[proc] = Math.round((marks.obtained / marks.max) * 100 * 100) / 100;
+        } else {
+            procedureScores[proc] = 0;
+        }
+    });
+
+    return { scores: procedureScores, marks: procedureMarks };
+}
+
+// Render procedure-by-procedure report when OSCE level is selected
+function renderStudentStationReport(students, osceType) {
+    if (!students || students.length === 0) {
+        return '<tr><td colspan="10" style="text-align: center; color: #64748b;">No student data available for ' + osceType + '</td></tr>';
+    }
+
+    // Extract unique procedures
+    const procedures = extractUniqueProcedures(students, osceType);
+
+    if (procedures.length === 0) {
+        return '<tr><td colspan="10" style="text-align: center; color: #64748b;">No procedure data available for ' + osceType + '</td></tr>';
+    }
+
+    return students.map((student, idx) => {
+        // Filter exams for this OSCE type
+        const typeExams = (student.exam_attempts || []).filter(e => e.exam_type === osceType);
+
+        if (typeExams.length === 0) {
+            return ''; // Skip students with no attempts in this OSCE type
+        }
+
+        // Get student's procedure scores and marks
+        const result = getStudentProcedureScores(student, osceType);
+        const procedureScores = result.scores;
+        const procedureMarks = result.marks;
+
+        // Calculate OSCE average using TOTAL MARKS METHOD (per METRICS_CALCULATION_GUIDE.md)
+        // osceAvg = (sum_of_all_procedure_marks_obtained / sum_of_all_procedure_max_marks) * 100
+        let totalObtained = 0;
+        let totalMax = 0;
+        Object.values(procedureMarks).forEach(marks => {
+            totalObtained += marks.obtained || 0;
+            totalMax += marks.max || 0;
+        });
+
+        const osceAvg = totalMax > 0
+            ? Math.round((totalObtained / totalMax) * 100 * 100) / 100
+            : 0;
+        const osceGrade = getGrade(osceAvg);
+
+        // Build row with procedure scores (with click handlers)
+        const procCells = procedures.map(proc => {
+            const score = procedureScores[proc];
+            const scoreDisplay = score !== undefined ? score + '%' : '-';
+
+            if (score !== undefined) {
+                // Create procedure data object with all attempt info
+                const procedureData = {
+                    aggregated_score: score,
+                    attempts: typeExams.filter(e => e.procedure_name === proc)
+                };
+
+                const procedureDataStr = JSON.stringify(procedureData)
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+
+                return `<td class="procedure-cell-hover" onclick="showProcedureDetails('${student.name || 'Unknown'}', '${proc}', ${score}, ${procedureDataStr})" style="cursor: pointer;">${scoreDisplay}</td>`;
+            }
+            return `<td>-</td>`;
+        }).join('');
+
+        return `
+            <tr class="student-row" data-index="${idx}" data-overall-grade="${osceGrade}" data-overall-avg="${osceAvg}">
+                <td><strong>${student.name || 'Unknown'}</strong></td>
+                ${procCells}
+                <td style="font-weight: 600; text-align: center;">${osceAvg}%</td>
+                <td style="font-weight: 600; text-align: center;">
+                    <span style="padding: 4px 8px; background: ${getGradeColor(osceGrade)}; color: white; border-radius: 4px;">${osceGrade}</span>
+                </td>
+            </tr>
+        `;
+    }).filter(row => row !== '').join('');
+}
+
+function renderStudentBatchReport(students, osceLevel = null) {
+    // If OSCE level is selected, render station-by-station report
+    if (osceLevel && osceLevel !== 'All') {
+        return renderStudentStationReport(students, osceLevel);
+    }
+
+    // Otherwise render the default report with Classroom/Mock/Final columns
     if (!students || students.length === 0) {
         return '<tr><td colspan="9" style="text-align: center; color: #64748b;">No student data available</td></tr>';
     }
 
     return students.map((student, idx) => `
-        <tr class="student-row" data-index="${idx}">
+        <tr class="student-row" data-index="${idx}" data-overall-grade="${student.overall_grade || '-'}" data-overall-avg="${student.overall_avg || 0}">
             <td><strong>${student.name || 'Unknown'}</strong></td>
             <td>
-                <div class="score-display">
-                    <span class="score-number">${student.overall_avg || 0}%</span>
-                    <span class="badge small-badge grade-${student.overall_grade}">${student.overall_grade || '-'}</span>
-                </div>
+                <span style="font-weight: 600; color: #1a202c;">${student.overall_grade || '-'}</span> <span style="color: #64748b;">(${student.overall_avg || 0}%)</span>
             </td>
             <td>
                 <div style="font-size: 13px; color: #1a202c;">
                     <strong>${student.total_marks_obtained || 0}</strong> / ${student.total_max_marks || 0}
                 </div>
             </td>
-            <td>${formatScore(student.classroom_score, student.classroom_grade)}</td>
-            <td>${formatScore(student.mock_score, student.mock_grade)}</td>
-            <td>${formatScore(student.final_score, student.final_grade)}</td>
-            <td>${student.skills_passed || 0} / ${student.skills_attempted || 0}</td>
-            <td>${student.total_osces || 0}</td>
+            <td>${formatScoreWithGrade(student.classroom_score, student.classroom_grade)}</td>
+            <td>${formatScoreWithGrade(student.mock_score, student.mock_grade)}</td>
+            <td>${formatScoreWithGrade(student.final_score, student.final_grade)}</td>
             <td><button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="viewStudentDetails(${idx})">View</button></td>
         </tr>
     `).join('');
@@ -1911,6 +2334,137 @@ function filterStudents() {
         const name = row.querySelector('td strong').textContent.toLowerCase();
         row.style.display = name.includes(searchTerm) ? '' : 'none';
     });
+}
+
+// Sort Student Table by Overall Grade
+function sortStudentTable(sortBy) {
+    const table = document.getElementById('studentTable');
+    const rows = Array.from(table.querySelectorAll('tbody .student-row'));
+
+    // Determine sort direction (toggle between asc and desc)
+    let isAscending = true;
+    const sortSpan = document.getElementById('overallSort');
+    if (sortSpan.textContent === ' ▲') {
+        isAscending = false;
+    }
+
+    // Sort rows
+    rows.sort((a, b) => {
+        if (sortBy === 'overall') {
+            const gradeOrder = { 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1, '-': 0 };
+            const gradeA = gradeOrder[a.getAttribute('data-overall-grade')] || 0;
+            const gradeB = gradeOrder[b.getAttribute('data-overall-grade')] || 0;
+
+            // If grades are equal, sort by percentage
+            if (gradeA === gradeB) {
+                const avgA = parseFloat(a.getAttribute('data-overall-avg'));
+                const avgB = parseFloat(b.getAttribute('data-overall-avg'));
+                return isAscending ? avgB - avgA : avgA - avgB;
+            }
+
+            return isAscending ? gradeB - gradeA : gradeA - gradeB;
+        }
+    });
+
+    // Update table body with sorted rows
+    const tbody = table.querySelector('tbody');
+    rows.forEach(row => tbody.appendChild(row));
+
+    // Update sort indicators
+    document.getElementById('overallSort').textContent = isAscending ? ' ▲' : ' ▼';
+}
+
+// Render Skills Analysis Table
+function renderSkillsAnalysisTable(skillsPerf) {
+    const skills = Object.values(skillsPerf);
+    if (skills.length === 0) {
+        return '<tr><td colspan="6" style="text-align: center; color: #64748b;">No skills data available</td></tr>';
+    }
+
+    return skills.map((skill, idx) => {
+        const osceTypes = getOSCETypesForSkill(skill);
+        const score = skill.avg_score_student_method || skill.avg_score || 0;
+        const grade = getGrade(score);
+
+        return `
+            <tr class="skill-row" data-skill-name="${skill.skill_name || 'Unknown'}" data-score="${score}" data-grade="${grade}">
+                <td><strong>${skill.skill_name || 'Unknown'}</strong></td>
+                <td>${skill.category || 'Other'}</td>
+                <td>${osceTypes}</td>
+                <td>${skill.students_attempted || 0}</td>
+                <td>
+                    <span class="score-number">${score}%</span>
+                </td>
+                <td>
+                    <span class="badge" style="padding: 8px 16px; font-weight: 600; font-size: 14px; background: ${getGradeColor(grade)}; color: white;">${grade}</span>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Get OSCE Types for a Skill
+function getOSCETypesForSkill(skill) {
+    // Check if osce_types array exists and has values
+    if (skill.osce_types && Array.isArray(skill.osce_types) && skill.osce_types.length > 0) {
+        return skill.osce_types.join(', ');
+    }
+
+    return 'N/A';
+}
+
+// Filter Skills Analysis Table
+function filterSkillsAnalysis() {
+    const searchTerm = document.getElementById('skillsAnalysisSearch').value.toLowerCase();
+    const rows = document.querySelectorAll('.skill-row');
+
+    rows.forEach(row => {
+        const skillName = row.getAttribute('data-skill-name').toLowerCase();
+        row.style.display = skillName.includes(searchTerm) ? '' : 'none';
+    });
+}
+
+// Sort Skills Table
+function sortSkillsTable(sortBy) {
+    const table = document.getElementById('skillsAnalysisTable');
+    const rows = Array.from(table.querySelectorAll('tbody .skill-row'));
+
+    // Determine sort direction (toggle between asc and desc)
+    let isAscending = true;
+    const sortSpan = document.getElementById(sortBy === 'score' ? 'scoreSort' : 'gradeSort');
+    if (sortSpan.textContent === ' ▲') {
+        isAscending = false;
+    }
+
+    // Sort rows
+    rows.sort((a, b) => {
+        let aVal, bVal;
+
+        if (sortBy === 'score') {
+            aVal = parseFloat(a.getAttribute('data-score'));
+            bVal = parseFloat(b.getAttribute('data-score'));
+        } else if (sortBy === 'grade') {
+            const gradeOrder = { 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1 };
+            aVal = gradeOrder[a.getAttribute('data-grade')] || 0;
+            bVal = gradeOrder[b.getAttribute('data-grade')] || 0;
+        }
+
+        return isAscending ? bVal - aVal : aVal - bVal;
+    });
+
+    // Update table body with sorted rows
+    const tbody = table.querySelector('tbody');
+    rows.forEach(row => tbody.appendChild(row));
+
+    // Update sort indicators
+    document.getElementById('scoreSort').textContent = '';
+    document.getElementById('gradeSort').textContent = '';
+
+    if (sortBy === 'score') {
+        sortSpan.textContent = isAscending ? ' ▲' : ' ▼';
+    } else {
+        sortSpan.textContent = isAscending ? ' ▲' : ' ▼';
+    }
 }
 
 // View Student Details
@@ -2079,7 +2633,7 @@ function showCategoryDrilldown(categoryName, semesterData) {
         <div class="chart-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h3 class="section-title" style="margin: 0;">${categoryName} - Skills Analysis</h3>
-                <button class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;" onclick="closeCategoryDrilldown()">Close</button>
+                <button class="modal-close" style="padding: 0; width: 40px; height: 40px; font-size: 24px;" onclick="closeCategoryDrilldown()">&times;</button>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px;">
@@ -2459,6 +3013,17 @@ function getPassRateColor(rate) {
     return '#ef4444';
 }
 
+function getGradeColor(grade) {
+    const colors = {
+        'A': '#4CAF50',      // Green
+        'B': '#8BC34A',      // Light Green
+        'C': '#FFC107',      // Yellow
+        'D': '#FF9800',      // Orange
+        'E': '#F44336'       // Red
+    };
+    return colors[grade] || '#64748b';
+}
+
 function getProgressClass(score) {
     if (!score) return 'low';
     if (score >= 80) return 'high';
@@ -2478,6 +3043,11 @@ function getBadgeClass(osceType) {
 function formatScore(score, grade) {
     if (!score && score !== 0) return '-';
     return `<span class="badge small-badge grade-${grade}">${score}%</span>`;
+}
+
+function formatScoreWithGrade(score, grade) {
+    if (!score && score !== 0) return '-';
+    return `<span style="font-weight: 600; color: #1a202c;">${grade || '-'}</span> <span style="color: #64748b;">(${score}%)</span>`;
 }
 
 // Clear Filters
@@ -2567,5 +3137,247 @@ if (document.readyState === 'loading') {
         loadSemesterMetricsData();
     }
 }
+
+// ===== PROCEDURE DETAILS MODAL =====
+
+// Show procedure details modal
+function showProcedureDetails(studentName, procedureName, procedureScore, procedureData) {
+    const modal = document.getElementById('procedure-modal-slider');
+    const overlay = document.getElementById('procedure-modal-overlay');
+
+    if (!modal || !overlay) return;
+
+    // Set header
+    const headerTitle = document.getElementById('procedure-modal-title');
+    if (headerTitle) {
+        headerTitle.textContent = procedureName;
+    }
+
+    const headerSubtitle = document.getElementById('procedure-modal-subtitle');
+    if (headerSubtitle) {
+        headerSubtitle.textContent = `Student: ${studentName}`;
+    }
+
+    // Clear and populate attempts list
+    const attemptsList = document.getElementById('procedure-modal-attempts');
+    if (attemptsList && procedureData && procedureData.attempts) {
+        attemptsList.innerHTML = '';
+
+        // Add aggregated score card first
+        const aggregatedScore = procedureData.aggregated_score || procedureScore;
+        const aggregatedScoreCard = document.createElement('div');
+        aggregatedScoreCard.className = 'attempt-card aggregated-score-card';
+        aggregatedScoreCard.innerHTML = `
+            <div class="attempt-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); cursor: default;">
+                <h3 style="margin: 0; color: white; font-size: 16px; font-weight: 600;">Aggregated Performance</h3>
+                <div style="font-size: 24px; color: white; font-weight: 700;">${aggregatedScore}%</div>
+            </div>
+        `;
+        attemptsList.appendChild(aggregatedScoreCard);
+
+        // Add individual attempts
+        if (procedureData.attempts.length > 0) {
+            procedureData.attempts.forEach((attempt, idx) => {
+                const attemptCard = renderAttemptCard(attempt, idx, studentName, procedureName);
+                attemptsList.appendChild(attemptCard);
+            });
+        } else {
+            const noData = document.createElement('div');
+            noData.style.cssText = 'padding: 20px; text-align: center; color: #64748b;';
+            noData.textContent = 'No attempt data available';
+            attemptsList.appendChild(noData);
+        }
+    }
+
+    // Show modal
+    overlay.classList.add('active');
+    modal.classList.add('active');
+}
+
+// Render individual attempt card
+function renderAttemptCard(attempt, index, studentName, procedureName) {
+    const card = document.createElement('div');
+    card.className = 'attempt-card';
+    card.id = `attempt-${index}`;
+
+    const isExpanded = index === 0; // Expand first attempt by default
+
+    // Header
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'attempt-header';
+    headerDiv.style.cursor = 'pointer';
+    headerDiv.onclick = () => toggleAttemptDetails(index);
+
+    const osceType = attempt.exam_type || 'N/A';
+    const score = attempt.score || 0;
+    const marksObtained = attempt.marks_obtained || 0;
+    const marksMax = attempt.max_marks || 0;
+
+    headerDiv.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <div>
+                <h4 style="margin: 0 0 4px 0; color: #1a202c; font-weight: 600;">${osceType} Attempt</h4>
+                <p style="margin: 0; font-size: 13px; color: #64748b;">${marksObtained}/${marksMax} marks</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="text-align: right;">
+                    <div style="font-size: 20px; font-weight: 700; color: #667eea;">${score}%</div>
+                </div>
+                <span class="attempt-expand-icon" style="transition: transform 0.3s ease; transform: ${isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'};font-size: 20px; color: #94a3b8;">▼</span>
+            </div>
+        </div>
+    `;
+
+    card.appendChild(headerDiv);
+
+    // Details section (initially hidden)
+    const detailsDiv = document.createElement('div');
+    detailsDiv.className = 'attempt-details';
+    detailsDiv.id = `attempt-details-${index}`;
+    detailsDiv.style.display = isExpanded ? 'block' : 'none';
+
+    const detailsHTML = `
+        <div style="padding: 20px; background: #f8fafc;">
+            <h5 style="margin: 0 0 16px 0; color: #1a202c; font-weight: 600; font-size: 14px;">Exam Details</h5>
+
+            <table class="detail-table">
+                <tbody>
+                    <tr>
+                        <td style="color: #64748b; font-weight: 500;">Assessors</td>
+                        <td style="color: #1a202c;">${attempt.assessor_names && attempt.assessor_names.length > 0 ? attempt.assessor_names.join(', ') : 'N/A'}</td>
+                    </tr>
+                    <tr>
+                        <td style="color: #64748b; font-weight: 500;">Marks Obtained</td>
+                        <td style="color: #1a202c; font-weight: 600;">${marksObtained}/${marksMax}</td>
+                    </tr>
+                    <tr>
+                        <td style="color: #64748b; font-weight: 500;">Percentage</td>
+                        <td style="color: #1a202c; font-weight: 600;">${score}%</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            ${attempt.checklist_summary ? `
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #cbd5e1;">
+                    <h5 style="margin: 0 0 12px 0; color: #1a202c; font-weight: 600; font-size: 14px;">Checklist Performance</h5>
+                    <table class="detail-table">
+                        <tbody>
+                            <tr>
+                                <td style="color: #64748b; font-weight: 500;">Total Steps</td>
+                                <td style="color: #1a202c;">${attempt.checklist_summary.total_steps || 0}</td>
+                            </tr>
+                            <tr>
+                                <td style="color: #64748b; font-weight: 500;">Completed Steps</td>
+                                <td style="color: #10b981; font-weight: 600;">${attempt.checklist_summary.steps_completed || 0}</td>
+                            </tr>
+                            <tr>
+                                <td style="color: #64748b; font-weight: 500;">Missed Steps</td>
+                                <td style="color: #f59e0b; font-weight: 600;">${attempt.checklist_summary.steps_missed || 0}</td>
+                            </tr>
+                            <tr>
+                                <td style="color: #64748b; font-weight: 500;">Critical Steps Total</td>
+                                <td style="color: #1a202c;">${attempt.checklist_summary.critical_steps_total || 0}</td>
+                            </tr>
+                            <tr>
+                                <td style="color: #64748b; font-weight: 500;">Missed Critical Steps</td>
+                                <td style="color: #ef4444; font-weight: 600;">${attempt.checklist_summary.critical_steps_missed || 0}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    ${attempt.checklist_summary.missed_critical_steps_list && attempt.checklist_summary.missed_critical_steps_list.length > 0 ? `
+                        <div style="margin-top: 12px; padding: 12px; background: #fee2e2; border-left: 4px solid #ef4444; border-radius: 4px;">
+                            <p style="margin: 0 0 8px 0; color: #991b1b; font-weight: 600; font-size: 13px;">Missed Critical Steps:</p>
+                            <ul style="margin: 0; padding-left: 20px; color: #7f1d1d; font-size: 13px;">
+                                ${attempt.checklist_summary.missed_critical_steps_list.map(step => `<li>${step}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                </div>
+            ` : ''}
+
+            ${attempt.notes ? `
+                <div style="margin-top: 20px; padding: 12px; background: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 4px;">
+                    <p style="margin: 0 0 8px 0; color: #1e40af; font-weight: 600; font-size: 13px;">Examiner Notes</p>
+                    <p style="margin: 0; color: #1e3a8a; font-size: 13px; line-height: 1.5;">${attempt.notes}</p>
+                </div>
+            ` : ''}
+        </div>
+    `;
+
+    detailsDiv.innerHTML = detailsHTML;
+    card.appendChild(detailsDiv);
+
+    return card;
+}
+
+// Toggle attempt details
+function toggleAttemptDetails(index) {
+    const detailsDiv = document.getElementById(`attempt-details-${index}`);
+    const attemptCard = document.getElementById(`attempt-${index}`);
+    const expandIcon = attemptCard.querySelector('.attempt-expand-icon');
+
+    if (!detailsDiv) return;
+
+    const isVisible = detailsDiv.style.display === 'block';
+    detailsDiv.style.display = isVisible ? 'none' : 'block';
+
+    if (expandIcon) {
+        expandIcon.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(180deg)';
+    }
+}
+
+// Close procedure modal
+function closeProcedureModal() {
+    const modal = document.getElementById('procedure-modal-slider');
+    const overlay = document.getElementById('procedure-modal-overlay');
+
+    if (modal) modal.classList.remove('active');
+    if (overlay) overlay.classList.remove('active');
+}
+
+// Close modal when clicking on overlay
+document.addEventListener('DOMContentLoaded', function() {
+    const overlay = document.getElementById('procedure-modal-overlay');
+    if (overlay) {
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) {
+                closeProcedureModal();
+            }
+        });
+    }
+
+    // Close button handler
+    const closeBtn = document.getElementById('procedure-modal-close');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeProcedureModal);
+    }
+});
+
+// ESC key to close procedure modal
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeProcedureModal();
+    }
+});
 </script>
+
+<!-- Procedure Details Modal HTML -->
+<div id="procedure-modal-overlay" class="procedure-modal-overlay"></div>
+<div id="procedure-modal-slider" class="procedure-modal-slider">
+    <div style="display: flex; height: 100%; flex-direction: column;">
+        <!-- Modal Header -->
+        <div style="padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+            <div>
+                <h2 id="procedure-modal-title" style="margin: 0 0 4px 0; font-size: 20px; font-weight: 700;">Procedure Name</h2>
+                <p id="procedure-modal-subtitle" style="margin: 0; font-size: 13px; opacity: 0.9;">Student: Name</p>
+            </div>
+            <button id="procedure-modal-close" style="background: none; border: none; font-size: 28px; color: white; cursor: pointer; padding: 0; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; opacity: 0.8; transition: opacity 0.2s;">×</button>
+        </div>
+
+        <!-- Modal Body (Scrollable) -->
+        <div style="flex: 1; overflow-y: auto; padding: 20px; background: white;">
+            <div id="procedure-modal-attempts"></div>
+        </div>
+    </div>
+</div>
 {% endblock %}
