@@ -18,6 +18,7 @@ urlpatterns = [
     path('api/tests/<str:test_id>/', views.get_test, name='get_test'),
     path('api/batch-assignment-summaries/<str:summary_id>/', views.get_batch_assignment_summary, name='get_batch_assignment_summary'),
     path('api/batch-assignment-summaries/<str:summary_id>/update/', views.update_batch_assignment_summary, name='update_batch_assignment_summary'),
+    path('api/batch-assignment-summaries/<str:summary_id>/delete/', views.delete_batch_assignment_summary, name='delete_batch_assignment_summary'),
     path('course-management/', views.course_management, name='course_management'),
     path('course-management/<str:course_id>/', views.course_detail, name='course_detail'),
     path('batch-management/', views.batch_management, name='batch_management'),

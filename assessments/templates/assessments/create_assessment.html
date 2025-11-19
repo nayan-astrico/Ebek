@@ -114,12 +114,16 @@
                         <div class="selection-count" id="procedureStatusSelectionCount">0 Status selected</div>
                     </div>
                     <div class="options-list" id="procedureFilterStatusOptions">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllStatuses" onchange="toggleSelectAllStatuses(this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                         <label class="option-item">
-                            <input type="checkbox" name="status" value="active" onchange="updateProcedureStatusSelectionCount()">
+                            <input type="checkbox" name="status" value="active" onchange="updateProcedureStatusSelectionCount()" class="status-checkbox">
                             <span>Active</span>
                         </label>
                         <label class="option-item">
-                            <input type="checkbox" name="status" value="inactive" onchange="updateProcedureStatusSelectionCount()">
+                            <input type="checkbox" name="status" value="inactive" onchange="updateProcedureStatusSelectionCount()" class="status-checkbox">
                             <span>Inactive</span>
                         </label>
                     </div>
@@ -131,28 +135,32 @@
                         <div class="selection-count" id="procedureCategorySelectionCount">0 Categories selected</div>
                     </div>
                     <div class="options-list" id="procedureFilterCategoryOptions">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllCategories" onchange="toggleSelectAllCategories(this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                         <label class="option-item">
-                            <input type="checkbox" name="category" value="Core Skills" onchange="updateProcedureCategorySelectionCount()">
+                            <input type="checkbox" name="category" value="Core Skills" onchange="updateProcedureCategorySelectionCount()" class="category-checkbox">
                             <span>Core Skills</span>
                         </label>
                         <label class="option-item">
-                            <input type="checkbox" name="category" value="Infection Control" onchange="updateProcedureCategorySelectionCount()">
+                            <input type="checkbox" name="category" value="Infection Control" onchange="updateProcedureCategorySelectionCount()" class="category-checkbox">
                             <span>Infection Control</span>
                         </label>
                         <label class="option-item">
-                            <input type="checkbox" name="category" value="Communication" onchange="updateProcedureCategorySelectionCount()">
+                            <input type="checkbox" name="category" value="Communication" onchange="updateProcedureCategorySelectionCount()" class="category-checkbox">
                             <span>Communication</span>
                         </label>
                         <label class="option-item">
-                            <input type="checkbox" name="category" value="Documentation" onchange="updateProcedureCategorySelectionCount()">
+                            <input type="checkbox" name="category" value="Documentation" onchange="updateProcedureCategorySelectionCount()" class="category-checkbox">
                             <span>Documentation</span>
                         </label>
                         <label class="option-item">
-                            <input type="checkbox" name="category" value="Pre-Procedure" onchange="updateProcedureCategorySelectionCount()">
+                            <input type="checkbox" name="category" value="Pre-Procedure" onchange="updateProcedureCategorySelectionCount()" class="category-checkbox">
                             <span>Pre-Procedure</span>
                         </label>
                         <label class="option-item">
-                            <input type="checkbox" name="category" value="Critical Thinking" onchange="updateProcedureCategorySelectionCount()">
+                            <input type="checkbox" name="category" value="Critical Thinking" onchange="updateProcedureCategorySelectionCount()" class="category-checkbox">
                             <span>Critical Thinking</span>
                         </label>
                     </div>
@@ -161,9 +169,9 @@
         </div>
 
         <div class="filter-actions">
-            <button type="button" class="btn btn-light" onclick="clearAllProcedureFilters()">Clear All</button>
             <button type="button" class="btn btn-light" onclick="toggleProcedureFilterPanel()">Cancel</button>
-            <button type="button" class="btn btn-primary" onclick="applyProcedureFilters()">Apply Filter</button>
+            <button type="button" class="btn btn-light" onclick="clearAllProcedureFilters()">Clear All</button>
+            <button type="button" class="btn btn-primary" onclick="applyProcedureFilters()">Apply filter</button>
         </div>
     </form>
 </div>
@@ -173,7 +181,9 @@
     <div id="viewProcedurePanel" class="side-panel">
         <div class="side-panel-header">
             <h3 id="procedureTitle">Procedure Details</h3>
-            <button class="close-btn" onclick="toggleViewProcedurePanel()">×</button>
+            <button type="button" class="btn-close" onclick="toggleViewProcedurePanel()">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
         <div id="procedureContent" class="side-panel-body"></div>
     </div>
@@ -182,7 +192,9 @@
     <div id="editProcedurePanel" class="side-panel">
         <div class="side-panel-header">
             <h3>Edit Assessment</h3>
-            <button class="close-btn" onclick="toggleEditProcedurePanel()">×</button>
+            <button type="button" class="btn-close" onclick="toggleEditProcedurePanel()">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
         <div class="side-panel-body">
             <form id="editProcedureForm">
@@ -434,6 +446,42 @@ document.addEventListener('DOMContentLoaded', () => {
         previewExcel(selectedFile);
     });
 
+    // Drag and drop functionality
+    const uploadZone = document.getElementById('uploadZone');
+
+    uploadZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        uploadZone.classList.add('dragover');
+    });
+
+    uploadZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        uploadZone.classList.remove('dragover');
+    });
+
+    uploadZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        uploadZone.classList.remove('dragover');
+
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            const file = files[0];
+            if (!file.name.endsWith('.xlsx')) {
+                alert('Please select a valid Excel file (.xlsx)');
+                return;
+            }
+            selectedFile = file;
+            // Update file input to match dropped file
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            fileInput.files = dataTransfer.files;
+            previewExcel(file);
+        }
+    });
+
     // Remove file
     window.removeFile = () => {
         selectedFile = null;
@@ -539,18 +587,47 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: formData
             });
             const data = await res.json();
-            // ✅ Close sidebar no matter what
-            const panel = document.getElementById('uploadPanel');
-            if (panel && panel.classList.contains('active')) {
-                panel.classList.remove('active');
-                document.body.style.overflow = '';
-            }
 
-            // Reset fields
-            resetUploadPanel();
-            alert(data.status === 'success' ? 'Upload successful ✅' : 'Upload failed ❌');
+            if (data.status === 'success') {
+                // ✅ Only close panel on success
+                const panel = document.getElementById('uploadPanel');
+                if (panel && panel.classList.contains('active')) {
+                    panel.classList.remove('active');
+                    document.body.style.overflow = '';
+                }
+                // Reset fields
+                resetUploadPanel();
+                alert('Upload successful ✅');
+                // Reload to show new assessment in table
+                window.location.reload();
+            } else {
+                // ❌ Keep modal open on error, show validation errors
+                const validationContainer = document.querySelector('.validation-results');
+                validationContainer.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <div>
+                            <strong>Upload Failed</strong>
+                            <p>${data.message || 'An error occurred during upload.'}</p>
+                            <p>Please correct the errors above and try uploading again.</p>
+                        </div>
+                    </div>
+                `;
+                alert(`Upload failed: ${data.message || 'Please check the errors and try again.'}`);
+            }
         } catch (err) {
-            alert('Error uploading file.');
+            // ❌ Keep modal open on network error
+            const validationContainer = document.querySelector('.validation-results');
+            validationContainer.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <div>
+                        <strong>Network Error</strong>
+                        <p>Could not connect to the server. Please try again.</p>
+                    </div>
+                </div>
+            `;
+            alert('Error uploading file. Please check your connection and try again.');
             console.error(err);
         }
     });
@@ -672,14 +749,44 @@ function switchProcedureFilter(filterType) {
 
 // ==================== STATUS FILTER ====================
 function updateProcedureStatusSelectionCount() {
-    const checkedStatuses = document.querySelectorAll('#procedureFilterStatusOptions input[type="checkbox"]:checked');
+    const checkedStatuses = document.querySelectorAll('#procedureFilterStatusOptions .status-checkbox:checked');
     document.getElementById('procedureStatusSelectionCount').textContent = `${checkedStatuses.length} Status selected`;
+
+    // Update select all checkbox state
+    const allStatuses = document.querySelectorAll('#procedureFilterStatusOptions .status-checkbox');
+    const selectAllCheckbox = document.getElementById('selectAllStatuses');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = checkedStatuses.length === allStatuses.length;
+    }
+}
+
+function toggleSelectAllStatuses(checkbox) {
+    const allCheckboxes = document.querySelectorAll('#procedureFilterStatusOptions .status-checkbox');
+    allCheckboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+    updateProcedureStatusSelectionCount();
 }
 
 // ==================== CATEGORY FILTER ====================
 function updateProcedureCategorySelectionCount() {
-    const checkedCategories = document.querySelectorAll('#procedureFilterCategoryOptions input[type="checkbox"]:checked');
+    const checkedCategories = document.querySelectorAll('#procedureFilterCategoryOptions .category-checkbox:checked');
     document.getElementById('procedureCategorySelectionCount').textContent = `${checkedCategories.length} Categories selected`;
+
+    // Update select all checkbox state
+    const allCategories = document.querySelectorAll('#procedureFilterCategoryOptions .category-checkbox');
+    const selectAllCheckbox = document.getElementById('selectAllCategories');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = checkedCategories.length === allCategories.length;
+    }
+}
+
+function toggleSelectAllCategories(checkbox) {
+    const allCheckboxes = document.querySelectorAll('#procedureFilterCategoryOptions .category-checkbox');
+    allCheckboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+    updateProcedureCategorySelectionCount();
 }
 // ==================== CLEAR FILTERS ====================
 function clearAllProcedureFilters() {
@@ -1261,7 +1368,7 @@ function renderProcedureRow(proc) {
                 <button class="btn-icon btn-danger" onclick="event.stopPropagation(); deleteProcedure('${proc.id}')" title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
-                <button class="btn-icon" onclick="event.stopPropagation(); downloadProcedure('${proc.id}')" title="Download">
+                <button class="btn-icon" style="display:none;" onclick="event.stopPropagation(); downloadProcedure('${proc.id}')" title="Download">
                     <i class="fas fa-download"></i>
                 </button>
             </div>
@@ -1977,12 +2084,16 @@ document.addEventListener('DOMContentLoaded', function() {
     border-top: 1px solid #e2e8f0;
 }
 
-.course-row {
+.course-row, .procedure-row {
     cursor: pointer;
 }
 
-.course-row:hover {
+.course-row:hover, .procedure-row:hover {
     background-color: #f7fafc;
+}
+
+.procedure-row.clickable td:first-child {
+    cursor: pointer;
 }
 
 /* Toggle Switch */
@@ -2187,6 +2298,16 @@ input:checked + .slider:before {
     gap: 8px;
     padding: 8px 0;
     cursor: pointer;
+}
+
+.option-item.select-all-item {
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 12px;
+    margin-bottom: 8px;
+}
+
+.option-item.select-all-item span {
+    color: #1a202c;
 }
 
 .option-item input[type="checkbox"] {
@@ -2582,12 +2703,12 @@ input:checked + .slider:before {
     }
 }
 
-/* Upload Panel */
-.upload-panel {
+/* Side Panel Styles */
+.side-panel {
     position: fixed;
     top: 0;
-    right: -800px;
-    width: 800px;
+    right: -600px;
+    width: 600px;
     height: 100vh;
     background: white;
     box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
@@ -2597,60 +2718,37 @@ input:checked + .slider:before {
     flex-direction: column;
 }
 
-.upload-panel.active {
+.side-panel.active {
     right: 0;
 }
 
-.upload-header {
-    padding: 24px;
+.side-panel-header {
+    padding: 20px 24px;
     border-bottom: 1px solid #e2e8f0;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #f8fafc;
 }
 
-.upload-header h3 {
+.side-panel-header h3 {
     margin: 0;
     font-size: 20px;
     font-weight: 600;
-    color: #1a202c;
-    display: flex;
-    align-items: center;
-    gap: 12px;
 }
 
-.btn-close {
-    width: 32px;
-    height: 32px;
-    border: none;
+.close {
     background: none;
-    color: #64748b;
-    border-radius: 6px;
+    border: none;
+    font-size: 24px;
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
+    color: #666;
 }
 
-.btn-close:hover {
-    background: #e2e8f0;
-    color: #1a202c;
-}
-
-.upload-content {
-    flex: 1;
+.side-panel-body {
+    padding: 20px 24px;
     overflow-y: auto;
-    padding: 24px;
-}
-
-.upload-section {
-    background: white;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    padding: 20px;
-    margin-bottom: 24px;
+    flex: 1;
+    background-color: #fafafa;
 }
 
 .section-header {
@@ -3045,7 +3143,6 @@ input:checked + .slider:before {
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 20px;
     overflow-y: auto;
 }
 
@@ -3068,7 +3165,6 @@ input:checked + .slider:before {
 
 .filter-actions {
     display: flex;
-    justify-content: space-between;
     margin-top: auto;
     padding-top: 10px;
     border-top: 1px solid #e2e8f0;

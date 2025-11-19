@@ -291,7 +291,7 @@ class ProcedureAPIView(APIView):
             # Start creating the data structure
             data = [["Procedure Name", procedure_name]]  # Procedure name row
             data.append([])  # Empty row
-            data.append(["Section", "Parameters", "Indicators", "Category"])  # Column headers
+            data.append(["Section", "Parameters", "Indicators", "Category (i.e C for Communication, K for Knowledge and D for Documentation)", "Marks", "Critical"])  # Column headers
 
             # Populate rows with exam metadata
             for section in exam_metadata:
@@ -302,6 +302,8 @@ class ProcedureAPIView(APIView):
                         question.get("question", ""),
                         "",  # Indicators will start on the same row
                         question.get("category", "") if not question.get("sub_section_questions_present", False) else "",
+                        question.get("right_marks_for_question", 0) if not question.get("sub_section_questions_present", False) else "",
+                        str(question.get("critical", False)).lower() if not question.get("sub_section_questions_present", False) else "",
                     ]
                     data.append(parameter_row)
 
@@ -314,6 +316,8 @@ class ProcedureAPIView(APIView):
                                 # Place the first indicator on the same row as the parameter
                                 data[-1][2] = indicator.get("question", "")  # Add indicator to the "Indicators" column
                                 data[-1][3] = indicator.get("category", "")  # Add category
+                                data[-1][4] = indicator.get("right_marks_for_question", 0)  # Add marks
+                                data[-1][5] = str(indicator.get("critical", False)).lower()  # Add critical
                             else:
                                 # For subsequent indicators, create a new row
                                 data.append([
@@ -321,6 +325,8 @@ class ProcedureAPIView(APIView):
                                     "",  # No Parameter
                                     indicator.get("question", ""),
                                     indicator.get("category", ""),
+                                    indicator.get("right_marks_for_question", 0),
+                                    str(indicator.get("critical", False)).lower(),
                                 ])
 
             # Convert to a DataFrame
@@ -765,7 +771,7 @@ def create_procedure_assignment_and_test(request):
                             'test_date': test_date_obj,
                             'procedure_assessor_mappings': processed_mappings,
                             'created_at': datetime.now(),
-                            'status': 'Active',
+                            'status': 'Not Completed',
                             'semester': semester,
                             'yearOfBatch': year_of_batch,
                         }
@@ -1543,6 +1549,59 @@ def delete_batch_assignment(request, ba_id):
         ba_ref.delete()
         return JsonResponse({'success': True})
     except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+def delete_batch_assignment_summary(request, summary_id):
+    """Delete a BatchAssignmentSummary and all associated BatchAssignments and ExamAssignments."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+    try:
+        summary_ref = db.collection('BatchAssignmentSummary').document(summary_id)
+        summary_doc = summary_ref.get()
+        if not summary_doc.exists:
+            return JsonResponse({'error': 'Batch assignment summary not found'}, status=404)
+
+        summary_data = summary_doc.to_dict()
+
+        # Get all BatchAssignment IDs from procedure_assessor_mappings
+        procedure_assessor_mappings = summary_data.get('procedure_assessor_mappings', [])
+
+        # Delete all associated BatchAssignments and their ExamAssignments
+        for mapping in procedure_assessor_mappings:
+            ba_id = mapping.get('batchassignment_id')
+            if ba_id:
+                try:
+                    ba_ref = db.collection('BatchAssignment').document(ba_id)
+                    ba_doc = ba_ref.get()
+                    if ba_doc.exists:
+                        ba_data = ba_doc.to_dict()
+
+                        # Delete ExamAssignments first
+                        exam_refs = ba_data.get('examassignment', []) or []
+                        for exam_ref in exam_refs:
+                            try:
+                                exam_ref.delete()
+                            except Exception:
+                                pass
+
+                        # Delete BatchAssignment
+                        ba_ref.delete()
+                except Exception as e:
+                    logger.error(f"Error deleting BatchAssignment {ba_id}: {e}")
+                    pass
+
+        # Note: We intentionally do NOT delete UnitMetrics or SemesterMetrics here.
+        # Multiple exam types (Mock, Final, etc.) for the same batch/semester share the same metrics.
+        # Deleting metrics when removing one exam type would incorrectly remove data for other exams.
+
+        # Finally delete the summary document
+        summary_ref.delete()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Error in delete_batch_assignment_summary: {str(e)}\n{error_trace}")
         return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
@@ -6185,17 +6244,32 @@ def update_procedure(request):
         # Get existing procedure
         procedure_ref = db.collection('ProcedureTable').document(procedure_id)
         procedure_doc = procedure_ref.get()
-        
+
         if not procedure_doc.exists:
             return JsonResponse({'status': 'error', 'message': 'Procedure not found'}, status=404)
-        
+
+        # Check if another procedure with the same name exists (excluding current procedure)
+        existing_procedure_data = procedure_doc.to_dict()
+        current_name = existing_procedure_data.get('procedureName', '')
+
+        # Only check for duplicates if the name is being changed
+        if procedure_name != current_name:
+            duplicate_procedures = db.collection('ProcedureTable').where('procedureName', '==', procedure_name).limit(1).stream()
+            duplicate_list = list(duplicate_procedures)
+
+            if duplicate_list:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'A procedure with the name "{procedure_name}" already exists. Please use a different name.'
+                }, status=400)
+
         # Update procedure
         update_data = {
             'procedureName': procedure_name,
             'category': category,
             'examMetaData': exam_meta_data
         }
-        
+
         procedure_ref.update(update_data)
         
         return JsonResponse({
@@ -6266,10 +6340,22 @@ def upload_excel(request):
         df_data = pd.read_excel(file_path)
         parsed_json = parse_excel_to_json(df_data, procedure_name,category)
 
+        # Check if procedure with same name already exists
+        existing_procedures = db.collection('ProcedureTable').where('procedureName', '==', parsed_json['procedure_name']).limit(1).stream()
+        existing_procedure_list = list(existing_procedures)
+
+        if existing_procedure_list:
+            # Ask user if they want to update existing procedure
+            return JsonResponse({
+                'status': 'error',
+                'message': f'A procedure with the name "{parsed_json["procedure_name"]}" already exists. Please use a different name or delete the existing procedure first.'
+            })
+
         # Upload to Firebase
         procedure_ref = db.collection('ProcedureTable').document()
         procedure_ref.set({
             "procedureName": parsed_json['procedure_name'],
+            "category": category,  # Store category at procedure level
             "examMetaData": parsed_json['exammetadata'],
             "notes": parsed_json['notes'],
             "active": True

@@ -501,7 +501,7 @@
         <div class="assign-content">
             <div class="form-group">
                 <label class="form-label">Assessment Name</label>
-                <input type="text" id="editAssessmentName" class="form-control">
+                <input type="text" id="editAssessmentName" class="form-control" readonly style="background-color: #f5f5f5; cursor: not-allowed;">
             </div>
             <div class="form-group">
                 <label class="form-label">Skillathon/Exam Type</label>
@@ -3498,11 +3498,11 @@
                 btn.textContent = 'Deleting...';
                 
                 const csrf = $('[name="csrfmiddlewaretoken"]').val();
-                const url = (testType === 'B2B') ? `/api/batch-assignments/${testId}/delete/` : `/api/tests/${testId}/delete/`;
-                $.ajax({ 
-                    url, 
-                    method: 'POST', 
-                    headers: { 'X-CSRFToken': csrf } 
+                const url = (testType === 'B2B') ? `/api/batch-assignment-summaries/${testId}/delete/` : `/api/tests/${testId}/delete/`;
+                $.ajax({
+                    url,
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrf }
                 }).done(function(){
                     $('#deleteTestModal').modal('hide');
                     window.location.reload();
@@ -3544,10 +3544,10 @@
                 const cells = row.querySelectorAll('td');
                 if (cells.length >= 8) {
                     // Extract data from table cells
-                    rowData.assessment_name = cells[1]?.querySelector('.assessment-name span')?.textContent?.trim() || '';
+                    rowData.assessment_name = cells[0]?.querySelector('.assessment-name span')?.textContent?.trim() || '';
                     rowData.skillathon = row.dataset.mode || '';
                     rowData.status = 'Not Completed'; // Default, will be updated from API if available
-                    const dateText = cells[7]?.querySelector('.date-text')?.textContent?.trim() || '';
+                    const dateText = cells[6]?.querySelector('.date-text')?.textContent?.trim() || '';
                     // Try to parse date if available
                     if (dateText && dateText !== '-') {
                         // Date format is "d M Y" (e.g., "15 Jan 2024")
@@ -3677,9 +3677,30 @@
                 const s = res.summary;
 
                 // Populate basic fields
+                // Build assessment name from available data (matching table display)
+                let assessmentName = '';
                 if (s.batch_name) {
-                    $('#editAssessmentName').val(String(s.batch_name));
+                    assessmentName = s.batch_name;
+                    if (s.testdate) {
+                        // Add date to match table format
+                        const dateObj = new Date(s.testdate);
+                        const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                        assessmentName += ` - ${dateStr}`;
+                    }
+                } else if (s.unit_name) {
+                    // Fallback: use unit name if batch name not available
+                    assessmentName = s.unit_name;
+                    if (s.testdate) {
+                        const dateObj = new Date(s.testdate);
+                        const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                        assessmentName += ` - ${dateStr}`;
+                    }
                 }
+
+                if (assessmentName) {
+                    $('#editAssessmentName').val(assessmentName);
+                }
+
                 if (s.exam_type !== undefined && s.exam_type !== null) {
                     $('#editSkillathon').val(String(s.exam_type));
                 }
@@ -3701,31 +3722,30 @@
                             const procName = String(mapping.procedure_name);
                             const baId = mapping.batchassignment_id || '';
 
-                            // Build assessor chips for this procedure
-                            let assessorChips = '';
-                            if (mapping.assessors && Array.isArray(mapping.assessors)) {
-                                mapping.assessors.forEach(assessor => {
-                                    assessorChips += `<span class="chip" data-id="${assessor.id}" style="margin: 2px;">${assessor.name}<span class="remove" onclick="removeEditAssessorFromRow(this)">&times;</span></span>`;
-                                });
-                            }
-
-                            // Create table row
-                            const row = `
+                            // Create table row with dropdown (matching create panel structure)
+                            const row = $(`
                                 <tr data-procedure-id="${procId}" data-ba-id="${baId}">
-                                    <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">
+                                    <td class="procedure-name-cell" style="padding: 12px; border-bottom: 1px solid #e2e8f0;">
                                         <strong>${procName}</strong>
                                     </td>
-                                    <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">
-                                        <div class="assessor-chips-container" style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
-                                            ${assessorChips}
-                                            <button type="button" class="btn-add-assessor" onclick="openEditAssessorDropdownForRow('${procId}')" style="padding: 4px 8px; font-size: 12px; background: #4299e1; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                                                + Add Assessor
+                                    <td class="assessor-select-cell" style="padding: 12px; border-bottom: 1px solid #e2e8f0;">
+                                        <div class="assessor-select-dropdown">
+                                            <button type="button" class="assessor-select-btn" data-procedure-id="${procId}">
+                                                <span class="assessor-select-text">Select Assessors</span>
+                                                <i class="fas fa-chevron-down" style="margin-left: 8px; font-size: 12px;"></i>
                                             </button>
+                                            <div class="assessor-select-list" data-procedure-id="${procId}">
+                                                <!-- Assessor checkboxes will be populated here -->
+                                            </div>
                                         </div>
+                                        <div class="assessor-chips-inline" data-procedure-id="${procId}"></div>
                                     </td>
                                 </tr>
-                            `;
+                            `);
                             tableBody.append(row);
+
+                            // Populate assessor dropdown and pre-select existing assessors
+                            populateEditAssessorDropdownForProcedure(procId, mapping.assessors || []);
                         }
                     });
                 }
@@ -3737,14 +3757,9 @@
           });
     }
 
-    // Helper function to remove assessor from B2B edit table row
-    function removeEditAssessorFromRow(chipElement) {
-        $(chipElement).closest('.chip').remove();
-    }
-
-    // Helper function to open assessor dropdown for a specific procedure row in edit mode
-    function openEditAssessorDropdownForRow(procedureId) {
-        // Fetch all assessors and show modal/dropdown
+    // Helper function to populate assessor dropdown for edit mode (matching create panel)
+    function populateEditAssessorDropdownForProcedure(procedureId, selectedAssessors) {
+        // Fetch all assessors
         fetch('/fetch-assessors/', {
             method: 'GET',
             headers: { 'Accept': 'application/json' }
@@ -3752,53 +3767,67 @@
         .then(r => r.json())
         .then(data => {
             const assessors = data.assessors || [];
+            const dropdown = $(`#editProcedureAssessorMappingBody tr[data-procedure-id="${procedureId}"] .assessor-select-list[data-procedure-id="${procedureId}"]`);
+            dropdown.empty();
 
-            // Get existing assessors for this row
-            const row = $(`#editProcedureAssessorMappingBody tr[data-procedure-id="${procedureId}"]`);
-            const existingIds = row.find('.chip[data-id]').map(function() {
-                return $(this).data('id').toString();
-            }).get();
+            // Create array of selected assessor IDs for easy lookup
+            const selectedIds = selectedAssessors.map(a => String(a.id));
 
-            // Build simple selection UI
-            let assessorOptions = '<div style="max-height: 300px; overflow-y: auto; padding: 10px; background: white; border: 1px solid #ccc; border-radius: 4px; position: absolute; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">';
+            // Populate dropdown with checkboxes
             assessors.forEach(assessor => {
-                if (!existingIds.includes(assessor.id.toString())) {
-                    assessorOptions += `<div style="padding: 8px; cursor: pointer; border-bottom: 1px solid #eee;" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='white'" onclick="addEditAssessorToRow('${procedureId}', '${assessor.id}', '${assessor.name.replace(/'/g, "\\'")}')">
-                        ${assessor.name}
-                    </div>`;
-                }
+                const isChecked = selectedIds.includes(String(assessor.id));
+                const checkboxHtml = `
+                    <div class="assessor-item">
+                        <input type="checkbox"
+                               id="edit-assessor-${procedureId}-${assessor.id}"
+                               value="${assessor.id}"
+                               data-assessor-id="${assessor.id}"
+                               data-assessor-name="${assessor.name}"
+                               ${isChecked ? 'checked' : ''}>
+                        <label for="edit-assessor-${procedureId}-${assessor.id}">${assessor.name}</label>
+                    </div>
+                `;
+                dropdown.append(checkboxHtml);
             });
-            assessorOptions += '</div>';
 
-            // Show dropdown next to button
-            const button = row.find('.btn-add-assessor');
-            const dropdown = $(assessorOptions);
-            dropdown.css({
-                top: button.offset().top + button.outerHeight(),
-                left: button.offset().left
+            // Attach change handler
+            dropdown.find('input[type="checkbox"]').on('change', function() {
+                updateEditAssessorSelectionForProcedure(procedureId);
             });
-            $('body').append(dropdown);
 
-            // Close on click outside
-            setTimeout(() => {
-                $(document).one('click', function() {
-                    dropdown.remove();
-                });
-            }, 100);
+            // Initial update to show selected assessors
+            updateEditAssessorSelectionForProcedure(procedureId);
         });
     }
 
-    // Helper function to add assessor to a specific procedure row in edit mode
-    function addEditAssessorToRow(procedureId, assessorId, assessorName) {
+    // Helper function to update assessor selection display (matching create panel)
+    function updateEditAssessorSelectionForProcedure(procedureId) {
         const row = $(`#editProcedureAssessorMappingBody tr[data-procedure-id="${procedureId}"]`);
-        const container = row.find('.assessor-chips-container');
-        const addButton = container.find('.btn-add-assessor');
+        const checkedBoxes = row.find(`.assessor-select-list input[type="checkbox"]:checked`);
+        const button = row.find('.assessor-select-btn .assessor-select-text');
+        const chipsContainer = row.find('.assessor-chips-inline');
 
-        const chip = `<span class="chip" data-id="${assessorId}" style="margin: 2px;">${assessorName}<span class="remove" onclick="removeEditAssessorFromRow(this)">&times;</span></span>`;
-        addButton.before(chip);
+        // Update button text
+        const count = checkedBoxes.length;
+        if (count === 0) {
+            button.text('Select Assessors');
+        } else {
+            button.text(`${count} Assessor${count > 1 ? 's' : ''} Selected`);
+        }
 
-        // Close dropdown
-        $('body > div[style*="position: absolute"]').remove();
+        // Update chips display
+        chipsContainer.empty();
+        checkedBoxes.each(function() {
+            const assessorId = $(this).data('assessor-id');
+            const assessorName = $(this).data('assessor-name');
+            const chip = $(`
+                <span class="assessor-chip-inline" data-assessor-id="${assessorId}">
+                    ${assessorName}
+                    <span class="remove">&times;</span>
+                </span>
+            `);
+            chipsContainer.append(chip);
+        });
     }
 
     function toggleEditPanel(forceOpen){
@@ -3840,9 +3869,9 @@
                 const procId = row.data('procedure-id');
                 const baId = row.data('ba-id') || null;
 
-                // Collect assessor IDs for this specific procedure
-                const assessorIds = row.find('.chip[data-id]').map(function() {
-                    return $(this).data('id').toString();
+                // Collect assessor IDs from checked checkboxes for this specific procedure
+                const assessorIds = row.find('.assessor-select-list input[type="checkbox"]:checked').map(function() {
+                    return $(this).data('assessor-id').toString();
                 }).get();
 
                 procedureAssessorMappings.push({
