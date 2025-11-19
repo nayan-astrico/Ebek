@@ -822,10 +822,16 @@ def learner_create(request):
             if user is not None:
                 learner.learner_user = user
             learner.save()
-            
-            # Create test and exam assignments if skillathon is assigned
-            create_test_and_exam_assignments(learner, learner.skillathon_event)
-            
+
+            # Create test and exam assignments if skillathon is assigned (run in background)
+            if learner.skillathon_event:
+                thread = threading.Thread(
+                    target=create_test_and_exam_assignments,
+                    args=(learner, learner.skillathon_event)
+                )
+                thread.daemon = True
+                thread.start()
+
             messages.success(request, 'Learner created successfully.')
             return HttpResponse('OK')
     else:
@@ -918,10 +924,16 @@ def learner_edit(request, pk):
             
             learner = form.save(commit=False)
             learner.save()
-            
-            # Create test and exam assignments if skillathon is assigned
-            create_test_and_exam_assignments(learner, learner.skillathon_event)
-            
+
+            # Create test and exam assignments if skillathon is assigned (run in background)
+            if learner.skillathon_event:
+                thread = threading.Thread(
+                    target=create_test_and_exam_assignments,
+                    args=(learner, learner.skillathon_event)
+                )
+                thread.daemon = True
+                thread.start()
+
             messages.success(request, 'Learner updated successfully.')
             return HttpResponse('OK')
     else:

@@ -84,53 +84,68 @@ def create_test_and_exam_assignments(learner, skillathon_event, test_ref=None, p
         
         # For each procedure assignment, create an exam assignment for this learner
         for proc_assignment_ref in procedure_assignments:
-            proc_assignment = proc_assignment_ref.get()
-            if not proc_assignment.exists:
-                print("NO PROC ASSIGNMENT FOUND")
-                continue
-                
-            proc_data = proc_assignment.to_dict()
-            procedure_ref = proc_data.get('procedure')
-            
-            if not procedure_ref:
-                print("NO PROCEDURE REF FOUND")
-                continue
-                
-            procedure = procedure_ref.get()
-            if not procedure.exists:
-                print("NO PROCEDURE FOUND")
-                continue
-                
-            procedure_data = procedure.to_dict()
-            
-            # Check if exam assignment already exists for this user and procedure
-            existing_exam_assignments = proc_data.get('examAssignmentArray', [])
-            for existing_ref in existing_exam_assignments:
-                existing_exam = existing_ref.get()
-                if existing_exam.exists:
-                    existing_data = existing_exam.to_dict()
-                    if existing_data.get('user') == learner_user_ref:
-                        # Skip creating new exam assignment if one already exists
+            try:
+                proc_assignment = proc_assignment_ref.get()
+                if not proc_assignment.exists:
+                    print("NO PROC ASSIGNMENT FOUND")
+                    continue
+
+                proc_data = proc_assignment.to_dict()
+                procedure_ref = proc_data.get('procedure')
+
+                if not procedure_ref:
+                    print("NO PROCEDURE REF FOUND")
+                    continue
+
+                procedure = procedure_ref.get()
+                if not procedure.exists:
+                    print("NO PROCEDURE FOUND")
+                    continue
+
+                procedure_data = procedure.to_dict()
+
+                # Check if exam assignment already exists for this user and procedure
+                existing_exam_assignments = proc_data.get('examAssignmentArray', [])
+                exam_assignment_exists = False
+
+                for existing_ref in existing_exam_assignments:
+                    try:
+                        existing_exam = existing_ref.get()
+                        if existing_exam.exists:
+                            existing_data = existing_exam.to_dict()
+                            if existing_data.get('user') == learner_user_ref:
+                                # Skip creating new exam assignment if one already exists
+                                print(f"Exam assignment already exists for user {learner.learner_user.email} and procedure {procedure_data.get('procedureName')}")
+                                exam_assignment_exists = True
+                                break
+                    except Exception as inner_e:
+                        print(f"Error checking existing exam assignment: {inner_e}")
                         continue
-            
-            # Create exam assignment
-            exam_assignment_data = {
-                'user': learner_user_ref,
-                'examMetaData': procedure_data.get('examMetaData', {}),
-                'status': 'Pending',
-                'notes': procedure_data.get('notes', ''),
-                'procedure_name': procedure_data.get('procedureName', ''),
-                'institute': learner.college.name if learner.college else None,
-                'hospital': learner.hospital.name if learner.hospital else None,
-            }
-            
-            # Add exam assignment to Firestore and get its reference
-            exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
-            
-            # Update procedure assignment with new exam assignment reference
-            proc_assignment_ref.update({
-                'examAssignmentArray': firestore.ArrayUnion([exam_assignment_ref])
-            })
+
+                # Only create if exam assignment doesn't exist
+                if not exam_assignment_exists:
+                    # Create exam assignment
+                    exam_assignment_data = {
+                        'user': learner_user_ref,
+                        'examMetaData': procedure_data.get('examMetaData', {}),
+                        'status': 'Pending',
+                        'notes': procedure_data.get('notes', ''),
+                        'procedure_name': procedure_data.get('procedureName', ''),
+                        'institute': learner.college.name if learner.college else None,
+                        'hospital': learner.hospital.name if learner.hospital else None,
+                    }
+
+                    # Add exam assignment to Firestore and get its reference
+                    exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
+                    print(f"Created exam assignment for user {learner.learner_user.email} and procedure {procedure_data.get('procedureName')}")
+
+                    # Update procedure assignment with new exam assignment reference
+                    proc_assignment_ref.update({
+                        'examAssignmentArray': firestore.ArrayUnion([exam_assignment_ref])
+                    })
+            except Exception as proc_e:
+                print(f"Error processing procedure assignment: {proc_e}")
+                continue
     except Exception as e:
         print(e)
         print(traceback.format_exc())
