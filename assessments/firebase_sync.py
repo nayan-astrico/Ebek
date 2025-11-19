@@ -202,34 +202,43 @@ def delete_user_from_firebase_auth(user):
     except auth.UserNotFoundError:
         pass
 
-def cascade_delete_user_firebase_data(user_id):
+def cascade_delete_user_firebase_data(user_email):
     """
     Cascading delete for user data in Firebase.
     Removes user from Batches and deletes all associated ExamAssignments
     and their references from BatchAssignment or ProcedureAssignment.
     """
     try:
-        user_path = f'/Users/{user_id}'
-        print(f"Starting cascading delete for user: {user_path}")
+        # Step 0: Find the Firebase user document by email
+        user_docs = db.collection('Users').where('emailID', '==', user_email).limit(1).stream()
+        user_doc_list = list(user_docs)
+
+        if not user_doc_list:
+            print(f"No Firebase user found with email: {user_email}")
+            return
+
+        firebase_user_ref = user_doc_list[0].reference
+        firebase_user_id = user_doc_list[0].id
+        print(f"Starting cascading delete for Firebase user: {firebase_user_id} (email: {user_email})")
 
         # Step 1: Find all ExamAssignments for this user
-        exam_assignments_query = db.collection('ExamAssignment').where('user', '==', user_path).stream()
+        exam_assignments_query = db.collection('ExamAssignment').where('user', '==', firebase_user_ref).stream()
+        exam_assignment_refs = []
         exam_assignment_ids = []
-        exam_assignment_paths = []
 
         for exam_doc in exam_assignments_query:
             exam_assignment_ids.append(exam_doc.id)
-            exam_assignment_paths.append(f'/ExamAssignment/{exam_doc.id}')
+            exam_assignment_refs.append(exam_doc.reference)
 
-        print(f"Found {len(exam_assignment_ids)} ExamAssignment(s) for user {user_path}")
+        print(f"Found {len(exam_assignment_ids)} ExamAssignment(s) for user {firebase_user_id}")
 
         # Step 2: Remove user from all Batches
-        batches_query = db.collection('Batches').where('learners', 'array_contains', user_path).stream()
+        batches_query = db.collection('Batches').where('learners', 'array_contains', firebase_user_ref).stream()
         batch_count = 0
         for batch_doc in batches_query:
             batch_ref = db.collection('Batches').document(batch_doc.id)
             batch_ref.update({
-                'learners': firestore.ArrayRemove([user_path])
+                'learners': firestore.ArrayRemove([firebase_user_ref])
             })
             batch_count += 1
             print(f"Removed user from Batch: {batch_doc.id}")
@@ -237,44 +246,48 @@ def cascade_delete_user_firebase_data(user_id):
         print(f"Removed user from {batch_count} Batch(es)")
 
         # Step 3: Remove ExamAssignment references from BatchAssignment
-        if exam_assignment_paths:
+        if exam_assignment_refs:
             batch_assignments_query = db.collection('BatchAssignment').stream()
             for ba_doc in batch_assignments_query:
                 ba_data = ba_doc.to_dict()
                 ba_ref = db.collection('BatchAssignment').document(ba_doc.id)
 
+                exam_array = ba_data.get('examAssignmentArray', [])
+
                 # Check each exam assignment reference
-                for exam_path in exam_assignment_paths:
-                    if exam_path in ba_data.get('examAssignmentArray', []):
+                for exam_ref in exam_assignment_refs:
+                    if exam_ref in exam_array:
                         ba_ref.update({
-                            'examAssignmentArray': firestore.ArrayRemove([exam_path])
+                            'examAssignmentArray': firestore.ArrayRemove([exam_ref])
                         })
-                        print(f"Removed {exam_path} from BatchAssignment: {ba_doc.id}")
+                        print(f"Removed ExamAssignment {exam_ref.id} from BatchAssignment: {ba_doc.id}")
 
         # Step 4: Remove ExamAssignment references from ProcedureAssignment
-        if exam_assignment_paths:
+        if exam_assignment_refs:
             procedure_assignments_query = db.collection('ProcedureAssignment').stream()
             for pa_doc in procedure_assignments_query:
                 pa_data = pa_doc.to_dict()
                 pa_ref = db.collection('ProcedureAssignment').document(pa_doc.id)
 
+                exam_array = pa_data.get('examAssignmentArray', [])
+
                 # Check each exam assignment reference
-                for exam_path in exam_assignment_paths:
-                    if exam_path in pa_data.get('examAssignmentArray', []):
+                for exam_ref in exam_assignment_refs:
+                    if exam_ref in exam_array:
                         pa_ref.update({
-                            'examAssignmentArray': firestore.ArrayRemove([exam_path])
+                            'examAssignmentArray': firestore.ArrayRemove([exam_ref])
                         })
-                        print(f"Removed {exam_path} from ProcedureAssignment: {pa_doc.id}")
+                        print(f"Removed ExamAssignment {exam_ref.id} from ProcedureAssignment: {pa_doc.id}")
 
         # Step 5: Delete all ExamAssignments
         for exam_id in exam_assignment_ids:
             db.collection('ExamAssignment').document(exam_id).delete()
             print(f"Deleted ExamAssignment: {exam_id}")
 
-        print(f"Cascading delete completed for user: {user_path}")
+        print(f"Cascading delete completed for Firebase user: {firebase_user_id}")
 
     except Exception as e:
-        print(f"Error during cascading delete for user {user_id}: {str(e)}")
+        print(f"Error during cascading delete for user {user_email}: {str(e)}")
         import traceback
         traceback.print_exc()
 
@@ -292,7 +305,7 @@ def on_user_save(sender, instance, created, **kwargs):
 @receiver(post_delete, sender=EbekUser)
 def on_user_delete(sender, instance, **kwargs):
     # Cascade delete all Firebase data associated with this user
-    cascade_delete_user_firebase_data(instance.id)
+    cascade_delete_user_firebase_data(instance.email)
     # Delete the user document and auth
     delete_user_from_firestore(instance)
     delete_user_from_firebase_auth(instance)
