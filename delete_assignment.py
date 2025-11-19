@@ -135,28 +135,93 @@ def delete_exam_assignments(docs, dry_run=False):
         print(f"✗ Failed to delete {failed_count} documents")
 
 
-def main():
-    # Get documents
-    docs = get_exam_assignments_with_batchassignment(limit=None)
-    
+def delete_entire_collection(collection_name, dry_run=False):
+    """Delete all documents from a collection"""
+    print(f"\n{'[DRY RUN] ' if dry_run else ''}Processing collection: {collection_name}")
+
+    collection_ref = db.collection(collection_name)
+    docs = list(collection_ref.stream())
+
     if not docs:
-        print("No ExamAssignment documents found with batchassignment != null")
+        print(f"  No documents found in {collection_name}")
         return
-    
-    # Show preview
-    # print(f"\n{'[DRY RUN] ' if args.dry_run else ''}Found {len(docs)} ExamAssignment documents with batchassignment != null")
-    
-    # if not args.dry_run and not args.confirm:
-    #     response = input(f"\nAre you sure you want to delete {len(docs)} documents? (yes/no): ")
-    #     if response.lower() not in ['yes', 'y']:
-    #         print("Deletion cancelled.")
-    #         return
-    
-    # Delete documents
-    delete_exam_assignments(docs, dry_run=False)
-    
-    # if not args.dry_run:
-    #     print("\n✓ Deletion completed!")
+
+    print(f"  Found {len(docs)} documents")
+
+    if dry_run:
+        print(f"  [DRY RUN] Would delete {len(docs)} documents from {collection_name}")
+        return
+
+    # Delete in batches
+    deleted_count = 0
+    failed_count = 0
+    batch = db.batch()
+    batch_size = 500
+
+    for i, doc in enumerate(docs):
+        try:
+            batch.delete(doc.reference)
+
+            # Commit batch when it reaches the limit
+            if (i + 1) % batch_size == 0:
+                batch.commit()
+                deleted_count += batch_size
+                print(f"  Deleted {deleted_count}/{len(docs)} documents from {collection_name}...")
+                batch = db.batch()
+        except Exception as e:
+            print(f"  Error deleting document {doc.id}: {str(e)}")
+            failed_count += 1
+
+    # Commit remaining documents
+    if len(docs) % batch_size != 0:
+        try:
+            batch.commit()
+            deleted_count += len(docs) % batch_size
+        except Exception as e:
+            print(f"  Error committing final batch: {str(e)}")
+            failed_count += len(docs) % batch_size
+
+    print(f"  ✓ Successfully deleted {deleted_count} documents from {collection_name}")
+    if failed_count > 0:
+        print(f"  ✗ Failed to delete {failed_count} documents")
+
+
+def main():
+    dry_run = False  # Set to True to preview what would be deleted
+
+    print("=" * 60)
+    print("DELETION SCRIPT - Will delete from multiple collections")
+    print("=" * 60)
+
+    # Collections to completely delete
+    collections_to_clear = [
+        'BatchAssignment',
+        'BatchAssignmentSummary',
+        'MetricUpdateQueue',
+        'SemesterMetrics',
+        'UnitMetrics'
+    ]
+
+    # Get ExamAssignment documents with batchassignment
+    print("\n1. Processing ExamAssignment (filtered by batchassignment != null)")
+    docs = get_exam_assignments_with_batchassignment(limit=None)
+
+    if not docs:
+        print("  No ExamAssignment documents found with batchassignment != null")
+    else:
+        delete_exam_assignments(docs, dry_run=dry_run)
+
+    # Delete all documents from the specified collections
+    print(f"\n2. Deleting all documents from {len(collections_to_clear)} collections")
+    for collection_name in collections_to_clear:
+        delete_entire_collection(collection_name, dry_run=dry_run)
+
+    print("\n" + "=" * 60)
+    if dry_run:
+        print("[DRY RUN] No documents were actually deleted.")
+    else:
+        print("✓ All deletion operations completed!")
+    print("=" * 60)
 
 
 main()

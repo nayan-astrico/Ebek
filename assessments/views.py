@@ -341,39 +341,71 @@ class ProcedureAPIView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 def fetch_institutes(request):
-    """Fetch institutes from both Django and Firebase, with optional B2B filtering."""
+    """Fetch institutes from both Django and Firebase, with optional B2B and unit_type filtering."""
     try:
         # Check if we need B2B filtering
         onboarding_type = request.GET.get('onboarding_type', '').lower()
-        
+        unit_type = request.GET.get('unit_type', '').lower()  # 'institution' or 'hospital'
+
         institutes = []
-        
+
         if onboarding_type == 'b2b':
-            # For B2B, fetch from Django Institution model with B2B filtering
-            django_institutions = Institution.objects.filter(
-                is_active=True, 
-                onboarding_type='b2b'
-            )
-            
-            for inst in django_institutions:
-                institutes.append({
-                    'id': inst.id,
-                    'instituteName': inst.name,
-                    'type': 'institution'
-                })
-            
-            # Also fetch B2B hospitals
-            django_hospitals = Hospital.objects.filter(
-                is_active=True, 
-                onboarding_type='b2b'
-            )
-            
-            for hosp in django_hospitals:
-                institutes.append({
-                    'id': hosp.id,
-                    'instituteName': hosp.name,
-                    'type': 'hospital'
-                })
+            # For B2B, fetch from Django Institution/Hospital models with B2B filtering
+
+            # If unit_type is specified, only fetch that type
+            if unit_type == 'institution':
+                # Only fetch institutions
+                django_institutions = Institution.objects.filter(
+                    is_active=True,
+                    onboarding_type='b2b'
+                )
+
+                for inst in django_institutions:
+                    institutes.append({
+                        'id': inst.id,
+                        'instituteName': inst.name,
+                        'type': 'institution'
+                    })
+
+            elif unit_type == 'hospital':
+                # Only fetch hospitals
+                django_hospitals = Hospital.objects.filter(
+                    is_active=True,
+                    onboarding_type='b2b'
+                )
+
+                for hosp in django_hospitals:
+                    institutes.append({
+                        'id': hosp.id,
+                        'instituteName': hosp.name,
+                        'type': 'hospital'
+                    })
+            else:
+                # No unit_type specified, fetch both
+                django_institutions = Institution.objects.filter(
+                    is_active=True,
+                    onboarding_type='b2b'
+                )
+
+                for inst in django_institutions:
+                    institutes.append({
+                        'id': inst.id,
+                        'instituteName': inst.name,
+                        'type': 'institution'
+                    })
+
+                # Also fetch B2B hospitals
+                django_hospitals = Hospital.objects.filter(
+                    is_active=True,
+                    onboarding_type='b2b'
+                )
+
+                for hosp in django_hospitals:
+                    institutes.append({
+                        'id': hosp.id,
+                        'instituteName': hosp.name,
+                        'type': 'hospital'
+                    })
         else:
             # Default behavior: fetch from Firebase InstituteNames collection
             institutes_ref = db.collection('InstituteNames')
@@ -552,6 +584,7 @@ def create_procedure_assignment_and_test(request):
             course_id = data.get('course_id', None)
             exam_type = data.get('exam_type', 'final')
             institution_id = data.get('institution_id', None)
+            unit_type = data.get('unit_type', None)  # 'institution' or 'hospital'
 
             
             
@@ -597,6 +630,8 @@ def create_procedure_assignment_and_test(request):
                     return JsonResponse({'error': 'Course ID is required'}, status=400)
                 if not institution_id:
                     return JsonResponse({'error': 'Institution/Hospital ID is required'}, status=400)
+                if not unit_type or unit_type not in ['institution', 'hospital']:
+                    return JsonResponse({'error': 'Unit type is required and must be either "institution" or "hospital"'}, status=400)
                 if not batch_ids:
                     return JsonResponse({'error': 'At least one batch must be selected'}, status=400)
                 if not procedure_assessor_mappings:
@@ -620,28 +655,21 @@ def create_procedure_assignment_and_test(request):
                         if not course_doc.exists:
                             return JsonResponse({'error': f'Course with ID {course_id} does not exist.'}, status=404)
                         
-                        # Determine unit type and get unit information
-                        unit_type = None
+                        # Get unit information based on unit_type
                         unit_ref = None
                         unit_name = None
-                        
-                        # Check if it's an institution
-                        institute_ref = db.collection('InstituteNames').document(institution_id)
-                        institute_doc = institute_ref.get()
-                        if institute_doc.exists:
-                            unit_type = "institute"
-                            unit_ref = institute_ref
-                            unit_name = institute_doc.to_dict()['instituteName']
-                        else:
-                            # Check if it's a hospital
-                            hospital_ref = db.collection('HospitalNames').document(institution_id)
-                            hospital_doc = hospital_ref.get()
-                            if hospital_doc.exists:
-                                unit_type = "hospital"
-                                unit_ref = hospital_ref
-                                unit_name = hospital_doc.to_dict()['hospitalName']
-                            else:
-                                return JsonResponse({'error': f'Unit with ID {institution_id} does not exist in either institutions or hospitals.'}, status=404)
+
+                        try:
+                            if unit_type == 'institution':
+                                institution = Institution.objects.get(id=institution_id, is_active=True, onboarding_type='b2b')
+                                unit_ref = db.collection('InstituteNames').document(str(institution.id))
+                                unit_name = institution.name
+                            elif unit_type == 'hospital':
+                                hospital = Hospital.objects.get(id=institution_id, is_active=True, onboarding_type='b2b')
+                                unit_ref = db.collection('HospitalNames').document(str(hospital.id))
+                                unit_name = hospital.name
+                        except (Institution.DoesNotExist, Hospital.DoesNotExist):
+                            return JsonResponse({'error': f'{unit_type.title()} with ID {institution_id} does not exist.'}, status=404)
                     # Create batchassignment for each procedure with its specific assessors
                     processed_mappings = []  # Track successfully processed mappings
                     for mapping in procedure_assessor_mappings:
@@ -8288,3 +8316,149 @@ def _get_grade_letter(percentage):
         return 'D'
     else:
         return 'E'
+
+
+@csrf_exempt
+def view_metrics_data(request):
+    """
+    Frontend page to view SemesterMetrics and UnitMetrics data
+    """
+    return render(request, 'assessments/metrics_viewer.html')
+
+
+@csrf_exempt
+def fetch_semester_metrics(request):
+    """
+    API endpoint to fetch all SemesterMetrics documents
+
+    Query Parameters:
+        - unit_name: Filter by unit name (optional)
+        - year: Filter by year (optional)
+        - semester: Filter by semester (optional)
+    """
+    try:
+        import os
+        from dotenv import load_dotenv
+        from firebase_admin import firestore
+
+        load_dotenv()
+        firebase_database = os.getenv('FIREBASE_DATABASE')
+        db = firestore.client(database_id=firebase_database) if firebase_database else firestore.client()
+
+        # Build query
+        query = db.collection('SemesterMetrics')
+
+        # Apply filters
+        unit_name = request.GET.get('unit_name')
+        year = request.GET.get('year')
+        semester = request.GET.get('semester')
+
+        if unit_name:
+            query = query.where('unit_name', '==', unit_name)
+        if year:
+            query = query.where('year', '==', year)
+        if semester:
+            query = query.where('semester', '==', semester)
+
+        # Fetch documents
+        docs = list(query.stream())
+
+        # Convert to JSON-serializable format
+        results = []
+        for doc in docs:
+            data = doc.to_dict()
+
+            # Convert Firestore timestamps to ISO strings
+            if 'last_updated' in data and data['last_updated']:
+                try:
+                    data['last_updated'] = data['last_updated'].isoformat()
+                except:
+                    data['last_updated'] = str(data['last_updated'])
+
+            # Convert sets to lists for JSON serialization
+            if 'assessed_student_ids' in data and isinstance(data['assessed_student_ids'], set):
+                data['assessed_student_ids'] = list(data['assessed_student_ids'])
+
+            results.append({
+                'doc_id': doc.id,
+                'data': data
+            })
+
+        return JsonResponse({
+            'success': True,
+            'count': len(results),
+            'documents': results
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def fetch_unit_metrics(request):
+    """
+    API endpoint to fetch all UnitMetrics documents
+
+    Query Parameters:
+        - unit_name: Filter by unit name (optional)
+        - year: Filter by year (optional)
+    """
+    try:
+        import os
+        from dotenv import load_dotenv
+        from firebase_admin import firestore
+
+        load_dotenv()
+        firebase_database = os.getenv('FIREBASE_DATABASE')
+        db = firestore.client(database_id=firebase_database) if firebase_database else firestore.client()
+
+        # Build query
+        query = db.collection('UnitMetrics')
+
+        # Apply filters
+        unit_name = request.GET.get('unit_name')
+        year = request.GET.get('year')
+
+        if unit_name:
+            query = query.where('unit_name', '==', unit_name)
+        if year:
+            query = query.where('year', '==', year)
+
+        # Fetch documents
+        docs = list(query.stream())
+
+        # Convert to JSON-serializable format
+        results = []
+        for doc in docs:
+            data = doc.to_dict()
+
+            # Convert Firestore timestamps to ISO strings
+            if 'last_updated' in data and data['last_updated']:
+                try:
+                    data['last_updated'] = data['last_updated'].isoformat()
+                except:
+                    data['last_updated'] = str(data['last_updated'])
+
+            results.append({
+                'doc_id': doc.id,
+                'data': data
+            })
+
+        return JsonResponse({
+            'success': True,
+            'count': len(results),
+            'documents': results
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
