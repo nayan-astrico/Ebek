@@ -1329,10 +1329,99 @@ def upload_progress_stream(request, session_key):
     response['X-Accel-Buffering'] = 'no'
     return response
 
+def cascade_delete_learner_data(learner):
+    """
+    Cascading delete for learner data in Firebase.
+    Removes learner from Batches, and deletes all associated ExamAssignments
+    and their references from BatchAssignment or ProcedureAssignment.
+    """
+    try:
+        if not learner.learner_user:
+            print(f"Warning: Learner {learner.pk} has no associated user")
+            return
+
+        user_id = learner.learner_user.id
+        user_path = f'/Users/{user_id}'
+
+        print(f"Starting cascading delete for learner user: {user_path}, onboarding_type: {learner.onboarding_type}")
+
+        # Step 1: Find all ExamAssignments for this user
+        exam_assignments_query = db.collection('ExamAssignment').where('user', '==', user_path).stream()
+        exam_assignment_ids = []
+        exam_assignment_paths = []
+
+        for exam_doc in exam_assignments_query:
+            exam_assignment_ids.append(exam_doc.id)
+            exam_assignment_paths.append(f'/ExamAssignment/{exam_doc.id}')
+
+        print(f"Found {len(exam_assignment_ids)} ExamAssignment(s) for user {user_path}")
+
+        if learner.onboarding_type.lower() == 'b2b':
+            # B2B: Remove from Batches, BatchAssignment, then delete ExamAssignments
+
+            # Step 2a: Remove user from all Batches
+            batches_query = db.collection('Batches').where('learners', 'array_contains', user_path).stream()
+            batch_count = 0
+            for batch_doc in batches_query:
+                batch_ref = db.collection('Batches').document(batch_doc.id)
+                batch_ref.update({
+                    'learners': firestore.ArrayRemove([user_path])
+                })
+                batch_count += 1
+                print(f"Removed user from Batch: {batch_doc.id}")
+
+            print(f"Removed user from {batch_count} Batch(es)")
+
+            # Step 2b: Remove ExamAssignment references from BatchAssignment
+            if exam_assignment_paths:
+                batch_assignments_query = db.collection('BatchAssignment').stream()
+                for ba_doc in batch_assignments_query:
+                    ba_data = ba_doc.to_dict()
+                    ba_ref = db.collection('BatchAssignment').document(ba_doc.id)
+
+                    # Check each exam assignment reference
+                    for exam_path in exam_assignment_paths:
+                        if exam_path in ba_data.get('examAssignmentArray', []):
+                            ba_ref.update({
+                                'examAssignmentArray': firestore.ArrayRemove([exam_path])
+                            })
+                            print(f"Removed {exam_path} from BatchAssignment: {ba_doc.id}")
+
+        else:
+            # B2C: Remove ExamAssignment references from ProcedureAssignment
+
+            if exam_assignment_paths:
+                procedure_assignments_query = db.collection('ProcedureAssignment').stream()
+                for pa_doc in procedure_assignments_query:
+                    pa_data = pa_doc.to_dict()
+                    pa_ref = db.collection('ProcedureAssignment').document(pa_doc.id)
+
+                    # Check each exam assignment reference
+                    for exam_path in exam_assignment_paths:
+                        if exam_path in pa_data.get('examAssignmentArray', []):
+                            pa_ref.update({
+                                'examAssignmentArray': firestore.ArrayRemove([exam_path])
+                            })
+                            print(f"Removed {exam_path} from ProcedureAssignment: {pa_doc.id}")
+
+        # Step 3: Delete all ExamAssignments
+        for exam_id in exam_assignment_ids:
+            db.collection('ExamAssignment').document(exam_id).delete()
+            print(f"Deleted ExamAssignment: {exam_id}")
+
+        print(f"Cascading delete completed for learner user: {user_path}")
+
+    except Exception as e:
+        print(f"Error during cascading delete for learner {learner.pk}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
 @login_required
 def learner_delete(request, pk):
     learner = get_object_or_404(Learner, pk=pk)
     if request.method == 'POST':
+        # Perform cascading delete before deleting the learner
+        cascade_delete_learner_data(learner)
         learner.delete()
         messages.success(request, 'Learner deleted successfully.')
         return redirect('learner_list')
@@ -1352,6 +1441,8 @@ def learners_bulk_delete(request):
         qs = Learner.objects.filter(pk__in=ids)
         count = qs.count()
         for learner in qs:
+            # Perform cascading delete before deleting the learner
+            cascade_delete_learner_data(learner)
             learner.delete()
         return JsonResponse({'success': True, 'deleted': count})
     except Exception as e:

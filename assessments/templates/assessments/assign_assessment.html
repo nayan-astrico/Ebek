@@ -501,26 +501,52 @@
         <div class="assign-content">
             <div class="form-group">
                 <label class="form-label">Assessment Name</label>
-                <input type="text" id="editAssessmentName" class="form-control">
+                <input type="text" id="editAssessmentName" class="form-control" readonly style="background-color: #f5f5f5; cursor: not-allowed;">
             </div>
             <div class="form-group">
-                <label class="form-label">Skillathon</label>
-                <input type="text" id="editSkillathon" class="form-control">
+                <label class="form-label">Skillathon/Exam Type</label>
+                <input type="text" id="editSkillathon" class="form-control" readonly>
             </div>
-            <div class="form-group">
-                <label class="form-label">Procedures</label>
-                <div id="editProcedures" class="chip-container"></div>
-                <div class="dropdown-container">
-                    <button class="dropdown-btn" id="editProcedureDropdownBtn">Select Procedure</button>
-                    <ul class="dropdown-list" id="editProcedureDropdownList"></ul>
+
+            <!-- B2C: Simple Procedures + Assessors -->
+            <div id="editB2CFieldsContainer">
+                <div class="form-group">
+                    <label class="form-label">Procedures</label>
+                    <div id="editProcedures" class="chip-container"></div>
+                    <div class="dropdown-container">
+                        <button class="dropdown-btn" id="editProcedureDropdownBtn">Select Procedure</button>
+                        <ul class="dropdown-list" id="editProcedureDropdownList"></ul>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Assessors</label>
+                    <div id="editAssessors" class="chip-container"></div>
+                    <div class="dropdown-container">
+                        <button class="dropdown-btn" id="editAssessorDropdownBtn">Select Assessor</button>
+                        <ul class="dropdown-list" id="editAssessorDropdownList"></ul>
+                    </div>
                 </div>
             </div>
-            <div class="form-group">
-                <label class="form-label">Assessors</label>
-                <div id="editAssessors" class="chip-container"></div>
-                <div class="dropdown-container">
-                    <button class="dropdown-btn" id="editAssessorDropdownBtn">Select Assessor</button>
-                    <ul class="dropdown-list" id="editAssessorDropdownList"></ul>
+
+            <!-- B2B: Procedure-Assessor Mapping Table -->
+            <div id="editB2BFieldsContainer" style="display: none;">
+                <div style="margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #1a202c;">Procedure-Assessor Mappings</h4>
+                    <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+                        <div style="max-height: 400px; overflow-y: auto;">
+                            <table id="editProcedureAssessorMappingTable" style="width: 100%; border-collapse: collapse;">
+                                <thead style="background: #f7fafc; position: sticky; top: 0; z-index: 10;">
+                                    <tr>
+                                        <th style="padding: 12px; text-align: left; font-weight: 600; color: #1a202c; border-bottom: 2px solid #e2e8f0; min-width: 200px;">Procedure</th>
+                                        <th style="padding: 12px; text-align: left; font-weight: 600; color: #1a202c; border-bottom: 2px solid #e2e8f0;">Assessors</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="editProcedureAssessorMappingBody">
+                                    <!-- Rows will be dynamically added here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="form-group">
@@ -3472,11 +3498,11 @@
                 btn.textContent = 'Deleting...';
                 
                 const csrf = $('[name="csrfmiddlewaretoken"]').val();
-                const url = (testType === 'B2B') ? `/api/batch-assignments/${testId}/delete/` : `/api/tests/${testId}/delete/`;
-                $.ajax({ 
-                    url, 
-                    method: 'POST', 
-                    headers: { 'X-CSRFToken': csrf } 
+                const url = (testType === 'B2B') ? `/api/batch-assignment-summaries/${testId}/delete/` : `/api/tests/${testId}/delete/`;
+                $.ajax({
+                    url,
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrf }
                 }).done(function(){
                     $('#deleteTestModal').modal('hide');
                     window.location.reload();
@@ -3490,32 +3516,38 @@
     });
 
     let __editingTestId = null;
+    let __editingTestType = null;  // Track whether editing B2C or B2B
     function openEditTestPanel(testId, buttonElement){
         if (!testId) {
             console.error('openEditTestPanel: testId is missing');
             return;
         }
-        
+
         __editingTestId = testId;
-        
+
         // Check if jQuery elements exist
         if (!$('#editAssessmentName').length) {
             console.error('Edit panel elements not found');
             return;
         }
-        
+
         // Try to extract data from the table row as fallback
         let rowData = {};
+        let testType = 'B2C';  // Default to B2C
         if (buttonElement) {
             const row = buttonElement.closest('.assessment-row');
             if (row) {
+                // Get test type from row data
+                testType = row.dataset.type || 'B2C';
+                __editingTestType = testType;
+
                 const cells = row.querySelectorAll('td');
                 if (cells.length >= 8) {
                     // Extract data from table cells
-                    rowData.assessment_name = cells[1]?.querySelector('.assessment-name span')?.textContent?.trim() || '';
+                    rowData.assessment_name = cells[0]?.querySelector('.assessment-name span')?.textContent?.trim() || '';
                     rowData.skillathon = row.dataset.mode || '';
                     rowData.status = 'Not Completed'; // Default, will be updated from API if available
-                    const dateText = cells[7]?.querySelector('.date-text')?.textContent?.trim() || '';
+                    const dateText = cells[6]?.querySelector('.date-text')?.textContent?.trim() || '';
                     // Try to parse date if available
                     if (dateText && dateText !== '-') {
                         // Date format is "d M Y" (e.g., "15 Jan 2024")
@@ -3540,21 +3572,34 @@
                 }
             }
         }
-        
+
         // Open the panel first
         toggleEditPanel(true);
-        
+
+        // Show/hide appropriate fields based on test type
+        if (testType === 'B2B') {
+            $('#editB2CFieldsContainer').hide();
+            $('#editB2BFieldsContainer').show();
+        } else {
+            $('#editB2CFieldsContainer').show();
+            $('#editB2BFieldsContainer').hide();
+        }
+
         // Clear existing data
         $('#editAssessmentName').val(rowData.assessment_name || '');
         $('#editSkillathon').val(rowData.skillathon || '');
         $('#editProcedures').empty();
         $('#editAssessors').empty();
+        $('#editProcedureAssessorMappingBody').empty();
         $('#editStatus').val(rowData.status || 'Not Completed');
         $('#editDate').val(rowData.testdate || '');
-        
+
+        // Determine API URL based on test type
+        const url = testType === 'B2B'
+            ? `/api/batch-assignment-summaries/${testId}/`
+            : `/api/tests/${testId}/`;
+
         // Try to load data from API (but don't block if it fails)
-        const url = `/api/tests/${testId}/`;
-        
         fetch(url, {
             method: 'GET',
             headers: {
@@ -3573,7 +3618,7 @@
             });
           })
           .then(res => {
-            if (!res || !res.success || !res.test) {
+            if (!res || !res.success) {
                 // If response is invalid, continue with row data
                 if (res && res.error) {
                     console.warn('API error:', res.error);
@@ -3582,53 +3627,207 @@
                 }
                 return;
             }
-            
-            const t = res.test;
-            
-            // Populate form fields from API (overrides row data)
-            if (t.assessment_name !== undefined && t.assessment_name !== null) {
-                $('#editAssessmentName').val(String(t.assessment_name));
+
+            // Handle B2C response
+            if (testType === 'B2C' && res.test) {
+                const t = res.test;
+
+                // Populate form fields from API (overrides row data)
+                if (t.assessment_name !== undefined && t.assessment_name !== null) {
+                    $('#editAssessmentName').val(String(t.assessment_name));
+                }
+                if (t.skillathon !== undefined && t.skillathon !== null) {
+                    $('#editSkillathon').val(String(t.skillathon));
+                }
+                if (t.status !== undefined && t.status !== null) {
+                    $('#editStatus').val(String(t.status));
+                }
+                if (t.testdate !== undefined && t.testdate !== null) {
+                    $('#editDate').val(String(t.testdate));
+                }
+
+                // Populate procedures
+                const procContainer = $('#editProcedures');
+                procContainer.empty();
+                if (t.procedures && Array.isArray(t.procedures) && t.procedures.length > 0) {
+                    t.procedures.forEach(p => {
+                        if (p && p.id && p.name) {
+                            const procId = String(p.id);
+                            const procName = String(p.name);
+                            procContainer.append(`<span class="chip" data-id="${procId}">${procName}<span class="remove">&times;</span></span>`);
+                        }
+                    });
+                }
+
+                // Populate assessors (B2C uses global assessor list)
+                const assContainer = $('#editAssessors');
+                assContainer.empty();
+                if (t.assessors && Array.isArray(t.assessors) && t.assessors.length > 0) {
+                    t.assessors.forEach(a => {
+                        if (a && a.id && a.name) {
+                            const assId = String(a.id);
+                            const assName = String(a.name);
+                            assContainer.append(`<span class="chip" data-id="${assId}">${assName}<span class="remove">&times;</span></span>`);
+                        }
+                    });
+                }
             }
-            if (t.skillathon !== undefined && t.skillathon !== null) {
-                $('#editSkillathon').val(String(t.skillathon));
-            }
-            if (t.status !== undefined && t.status !== null) {
-                $('#editStatus').val(String(t.status));
-            }
-            if (t.testdate !== undefined && t.testdate !== null) {
-                $('#editDate').val(String(t.testdate));
-            }
-            
-            // Populate procedures
-            const procContainer = $('#editProcedures'); 
-            procContainer.empty(); // Clear any existing chips
-            if (t.procedures && Array.isArray(t.procedures) && t.procedures.length > 0) {
-                t.procedures.forEach(p => {
-                    if (p && p.id && p.name) {
-                        const procId = String(p.id);
-                        const procName = String(p.name);
-                        procContainer.append(`<span class="chip" data-id="${procId}">${procName}<span class="remove">&times;</span></span>`);
+            // Handle B2B response
+            else if (testType === 'B2B' && res.summary) {
+                const s = res.summary;
+
+                // Populate basic fields
+                // Build assessment name from available data (matching table display)
+                let assessmentName = '';
+                if (s.batch_name) {
+                    assessmentName = s.batch_name;
+                    if (s.testdate) {
+                        // Add date to match table format
+                        const dateObj = new Date(s.testdate);
+                        const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                        assessmentName += ` - ${dateStr}`;
                     }
-                });
-            }
-            
-            // Populate assessors
-            const assContainer = $('#editAssessors'); 
-            assContainer.empty(); // Clear any existing chips
-            if (t.assessors && Array.isArray(t.assessors) && t.assessors.length > 0) {
-                t.assessors.forEach(a => {
-                    if (a && a.id && a.name) {
-                        const assId = String(a.id);
-                        const assName = String(a.name);
-                        assContainer.append(`<span class="chip" data-id="${assId}">${assName}<span class="remove">&times;</span></span>`);
+                } else if (s.unit_name) {
+                    // Fallback: use unit name if batch name not available
+                    assessmentName = s.unit_name;
+                    if (s.testdate) {
+                        const dateObj = new Date(s.testdate);
+                        const dateStr = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                        assessmentName += ` - ${dateStr}`;
                     }
-                });
+                }
+
+                if (assessmentName) {
+                    $('#editAssessmentName').val(assessmentName);
+                }
+
+                if (s.exam_type !== undefined && s.exam_type !== null) {
+                    $('#editSkillathon').val(String(s.exam_type));
+                }
+                if (s.status !== undefined && s.status !== null) {
+                    $('#editStatus').val(String(s.status));
+                }
+                if (s.testdate !== undefined && s.testdate !== null) {
+                    $('#editDate').val(String(s.testdate));
+                }
+
+                // Populate procedure-assessor mapping table
+                const tableBody = $('#editProcedureAssessorMappingBody');
+                tableBody.empty();
+
+                if (s.procedure_assessor_mappings && Array.isArray(s.procedure_assessor_mappings)) {
+                    s.procedure_assessor_mappings.forEach(mapping => {
+                        if (mapping && mapping.procedure_id && mapping.procedure_name) {
+                            const procId = String(mapping.procedure_id);
+                            const procName = String(mapping.procedure_name);
+                            const baId = mapping.batchassignment_id || '';
+
+                            // Create table row with dropdown (matching create panel structure)
+                            const row = $(`
+                                <tr data-procedure-id="${procId}" data-ba-id="${baId}">
+                                    <td class="procedure-name-cell" style="padding: 12px; border-bottom: 1px solid #e2e8f0;">
+                                        <strong>${procName}</strong>
+                                    </td>
+                                    <td class="assessor-select-cell" style="padding: 12px; border-bottom: 1px solid #e2e8f0;">
+                                        <div class="assessor-select-dropdown">
+                                            <button type="button" class="assessor-select-btn" data-procedure-id="${procId}">
+                                                <span class="assessor-select-text">Select Assessors</span>
+                                                <i class="fas fa-chevron-down" style="margin-left: 8px; font-size: 12px;"></i>
+                                            </button>
+                                            <div class="assessor-select-list" data-procedure-id="${procId}">
+                                                <!-- Assessor checkboxes will be populated here -->
+                                            </div>
+                                        </div>
+                                        <div class="assessor-chips-inline" data-procedure-id="${procId}"></div>
+                                    </td>
+                                </tr>
+                            `);
+                            tableBody.append(row);
+
+                            // Populate assessor dropdown and pre-select existing assessors
+                            populateEditAssessorDropdownForProcedure(procId, mapping.assessors || []);
+                        }
+                    });
+                }
             }
           })
-          .catch(error => { 
+          .catch(error => {
             // Silently handle errors - panel is already open with row data, user can still edit
             console.warn('Error loading test data (non-blocking):', error);
           });
+    }
+
+    // Helper function to populate assessor dropdown for edit mode (matching create panel)
+    function populateEditAssessorDropdownForProcedure(procedureId, selectedAssessors) {
+        // Fetch all assessors
+        fetch('/fetch-assessors/', {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            const assessors = data.assessors || [];
+            const dropdown = $(`#editProcedureAssessorMappingBody tr[data-procedure-id="${procedureId}"] .assessor-select-list[data-procedure-id="${procedureId}"]`);
+            dropdown.empty();
+
+            // Create array of selected assessor IDs for easy lookup
+            const selectedIds = selectedAssessors.map(a => String(a.id));
+
+            // Populate dropdown with checkboxes
+            assessors.forEach(assessor => {
+                const isChecked = selectedIds.includes(String(assessor.id));
+                const checkboxHtml = `
+                    <div class="assessor-item">
+                        <input type="checkbox"
+                               id="edit-assessor-${procedureId}-${assessor.id}"
+                               value="${assessor.id}"
+                               data-assessor-id="${assessor.id}"
+                               data-assessor-name="${assessor.name}"
+                               ${isChecked ? 'checked' : ''}>
+                        <label for="edit-assessor-${procedureId}-${assessor.id}">${assessor.name}</label>
+                    </div>
+                `;
+                dropdown.append(checkboxHtml);
+            });
+
+            // Attach change handler
+            dropdown.find('input[type="checkbox"]').on('change', function() {
+                updateEditAssessorSelectionForProcedure(procedureId);
+            });
+
+            // Initial update to show selected assessors
+            updateEditAssessorSelectionForProcedure(procedureId);
+        });
+    }
+
+    // Helper function to update assessor selection display (matching create panel)
+    function updateEditAssessorSelectionForProcedure(procedureId) {
+        const row = $(`#editProcedureAssessorMappingBody tr[data-procedure-id="${procedureId}"]`);
+        const checkedBoxes = row.find(`.assessor-select-list input[type="checkbox"]:checked`);
+        const button = row.find('.assessor-select-btn .assessor-select-text');
+        const chipsContainer = row.find('.assessor-chips-inline');
+
+        // Update button text
+        const count = checkedBoxes.length;
+        if (count === 0) {
+            button.text('Select Assessors');
+        } else {
+            button.text(`${count} Assessor${count > 1 ? 's' : ''} Selected`);
+        }
+
+        // Update chips display
+        chipsContainer.empty();
+        checkedBoxes.each(function() {
+            const assessorId = $(this).data('assessor-id');
+            const assessorName = $(this).data('assessor-name');
+            const chip = $(`
+                <span class="assessor-chip-inline" data-assessor-id="${assessorId}">
+                    ${assessorName}
+                    <span class="remove">&times;</span>
+                </span>
+            `);
+            chipsContainer.append(chip);
+        });
     }
 
     function toggleEditPanel(forceOpen){
@@ -3657,16 +3856,52 @@
         const spinner = button.find('.spinner-border');
         button.prop('disabled', true);
         spinner.show();
-        // Collect ids from chips
-        const procIds = $('#editProcedures .chip').map(function(){ return $(this).data('id'); }).get();
-        const assessorIds = $('#editAssessors .chip').map(function(){ return $(this).data('id'); }).get();
-        const payload = {
-            testdate: $('#editDate').val() || undefined,
-            status: $('#editStatus').val(),
-            procedure_ids: procIds,
-            assessor_ids: assessorIds
-        };
-        fetch(`/api/tests/${__editingTestId}/update/`, {
+
+        let url, payload;
+
+        // Build payload based on test type
+        if (__editingTestType === 'B2B') {
+            // For B2B, collect data from the procedure-assessor mapping table
+            const procedureAssessorMappings = [];
+
+            $('#editProcedureAssessorMappingBody tr').each(function() {
+                const row = $(this);
+                const procId = row.data('procedure-id');
+                const baId = row.data('ba-id') || null;
+
+                // Collect assessor IDs from checked checkboxes for this specific procedure
+                const assessorIds = row.find('.assessor-select-list input[type="checkbox"]:checked').map(function() {
+                    return $(this).data('assessor-id').toString();
+                }).get();
+
+                procedureAssessorMappings.push({
+                    procedure_id: procId,
+                    assessor_ids: assessorIds,  // Specific assessors for this procedure
+                    batchassignment_id: baId    // Preserve existing batchassignment if available
+                });
+            });
+
+            payload = {
+                testdate: $('#editDate').val() || undefined,
+                status: $('#editStatus').val(),
+                procedure_assessor_mappings: procedureAssessorMappings
+            };
+            url = `/api/batch-assignment-summaries/${__editingTestId}/update/`;
+        } else {
+            // B2C payload (original) - collect from simple fields
+            const procIds = $('#editProcedures .chip').map(function(){ return $(this).data('id'); }).get();
+            const assessorIds = $('#editAssessors .chip').map(function(){ return $(this).data('id'); }).get();
+
+            payload = {
+                testdate: $('#editDate').val() || undefined,
+                status: $('#editStatus').val(),
+                procedure_ids: procIds,
+                assessor_ids: assessorIds
+            };
+            url = `/api/tests/${__editingTestId}/update/`;
+        }
+
+        fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

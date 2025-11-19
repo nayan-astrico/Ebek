@@ -2505,8 +2505,6 @@ function submitEditForm() {
         courseName: document.getElementById('editCourseName').value.trim(),
         description: document.getElementById('editDescription').value.trim(),
         procedures: Array.from(document.querySelectorAll('#editProceduresOptions input[type="checkbox"]:checked')).map(cb => cb.value),
-        osceTypes: Array.from(document.querySelectorAll('#editOsceTypesGroup input[name="osce_type"]:checked')).map(cb => cb.value),
-        verificationRequired: document.getElementById('editVerification').checked
     };
     
     const courseId = '{{ course.id }}';
@@ -2722,14 +2720,7 @@ function validateEditForm() {
     if (selectedProcedures.length === 0) {
         showEditError('editProceduresError', 'Please select at least one procedure');
         isValid = false;
-    }
-    
-    // Validate OSCE types
-    const selectedOsceTypes = document.querySelectorAll('#editOsceTypesGroup input:checked');
-    if (selectedOsceTypes.length === 0) {
-        showEditError('editOsceTypesError', 'Please select at least one OSCE type');
-        isValid = false;
-    }
+    }    
     
     return isValid;
 }
@@ -2865,17 +2856,17 @@ function loadUnitNames(unitType) {
 
 // --- Hook up filters and search to AJAX ---
 document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('batchSearch').addEventListener('input', () => loadCourseBatches(1));
+    // document.getElementById('batchSearch').addEventListener('input', () => loadCourseBatches(1));
     document.getElementById('unitTypeFilter').addEventListener('change', function() {
         const unitType = this.value;
         loadUnitNames(unitType);
         document.getElementById('unitNameFilter').value = '';
-        loadCourseBatches(1);
+        // loadCourseBatches(1);
     });
-    document.getElementById('unitNameFilter').addEventListener('change', () => loadCourseBatches(1));
+    // document.getElementById('unitNameFilter').addEventListener('change', () => loadCourseBatches(1));
 
     // Initial load
-    loadCourseBatches(1);
+    // loadCourseBatches(1);
 });
 </script>
 {% endblock %} 
