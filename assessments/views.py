@@ -1124,81 +1124,93 @@ def assign_assessment(request):
     except Exception as e:
         logger.error(f"Error fetching B2C tests: {e}")
     
-    # FETCH B2B ASSESSMENTS FROM 'BatchAssignment' 
+    # FETCH B2B ASSESSMENTS FROM 'BatchAssignmentSummary' (grouped)
     try:
-        batch_assignments_ref = db.collection('BatchAssignment')
-        batch_assignments = batch_assignments_ref.limit(100).stream()
-        
-        for ba in batch_assignments:
+        summary_ref = db.collection('BatchAssignmentSummary')
+        summaries = summary_ref.limit(100).stream()
+
+        for summary in summaries:
             try:
-                ba_doc = ba.to_dict()
-                
+                summary_doc = summary.to_dict()
+
                 # Get batch information
-                batch_ref = ba_doc.get('batch')
+                batch_id = summary_doc.get('batch_id')
                 batch_name = '-'
-                if batch_ref:
+                if batch_id:
                     try:
+                        batch_ref = db.collection('Batches').document(batch_id)
                         batch_doc = batch_ref.get()
                         if batch_doc.exists:
                             batch_name = batch_doc.to_dict().get('batchName', '-')
                     except Exception:
                         pass
-                
+
                 # Get unit (institution/hospital) information
-                entity = ba_doc.get('unit_name', '-')
-                unit_type = ba_doc.get('unitType', 'institution')
-                
-                # Get procedure information
-                procedure_ref = ba_doc.get('procedure')
-                procedure_name = "Unknown"
-                if procedure_ref:
-                    try:
-                        procedure_doc = procedure_ref.get()
-                        if procedure_doc.exists:
-                            procedure_name = procedure_doc.to_dict().get('procedureName', 'Unknown')
-                    except Exception:
-                        pass
-                
-                procedure_assignments = [{
-                    'id': ba.id,
-                    'procedure_name': procedure_name,
-                    'status': ba_doc.get('status', 'Pending'),
-                }]
-                
-                # Get assessors
-                assessors_list = []
-                assessor_refs = ba_doc.get('assessorlist', [])
-                for assessor_ref in assessor_refs:
-                    try:
-                        assessor_doc = assessor_ref.get()
-                        if assessor_doc.exists:
-                            assessor_data = assessor_doc.to_dict()
-                            # Try multiple possible field names for assessor name
-                            assessor_name = (
-                                assessor_data.get('full_name') or 
-                                assessor_data.get('name') or 
-                                assessor_data.get('username', 'Assessor')
-                            )
-                            if assessor_name not in assessors_list:
-                                assessors_list.append(assessor_name)
-                    except Exception as e:
-                        logger.error(f"Error fetching assessor: {e}")
-                        pass
-                
-                # Get exam type
-                exam_type = ba_doc.get('examType', 'Final')
-                
-                # Get test date
-                test_date = ba_doc.get('testDate')
-                
+                entity = summary_doc.get('unit_name', '-')
+                unit_type = summary_doc.get('unitType', 'institution')
+
+                # Get procedure and assessor information from mappings
+                procedure_assessor_mappings = summary_doc.get('procedure_assessor_mappings', [])
+
+                # Collect all procedures from the summary
+                procedure_assignments = []
+                all_assessors = set()
+
+                for mapping in procedure_assessor_mappings:
+                    procedure_name = mapping.get('procedure_name', 'Unknown')
+                    batchassignment_id = mapping.get('batchassignment_id')
+
+                    # Add procedure to list
+                    if batchassignment_id:
+                        # Check status from actual BatchAssignment
+                        status = 'Pending'
+                        try:
+                            ba_ref = db.collection('BatchAssignment').document(batchassignment_id)
+                            ba_doc = ba_ref.get()
+                            if ba_doc.exists:
+                                status = ba_doc.to_dict().get('status', 'Pending')
+                        except Exception:
+                            pass
+
+                        procedure_assignments.append({
+                            'id': batchassignment_id,
+                            'procedure_name': procedure_name,
+                            'status': status,
+                        })
+
+                    # Collect assessors for this procedure
+                    assessor_ids = mapping.get('assessor_ids', [])
+                    for assessor_id in assessor_ids:
+                        try:
+                            assessor_ref = db.collection('Users').document(str(assessor_id))
+                            assessor_doc = assessor_ref.get()
+                            if assessor_doc.exists:
+                                assessor_data = assessor_doc.to_dict()
+                                assessor_name = (
+                                    assessor_data.get('full_name') or
+                                    assessor_data.get('name') or
+                                    assessor_data.get('username', 'Assessor')
+                                )
+                                all_assessors.add(assessor_name)
+                        except Exception as e:
+                            logger.error(f"Error fetching assessor: {e}")
+                            pass
+
+                # Get exam type and test date from summary
+                exam_type = summary_doc.get('exam_type', 'Final')
+                test_date = summary_doc.get('test_date')
+
                 # Assessment name
                 assessment_name = (
-                    f"{batch_name} - {procedure_name} - "
+                    f"{batch_name} - "
                     f"{test_date.strftime('%d %b %Y') if test_date else ''}"
                 )
-                
+
+                # Determine overall status
+                status = summary_doc.get('status', 'Active')
+
                 test_data.append({
-                    'id': ba.id,
+                    'id': summary.id,
                     'assessment_name': assessment_name,
                     'type': 'B2B',
                     'mode': exam_type,
@@ -1206,16 +1218,17 @@ def assign_assessment(request):
                     'batch': batch_name,
                     'skillathon': None,
                     'procedure_assignments': procedure_assignments,
-                    'assessors': ', '.join(assessors_list) if assessors_list else '-',
-                    'status': ba_doc.get('status', 'Pending'),
+                    'assessors': ', '.join(sorted(all_assessors)) if all_assessors else '-',
+                    'status': status,
                     'testdate': test_date,
+                    'is_summary': True,  # Flag to indicate this is a summary entry
                 })
             except Exception as e:
-                logger.error(f"Error processing batch assignment: {e}")
+                logger.error(f"Error processing batch assignment summary: {e}")
                 continue
-                
+
     except Exception as e:
-        logger.error(f"Error fetching B2B batch assignments: {e}")
+        logger.error(f"Error fetching B2B batch assignment summaries: {e}")
     
     # Sort by test date (most recent first)
     # Handle timezone-aware and timezone-naive datetime comparison
@@ -1258,6 +1271,7 @@ def get_test(request, test_id):
         return JsonResponse({'error': 'Only GET method allowed'}, status=405)
     try:
         if not test_id:
+            print(test_id)
             return JsonResponse({'error': 'Test ID is required'}, status=400)
         
         test_ref = db.collection('Test').document(test_id)
@@ -1365,6 +1379,118 @@ def get_test(request, test_id):
         error_trace = traceback.format_exc()
         logger.error(f"Error in get_test: {str(e)}\n{error_trace}")
         return JsonResponse({'error': 'Failed to retrieve test data. Please try again.'}, status=500)
+
+@csrf_exempt
+def get_batch_assignment_summary(request, summary_id):
+    """Return consolidated details for a BatchAssignmentSummary including procedures and assessors."""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Only GET method allowed'}, status=405)
+    try:
+        if not summary_id:
+            return JsonResponse({'error': 'Summary ID is required'}, status=400)
+
+        summary_ref = db.collection('BatchAssignmentSummary').document(summary_id)
+        summary_doc = summary_ref.get()
+        if not summary_doc.exists:
+            return JsonResponse({'error': 'Batch assignment summary not found'}, status=404)
+
+        summary_data = summary_doc.to_dict()
+        if not summary_data:
+            return JsonResponse({'error': 'Summary data is empty'}, status=404)
+
+        # Get batch information
+        batch_id = summary_data.get('batch_id')
+        batch_name = ''
+        if batch_id:
+            try:
+                batch_ref = db.collection('Batches').document(batch_id)
+                batch_doc = batch_ref.get()
+                if batch_doc.exists:
+                    batch_name = batch_doc.to_dict().get('batchName', '')
+            except Exception:
+                pass
+
+        # Get unit information
+        unit_name = summary_data.get('unit_name', '')
+        unit_type = summary_data.get('unitType', 'institution')
+
+        # Process procedure-assessor mappings
+        procedure_assessor_mappings = summary_data.get('procedure_assessor_mappings', []) or []
+
+        procedures_with_assessors = []
+        all_assessors_map = {}
+
+        for mapping in procedure_assessor_mappings:
+            procedure_id = mapping.get('procedure_id')
+            procedure_name = mapping.get('procedure_name', 'Unknown')
+            assessor_ids = mapping.get('assessor_ids', [])
+            batchassignment_id = mapping.get('batchassignment_id')
+
+            # Collect assessors for this procedure
+            procedure_assessors = []
+            for assessor_id in assessor_ids:
+                try:
+                    assessor_ref = db.collection('Users').document(str(assessor_id))
+                    assessor_doc = assessor_ref.get()
+                    if assessor_doc.exists:
+                        assessor_data = assessor_doc.to_dict()
+                        assessor_name = (
+                            assessor_data.get('full_name') or
+                            assessor_data.get('name') or
+                            assessor_data.get('username', 'Assessor')
+                        )
+                        procedure_assessors.append({
+                            'id': str(assessor_id),
+                            'name': assessor_name
+                        })
+                        # Add to global assessors map
+                        all_assessors_map[str(assessor_id)] = {
+                            'id': str(assessor_id),
+                            'name': assessor_name
+                        }
+                except Exception as e:
+                    logger.error(f"Error fetching assessor {assessor_id}: {e}")
+                    continue
+
+            procedures_with_assessors.append({
+                'procedure_id': procedure_id,
+                'procedure_name': procedure_name,
+                'batchassignment_id': batchassignment_id,
+                'assessors': procedure_assessors
+            })
+
+        # Format date
+        testdate_str = None
+        try:
+            testdate = summary_data.get('test_date')
+            if testdate:
+                if hasattr(testdate, 'strftime'):
+                    testdate_str = testdate.strftime('%Y-%m-%d')
+                elif isinstance(testdate, str):
+                    testdate_str = testdate
+        except Exception:
+            testdate_str = None
+
+        response = {
+            'id': summary_id,
+            'batch_id': batch_id,
+            'batch_name': batch_name,
+            'unit_name': unit_name,
+            'unit_type': unit_type,
+            'exam_type': summary_data.get('exam_type', 'Final'),
+            'status': summary_data.get('status', 'Active'),
+            'testdate': testdate_str,
+            'semester': summary_data.get('semester', ''),
+            'yearOfBatch': summary_data.get('yearOfBatch', ''),
+            'procedure_assessor_mappings': procedures_with_assessors,
+            'assessors': list(all_assessors_map.values()),
+        }
+        return JsonResponse({'success': True, 'summary': response})
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Error in get_batch_assignment_summary: {str(e)}\n{error_trace}")
+        return JsonResponse({'error': 'Failed to retrieve batch assignment summary. Please try again.'}, status=500)
 
 @csrf_exempt
 def delete_test(request, test_id):
@@ -1489,6 +1615,191 @@ def update_test(request, test_id):
 
         return JsonResponse({'success': True})
     except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+def update_batch_assignment_summary(request, summary_id):
+    """Update BatchAssignmentSummary fields: test_date, status, and procedure-assessor mappings."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+    try:
+        body = json.loads(request.body or '{}')
+        testdate_str = body.get('testdate')
+        status_val = body.get('status')
+        procedure_assessor_mappings = body.get('procedure_assessor_mappings', [])
+
+        summary_ref = db.collection('BatchAssignmentSummary').document(summary_id)
+        summary_doc = summary_ref.get()
+        if not summary_doc.exists:
+            return JsonResponse({'error': 'Batch assignment summary not found'}, status=404)
+
+        summary_data = summary_doc.to_dict()
+        update_payload = {}
+
+        # Update test date
+        if testdate_str:
+            try:
+                new_date = datetime.strptime(testdate_str, '%Y-%m-%d')
+                update_payload['test_date'] = new_date
+            except Exception:
+                return JsonResponse({'error': 'Invalid date format, expected YYYY-MM-DD'}, status=400)
+
+        # Update status
+        if status_val:
+            update_payload['status'] = status_val
+
+        # Apply basic updates
+        if update_payload:
+            summary_ref.update(update_payload)
+
+        # Handle procedure-assessor mappings updates
+        if procedure_assessor_mappings:
+            old_mappings = summary_data.get('procedure_assessor_mappings', [])
+
+            # Create a map of old batchassignments to potentially delete
+            old_ba_ids = {m.get('batchassignment_id') for m in old_mappings if m.get('batchassignment_id')}
+
+            # Process new mappings
+            new_processed_mappings = []
+            batch_id = summary_data.get('batch_id')
+            course_id = summary_data.get('course_id')
+            unit_id = summary_data.get('unit_id')
+            unit_type = summary_data.get('unitType', 'institution')
+            unit_name = summary_data.get('unit_name', '')
+            exam_type = summary_data.get('exam_type', 'Final')
+            year_of_batch = summary_data.get('yearOfBatch', '')
+            semester = summary_data.get('semester', '')
+
+            # Get references
+            batch_ref = db.collection('Batches').document(batch_id)
+            course_ref = db.collection('Courses').document(course_id)
+
+            # Determine unit reference based on type
+            if unit_type == 'hospital':
+                unit_ref = db.collection('Hospitals').document(unit_id)
+            else:
+                unit_ref = db.collection('Institutions').document(unit_id)
+
+            # Get test date for BatchAssignments
+            test_date_obj = summary_data.get('test_date')
+            if testdate_str:
+                try:
+                    test_date_obj = datetime.strptime(testdate_str, '%Y-%m-%d')
+                except Exception:
+                    pass
+
+            # Get learners from batch
+            batch_doc = batch_ref.get()
+            learners = []
+            if batch_doc.exists:
+                learners = batch_doc.to_dict().get('learners', [])
+
+            # For each procedure-assessor mapping
+            for mapping in procedure_assessor_mappings:
+                procedure_id = mapping.get('procedure_id')
+                assessor_ids = mapping.get('assessor_ids', [])
+                old_ba_id = mapping.get('batchassignment_id')  # May be None for new procedures
+
+                # Get procedure data
+                procedure_ref = db.collection('ProcedureTable').document(procedure_id)
+                procedure_doc = procedure_ref.get()
+                procedure_data = procedure_doc.to_dict() if procedure_doc.exists else {}
+
+                # Check if we can reuse existing BatchAssignment
+                batchassignment_ref = None
+                if old_ba_id:
+                    # Try to update existing BatchAssignment
+                    try:
+                        ba_ref = db.collection('BatchAssignment').document(old_ba_id)
+                        ba_doc = ba_ref.get()
+                        if ba_doc.exists:
+                            # Update assessorlist and testDate
+                            ba_ref.update({
+                                'assessorlist': [db.collection('Users').document(str(aid)) for aid in assessor_ids],
+                                'testDate': test_date_obj,
+                            })
+                            batchassignment_ref = ba_ref
+                            # Remove from deletion list
+                            old_ba_ids.discard(old_ba_id)
+                    except Exception as e:
+                        logger.error(f"Error updating existing BatchAssignment: {e}")
+
+                # If no existing BA or update failed, create new one
+                if not batchassignment_ref:
+                    # Create new BatchAssignment
+                    batchassignment_data = {
+                        'batch': batch_ref,
+                        'course': course_ref,
+                        'assessorlist': [db.collection('Users').document(str(aid)) for aid in assessor_ids],
+                        'procedure': procedure_ref,
+                        'examassignment': [],
+                        'examType': exam_type,
+                        'testDate': test_date_obj,
+                        'createdAt': datetime.now(),
+                        'status': 'Pending',
+                        'unitType': unit_type,
+                        'unit': unit_ref,
+                        'unit_name': unit_name,
+                        'yearOfBatch': year_of_batch,
+                        'semester': semester,
+                    }
+                    batchassignment_ref = db.collection('BatchAssignment').add(batchassignment_data)[1]
+
+                    # Create ExamAssignments for each learner
+                    exam_assignment_refs = []
+                    for learner_ref in learners:
+                        exam_assignment_data = {
+                            'user': learner_ref,
+                            'examMetaData': procedure_data.get('examMetaData', {}),
+                            'status': 'Pending',
+                            'procedure_name': procedure_data.get('procedureName', ''),
+                            'unitType': unit_type,
+                            'unit': unit_ref,
+                            'unit_name': unit_name,
+                            'examType': exam_type,
+                            'batchassignment': batchassignment_ref,
+                            'createdAt': datetime.now()
+                        }
+                        exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
+                        exam_assignment_refs.append(exam_assignment_ref)
+
+                    # Update BatchAssignment with ExamAssignments
+                    if exam_assignment_refs:
+                        batchassignment_ref.update({'examassignment': firestore.ArrayUnion(exam_assignment_refs)})
+
+                # Add to new mappings
+                new_processed_mappings.append({
+                    'procedure_id': procedure_id,
+                    'procedure_name': procedure_data.get('procedureName', 'Unknown'),
+                    'assessor_ids': assessor_ids,
+                    'batchassignment_id': batchassignment_ref.id
+                })
+
+            # Delete orphaned BatchAssignments
+            for old_ba_id in old_ba_ids:
+                try:
+                    ba_ref = db.collection('BatchAssignment').document(old_ba_id)
+                    ba_doc = ba_ref.get()
+                    if ba_doc.exists:
+                        # Delete associated ExamAssignments
+                        ba_data = ba_doc.to_dict()
+                        for exam_ref in ba_data.get('examassignment', []) or []:
+                            try:
+                                exam_ref.delete()
+                            except Exception:
+                                pass
+                        ba_ref.delete()
+                except Exception as e:
+                    logger.error(f"Error deleting orphaned BatchAssignment {old_ba_id}: {e}")
+
+            # Update summary with new mappings
+            summary_ref.update({'procedure_assessor_mappings': new_processed_mappings})
+
+        return JsonResponse({'success': True})
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Error in update_batch_assignment_summary: {str(e)}\n{error_trace}")
         return JsonResponse({'error': str(e)}, status=500)
 
 def render_exam_reports_page(request):
