@@ -4428,23 +4428,40 @@ def create_batch(request):
 
 @csrf_exempt
 def fetch_hospitals(request):
-    """API endpoint to fetch all hospitals."""
+    """API endpoint to fetch hospitals with optional B2B filtering."""
     try:
-        hospitals_ref = db.collection('HospitalNames')
+        # Check if we need B2B filtering
+        onboarding_type = request.GET.get('onboarding_type', '').lower()
         hospitals = []
-        
-        for doc in hospitals_ref.stream():
-            hospital_data = doc.to_dict()
-            hospitals.append({
-                'id': doc.id,
-                'name': hospital_data.get('hospitalName', 'N/A')
-            })
-        
+
+        if onboarding_type == 'b2b':
+            # For B2B, fetch from Django Hospital model with B2B filtering
+            django_hospitals = Hospital.objects.filter(
+                is_active=True,
+                onboarding_type='b2b'
+            )
+
+            for hosp in django_hospitals:
+                hospitals.append({
+                    'id': str(hosp.id),
+                    'name': hosp.name
+                })
+        else:
+            # Default behavior: fetch from Firebase HospitalNames collection
+            hospitals_ref = db.collection('HospitalNames')
+
+            for doc in hospitals_ref.stream():
+                hospital_data = doc.to_dict()
+                hospitals.append({
+                    'id': doc.id,
+                    'name': hospital_data.get('hospitalName', 'N/A')
+                })
+
         return JsonResponse({
             'success': True,
             'units': hospitals
         }, status=200)
-        
+
     except Exception as e:
         return JsonResponse({
             'success': False,

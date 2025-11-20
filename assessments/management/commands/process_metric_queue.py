@@ -357,11 +357,10 @@ class Command(BaseCommand):
                                 # Track marks by type
                                 students_data[user_id]['marks_by_type'][exam_type]['obtained'] += total_score
                                 students_data[user_id]['marks_by_type'][exam_type]['max'] += max_marks
-                            
-                            # Track grade distribution
-                            grade = self._get_grade(percentage)
-                            grade_distribution[grade] += 1
-                            
+
+                            # NOTE: Grade distribution is now calculated at student-level (not exam-level)
+                            # See after student_batch_report creation for proper calculation
+
                             # Track student completion
                             completed_student_ids.add(user_id)
                             
@@ -629,7 +628,42 @@ class Command(BaseCommand):
                     'osce_types': list(skill_data['osce_types']),
                     'station_breakdown': station_breakdown
                 }
-        
+
+        # PRE-COMPUTE: Category drill-down details
+        # Eliminates frontend filtering and calculation on every category click (~200 iterations per click)
+        category_details = {}
+        for category in ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Pre-Procedure', 'Critical Thinking']:
+            skills_in_category = [
+                skill for skill_id, skill in skills_performance.items()
+                if skill['category'] == category
+            ]
+
+            if skills_in_category:
+                # Find highest and lowest scoring skills using student-average method
+                highest_skill = max(skills_in_category, key=lambda s: s['avg_score_student_method'])
+                lowest_skill = min(skills_in_category, key=lambda s: s['avg_score_student_method'])
+
+                # Calculate skill grade distribution (grade each skill, not each exam)
+                skill_grade_dist = Counter()
+                for skill in skills_in_category:
+                    grade = self._get_grade(skill['avg_score_student_method'])
+                    skill_grade_dist[grade] += 1
+
+                category_details[category] = {
+                    'total_skills': len(skills_in_category),
+                    'highest_scoring_skill': {
+                        'name': highest_skill['skill_name'],
+                        'score': highest_skill['avg_score_student_method']
+                    },
+                    'lowest_scoring_skill': {
+                        'name': lowest_skill['skill_name'],
+                        'score': lowest_skill['avg_score_student_method']
+                    },
+                    'skill_grade_distribution': dict(skill_grade_dist)
+                }
+            else:
+                category_details[category] = None
+
         # Student batch report
         student_batch_report = []
         for user_id, student_data in students_data.items():
@@ -670,7 +704,37 @@ class Command(BaseCommand):
                         'attempts': len(scores),
                         'avg_score': round(sum(scores) / len(scores), 2)
                     }
-            
+
+            # PRE-COMPUTE: Procedure scores by OSCE type
+            # This eliminates 500-1000+ frontend calculations in getStudentProcedureScores()
+            # Groups exam attempts by OSCE type, then by procedure name, and calculates
+            # aggregated percentage using Total Marks Method (METRICS_CALCULATION_GUIDE.md)
+            procedure_scores_by_type = {}
+            for osce_type in ['Classroom', 'Mock', 'Final']:
+                procedure_scores_by_type[osce_type] = {}
+
+                # Get all exam attempts for this OSCE type
+                type_attempts = [e for e in student_data['exam_attempts'] if e.get('exam_type') == osce_type]
+
+                # Group by procedure name and aggregate marks
+                procedure_marks = {}  # {proc_name: {obtained: X, max: Y}}
+                for attempt in type_attempts:
+                    proc_name = attempt.get('procedure_name')
+                    if proc_name:
+                        if proc_name not in procedure_marks:
+                            procedure_marks[proc_name] = {'obtained': 0, 'max': 0}
+
+                        # Aggregate marks using Total Marks Method
+                        procedure_marks[proc_name]['obtained'] += attempt.get('marks_obtained', 0)
+                        procedure_marks[proc_name]['max'] += attempt.get('max_marks', 0)
+
+                # Calculate percentage for each procedure
+                for proc_name, marks in procedure_marks.items():
+                    if marks['max'] > 0:
+                        procedure_scores_by_type[osce_type][proc_name] = round((marks['obtained'] / marks['max']) * 100, 2)
+                    else:
+                        procedure_scores_by_type[osce_type][proc_name] = 0
+
             student_batch_report.append({
                 'user_id': user_id,
                 'name': student_data['name'],
@@ -691,11 +755,21 @@ class Command(BaseCommand):
                 'category_breakdown': category_breakdown,
                 'exam_attempts': student_data['exam_attempts'],
                 'total_marks_obtained': student_data['total_marks_obtained'],
-                'total_max_marks': student_data['total_max_marks']
+                'total_max_marks': student_data['total_max_marks'],
+                'procedure_scores_by_type': procedure_scores_by_type  # NEW: Pre-computed procedure scores
             })
         
         # Sort student report by overall average (descending)
         student_batch_report.sort(key=lambda x: x['overall_avg'], reverse=True)
+
+        # Calculate STUDENT-LEVEL grade distribution (not exam-level)
+        # This follows METRICS_CALCULATION_GUIDE.md methodology
+        student_grade_distribution = Counter()
+        for student in student_batch_report:
+            student_grade_distribution[student['overall_grade']] += 1
+
+        # Replace the exam-level grade_distribution with student-level
+        grade_distribution = student_grade_distribution
 
         # ============================================
         # PHASE 4B: PRE-COMPUTE OSCE TYPE BREAKDOWN
@@ -765,6 +839,40 @@ class Command(BaseCommand):
                 if osce.get('osce_level') == osce_type:
                     type_osce_timeline.append(osce)
 
+            # PRE-COMPUTE: Category drill-down details for this OSCE type
+            type_category_details = {}
+            for category in ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Pre-Procedure', 'Critical Thinking']:
+                type_skills_in_category = [
+                    skill for skill_id, skill in type_skills_perf.items()
+                    if skill['category'] == category
+                ]
+
+                if type_skills_in_category:
+                    # Find highest and lowest scoring skills
+                    type_highest_skill = max(type_skills_in_category, key=lambda s: s['avg_score'])
+                    type_lowest_skill = min(type_skills_in_category, key=lambda s: s['avg_score'])
+
+                    # Calculate skill grade distribution
+                    type_skill_grade_dist = Counter()
+                    for skill in type_skills_in_category:
+                        grade = self._get_grade(skill['avg_score'])
+                        type_skill_grade_dist[grade] += 1
+
+                    type_category_details[category] = {
+                        'total_skills': len(type_skills_in_category),
+                        'highest_scoring_skill': {
+                            'name': type_highest_skill['skill_name'],
+                            'score': type_highest_skill['avg_score']
+                        },
+                        'lowest_scoring_skill': {
+                            'name': type_lowest_skill['skill_name'],
+                            'score': type_lowest_skill['avg_score']
+                        },
+                        'skill_grade_distribution': dict(type_skill_grade_dist)
+                    }
+                else:
+                    type_category_details[category] = None
+
             # Build student batch report for this OSCE type
             for user_id, student_data in students_data.items():
                 type_marks = student_data['marks_by_type'].get(osce_type, {})
@@ -789,6 +897,25 @@ class Command(BaseCommand):
                                 'avg_score': round(sum(scores) / len(scores), 2)
                             }
 
+                    # PRE-COMPUTE: Procedure scores for this specific OSCE type
+                    type_procedure_scores = {}
+                    type_attempts = [e for e in student_data['exam_attempts'] if e.get('exam_type') == osce_type]
+
+                    procedure_marks = {}
+                    for attempt in type_attempts:
+                        proc_name = attempt.get('procedure_name')
+                        if proc_name:
+                            if proc_name not in procedure_marks:
+                                procedure_marks[proc_name] = {'obtained': 0, 'max': 0}
+                            procedure_marks[proc_name]['obtained'] += attempt.get('marks_obtained', 0)
+                            procedure_marks[proc_name]['max'] += attempt.get('max_marks', 0)
+
+                    for proc_name, marks in procedure_marks.items():
+                        if marks['max'] > 0:
+                            type_procedure_scores[proc_name] = round((marks['obtained'] / marks['max']) * 100, 2)
+                        else:
+                            type_procedure_scores[proc_name] = 0
+
                     type_student_batch_report.append({
                         'user_id': user_id,
                         'name': student_data['name'],
@@ -797,13 +924,19 @@ class Command(BaseCommand):
                         'total_marks_obtained': type_marks['obtained'],
                         'total_max_marks': type_marks['max'],
                         'category_breakdown': type_category_breakdown,
-                        'exam_attempts': [e for e in student_data['exam_attempts'] if e.get('exam_type') == osce_type]
+                        'exam_attempts': type_attempts,
+                        'procedure_scores_by_type': {osce_type: type_procedure_scores}  # NEW: Pre-computed for this type
                     })
 
             # Calculate metrics for this OSCE type
             type_avg_score = round(sum(type_student_overall_percentages) / len(type_student_overall_percentages), 2) if type_student_overall_percentages else 0
             type_pass_count = sum(1 for s in type_student_overall_percentages if s >= 80)
             type_pass_rate = round((type_pass_count / len(type_student_overall_percentages) * 100), 2) if type_student_overall_percentages else 0
+
+            # Calculate STUDENT-LEVEL grade distribution for this OSCE type
+            type_grade_dist = Counter()
+            for student in type_student_batch_report:
+                type_grade_dist[student['overall_grade']] += 1
 
             # Store OSCE type breakdown
             osce_type_breakdown[osce_type] = {
@@ -814,6 +947,7 @@ class Command(BaseCommand):
                 'grade_letter': self._get_grade(type_avg_score),
                 'grade_distribution': dict(type_grade_dist),
                 'category_performance': type_category_performance,
+                'category_details': type_category_details,  # NEW: Pre-computed category drill-down metrics
                 'skills_performance': type_skills_perf,
                 'osce_activity_timeline': type_osce_timeline,
                 'student_batch_report': type_student_batch_report,
@@ -839,6 +973,7 @@ class Command(BaseCommand):
             'num_assessors': len(assessors_set),
             'skills_evaluated': len(evaluated_procedures),  # Count unique procedures evaluated
             'category_performance': category_performance,
+            'category_details': category_details,  # NEW: Pre-computed category drill-down metrics
             'skills_performance': skills_performance,
             'grade_distribution': dict(grade_distribution),
             'osce_type_breakdown': osce_type_breakdown,  # NEW: Pre-computed breakdown by OSCE type
