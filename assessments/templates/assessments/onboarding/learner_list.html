@@ -43,6 +43,27 @@
     </button>
 </div>
 
+<!-- Main Page Upload Progress Indicator -->
+<div id="mainPageProgress" style="display: none; margin: 20px 0; padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+        <i class="fas fa-spinner fa-spin" style="font-size: 24px; color: #2563eb;"></i>
+        <div style="flex: 1;">
+            <h4 style="margin: 0 0 5px 0; color: #1f2937;">Bulk Upload in Progress</h4>
+            <p style="margin: 0; color: #6b7280; font-size: 14px;" id="mainProgressMessage">Processing learners...</p>
+        </div>
+        <button onclick="showUploadPanel()" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+            <i class="fas fa-eye"></i> View Details
+        </button>
+    </div>
+    <div style="background: #f3f4f6; border-radius: 6px; height: 8px; overflow: hidden;">
+        <div id="mainProgressBar" style="height: 100%; background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%); width: 0%; transition: width 0.3s ease;"></div>
+    </div>
+    <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 13px; color: #6b7280;">
+        <span id="mainProgressStats">0 / 0 completed</span>
+        <span id="mainProgressPercent">0%</span>
+    </div>
+</div>
+
 <!-- Filter Side Panel -->
 <div class="filter-panel" id="filterPanel">
     <div class="filter-header">
@@ -312,7 +333,7 @@
         <!-- Progress Section -->
         <div class="upload-section" id="progressSection" style="display: none;">
             <div class="section-header">
-                <!-- <i class="fas fa-spinner fa-spin"></i> -->
+                <i class="fas fa-spinner fa-spin"></i>
                 <h4>Upload Progress</h4>
             </div>
             <div class="progress-container">
@@ -348,6 +369,17 @@
                 <div class="progress-details" id="progressDetails">
                     <!-- Detailed progress information will be shown here -->
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload in Progress Warning -->
+    <div id="uploadInProgressWarning" style="display: none; padding: 15px 24px; background: #fef3c7; border-left: 4px solid #f59e0b; margin: 0;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <i class="fas fa-exclamation-triangle" style="color: #f59e0b; font-size: 20px;"></i>
+            <div>
+                <strong style="color: #92400e;">Upload Already in Progress</strong>
+                <p style="margin: 5px 0 0 0; color: #78350f; font-size: 14px;">Another file is currently being processed. Please wait for it to complete before uploading a new file.</p>
             </div>
         </div>
     </div>
@@ -2025,11 +2057,27 @@ function updateFilterBadge() {
     }
 }
 
+function showUploadPanel() {
+    const panel = document.getElementById('uploadPanel');
+    if (!panel.classList.contains('active')) {
+        toggleUploadPanel();
+    }
+
+    // Show the progress section inside the panel and scroll to it
+    setTimeout(() => {
+        const progressSection = document.getElementById('progressSection');
+        if (progressSection) {
+            progressSection.style.display = 'block';
+            progressSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }, 300); // Wait for panel animation to complete
+}
+
 function toggleUploadPanel() {
     const panel = document.getElementById('uploadPanel');
     const overlay = document.querySelector('.overlay');
     panel.classList.toggle('active');
-    
+
     if (panel.classList.contains('active')) {
         document.body.style.overflow = 'hidden';
         if (!overlay) {
@@ -2041,7 +2089,27 @@ function toggleUploadPanel() {
         setTimeout(() => {
             document.querySelector('.overlay').classList.add('active');
         }, 10);
-        
+
+        // Check if upload is in progress and show warning
+        const uploadButton = document.getElementById('uploadButton');
+        const warningDiv = document.getElementById('uploadInProgressWarning');
+
+        if (isUploadInProgress) {
+            if (warningDiv) warningDiv.style.display = 'block';
+            if (uploadButton) {
+                uploadButton.disabled = true;
+                uploadButton.style.opacity = '0.5';
+                uploadButton.style.cursor = 'not-allowed';
+            }
+        } else {
+            if (warningDiv) warningDiv.style.display = 'none';
+            if (uploadButton) {
+                uploadButton.disabled = false;
+                uploadButton.style.opacity = '1';
+                uploadButton.style.cursor = 'pointer';
+            }
+        }
+
         // Reset upload panel state
         resetUploadPanel();
     } else {
@@ -2053,6 +2121,9 @@ function toggleUploadPanel() {
                 overlay.remove();
             }, 300);
         }
+
+        // Reload the page when upload panel is closed
+        location.reload();
     }
 }
 
@@ -2091,6 +2162,9 @@ function resetUploadPanel() {
 // File Upload Handling
 const uploadZone = document.getElementById('uploadZone');
 const fileInput = document.getElementById('fileInput');
+let currentFile = null; // Store the current file for drag & drop
+let activePollingInterval = null; // Track active polling interval to prevent conflicts
+let isUploadInProgress = false; // Track if an upload is currently processing
 
 uploadZone.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -2104,17 +2178,33 @@ uploadZone.addEventListener('dragleave', () => {
 uploadZone.addEventListener('drop', (e) => {
     e.preventDefault();
     uploadZone.classList.remove('dragover');
-    handleFiles(e.dataTransfer.files);
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        // Store the file and update fileInput
+        currentFile = files[0];
+        // Create a new DataTransfer to set fileInput.files
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(currentFile);
+        fileInput.files = dataTransfer.files;
+        handleFiles(files);
+    }
 });
 
 fileInput.addEventListener('change', (e) => {
-    handleFiles(e.target.files);
+    if (e.target.files.length > 0) {
+        currentFile = e.target.files[0];
+        handleFiles(e.target.files);
+    }
 });
 
 function handleFiles(files) {
     if (files.length > 0) {
         const file = files[0];
         if (file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.name.endsWith('.xlsx')) {
+            // Clear previous validations and preview when new file is uploaded
+            document.querySelector('.table-wrapper').innerHTML = '';
+            document.querySelector('.validation-results').innerHTML = '';
+
             showFilePreview(file);
             validateAndPreviewExcel(file);
         } else {
@@ -2146,6 +2236,7 @@ function removeFile() {
     // Clear preview and validation
     document.querySelector('.table-wrapper').innerHTML = '';
     document.querySelector('.validation-results').innerHTML = '';
+    window.location.reload()
 }
 
 function validateAndPreviewExcel(file) {
@@ -2164,24 +2255,21 @@ function validateAndPreviewExcel(file) {
             ).slice(0, 5); // Get up to 5 non-empty rows
             
             // Get total non-empty rows for progress tracking
-            const allNonEmptyRows = jsonData.slice(1).filter(row => 
+            const allNonEmptyRows = jsonData.slice(1).filter(row =>
                 row.some(cell => cell !== null && cell !== undefined && cell.toString().trim() !== '')
             );
-            
+
             // Store total rows for progress tracking
             window.totalRowsToProcess = allNonEmptyRows.length;
-            
-            // Validate headers
+
+            // Validate headers only
             const validationResults = validateHeaders(headers);
-            
-            // Create preview table with non-empty rows
+
+            // Create preview table with non-empty rows (only first 5 for display)
             createPreviewTable(headers, nonEmptyRows);
-            
-            // Validate data (using all rows for validation)
-            const dataValidation = validateData(headers, nonEmptyRows);
-            
-            // Show validation results
-            showValidationResults(validationResults, dataValidation);
+
+            // Show header validation results only (data validation will be done by backend)
+            showValidationResults(validationResults);
         }
     };
     reader.readAsArrayBuffer(file);
@@ -2244,29 +2332,75 @@ function validateData(headers, rows) {
     const phoneRegex = /^\d{10}$/;
     const dateRegex = /^\d{2}\/\d{2}\/\d{4}$/;
     const pincodeRegex = /^\d{6}$/;
+    const seenEmails = new Set();
 
     rows.forEach((row, index) => {
         const rowErrors = [];
         const rowData = {};
-        
+
         // Create object from row data
         headers.forEach((header, i) => {
             rowData[header] = row[i];
         });
 
+        // Validate Onboarding Type (B2B or B2C)
+        const onboardingType = String(rowData['Onboarding Type'] || '').trim().toUpperCase();
+        if (!['B2B', 'B2C'].includes(onboardingType)) {
+            rowErrors.push(`Onboarding Type must be 'B2B' or 'B2C', found: '${rowData['Onboarding Type'] || ''}'`);
+        }
+
         // Validate required fields
         if (!rowData['Learner Name']) {
             rowErrors.push('Name is required');
         }
-        if (!rowData['Learner Email']) {
+
+        // Validate email
+        const email = String(rowData['Learner Email'] || '').trim();
+        if (!email) {
             rowErrors.push('Email is required');
-        } else if (!emailRegex.test(rowData['Learner Email'])) {
+        } else if (!emailRegex.test(email)) {
             rowErrors.push('Invalid email format');
+        } else if (seenEmails.has(email)) {
+            rowErrors.push(`Duplicate email address: '${email}'`);
+        } else {
+            seenEmails.add(email);
         }
+
+        // Validate phone
         if (!rowData['Learner Phone']) {
             rowErrors.push('Phone is required');
-        } else if (!phoneRegex.test(rowData['Learner Phone'])) {
+        } else if (!phoneRegex.test(String(rowData['Learner Phone']).trim())) {
             rowErrors.push('Phone must be 10 digits');
+        }
+
+        // Validate Learner Gender (Male, Female, or Other)
+        const gender = String(rowData['Learner Gender'] || '').trim().toLowerCase();
+        if (!gender) {
+            rowErrors.push('Learner Gender is required');
+        } else if (!['male', 'female', 'other'].includes(gender)) {
+            rowErrors.push(`Learner Gender must be 'Male', 'Female', or 'Other', found: '${rowData['Learner Gender']}'`);
+        }
+
+        // Validate Learner Type (Student or Nurse)
+        const learnerType = String(rowData['Learner Type'] || '').trim().toLowerCase();
+        if (!['student', 'nurse'].includes(learnerType)) {
+            rowErrors.push(`Learner Type must be 'Student' or 'Nurse', found: '${rowData['Learner Type'] || ''}'`);
+        }
+
+        // Validate College for students
+        if (learnerType === 'student') {
+            const college = String(rowData['College'] || '').trim();
+            if (!college) {
+                rowErrors.push('College cannot be empty for students');
+            }
+        }
+
+        // Validate Hospital for nurses
+        if (learnerType === 'nurse') {
+            const hospital = String(rowData['Hospital'] || '').trim();
+            if (!hospital) {
+                rowErrors.push('Hospital cannot be empty for nurses');
+            }
         }
 
         if (rowErrors.length > 0) {
@@ -2307,7 +2441,7 @@ function createPreviewTable(headers, rows) {
     tableWrapper.innerHTML = html;
 }
 
-function showValidationResults(headerValidation, dataValidation) {
+function showValidationResults(headerValidation) {
     const validationResults = document.querySelector('.validation-results');
     let html = '';
 
@@ -2333,38 +2467,14 @@ function showValidationResults(headerValidation, dataValidation) {
                 </div>
             </div>
         `;
-    }
-
-    // Show data validation results
-    if (!dataValidation.isValid) {
-        html += `
-            <div class="alert alert-danger">
-                <i class="fas fa-exclamation-circle"></i>
-                <div class="alert-content">
-                    <strong>Data Validation Failed</strong>
-                    <p>Errors found in the following rows:</p>
-                    <ul>
-                        ${dataValidation.errors.map(error => `
-                            <li>Row ${error.row}:
-                                <ul>
-                                    ${error.errors.map(e => `<li>${e}</li>`).join('')}
-                                </ul>
-                            </li>
-                        `).join('')}
-                    </ul>
-                </div>
-            </div>
-        `;
-    }
-
-    // Show success message if all validations pass
-    if (headerValidation.isValid && dataValidation.isValid) {
+    } else {
+        // Show success message only for header validation
         html += `
             <div class="alert alert-success">
                 <i class="fas fa-check-circle"></i>
                 <div class="alert-content">
-                    <strong>Validation Successful</strong>
-                    <p>All headers and data are valid. You can proceed with the upload.</p>
+                    <strong>Header Validation Successful</strong>
+                    <p>All required columns are present. Click upload to proceed with data validation.</p>
                 </div>
             </div>
         `;
@@ -2374,15 +2484,24 @@ function showValidationResults(headerValidation, dataValidation) {
 }
 
 function submitUpload() {
+    // Check if an upload is already in progress
+    if (isUploadInProgress) {
+        alert('An upload is already in progress. Please wait for it to complete before uploading another file.');
+        return;
+    }
+
     const form = document.getElementById('uploadForm');
     const formData = new FormData(form);
     const fileInput = document.getElementById('fileInput');
-    
+
     // Make sure we have a file
     if (!fileInput.files.length) {
         alert('Please select a file to upload');
         return;
     }
+
+    // Mark upload as in progress
+    isUploadInProgress = true;
     
     // Show progress section and hide validation section
     document.getElementById('progressSection').style.display = 'block';
@@ -2420,7 +2539,12 @@ function submitUpload() {
             startProgressTracking(data.session_key);
         } else {
             updateProgress(100, 'Upload failed: ' + (data.error || 'Unknown error'));
-            showUploadError(data.error || 'Unknown error');
+            // Show detailed validation errors if available
+            if (data.validation_errors && data.validation_errors.length > 0) {
+                showValidationErrors(data.validation_errors);
+            } else {
+                showUploadError(data.error || 'Unknown error');
+            }
         }
     })
     .catch(error => {
@@ -2434,84 +2558,158 @@ function submitUpload() {
 }
 
 function startProgressTracking(sessionKey) {
-    console.log(`[DEBUG] Starting SSE connection for session: ${sessionKey}`);
-    const sseUrl = `/onboarding/learners/upload-progress/${sessionKey}/`;
-    console.log(`[DEBUG] SSE URL: ${sseUrl}`);
-    
-    const eventSource = new EventSource(sseUrl);
-    
-    eventSource.onopen = function(event) {
-        console.log('[DEBUG] SSE connection opened');
-    };
-    
-    eventSource.onmessage = function(event) {
-        console.log(`[DEBUG] Received SSE message:`, event.data);
+    console.log(`[DEBUG] Starting polling for session: ${sessionKey}`);
+
+    // Clear any existing polling interval to prevent conflicts
+    if (activePollingInterval) {
+        console.log('[DEBUG] Clearing previous polling interval');
+        clearInterval(activePollingInterval);
+        activePollingInterval = null;
+    }
+
+    const pollUrl = `/onboarding/learners/upload-details/${sessionKey}/`;
+    console.log(`[DEBUG] Poll URL: ${pollUrl}`);
+
+    let pollCount = 0;
+    const maxPollAttempts = 1200; // 1200 attempts * 3 seconds = 1 hour max
+
+    const pollStatus = async () => {
+        pollCount++;
+
         try {
-            const data = JSON.parse(event.data);
-            console.log(`[DEBUG] Parsed data:`, data);
-            
-            if (data.error) {
-                console.log(`[DEBUG] SSE error:`, data.error);
-                showUploadError(data.error);
-                eventSource.close();
+            const response = await fetch(pollUrl);
+
+            if (!response.ok) {
+                console.error(`[DEBUG] Poll request failed with status: ${response.status}`);
+                if (pollCount > 3) { // Only show error after a few attempts
+                    if (activePollingInterval) {
+                        clearInterval(activePollingInterval);
+                        activePollingInterval = null;
+                    }
+                    showUploadError('Failed to fetch upload status. Please refresh the page.');
+                }
                 return;
             }
-            
-            // Update progress
-            console.log(`[DEBUG] Updating progress to ${data.progress}%`);
-            updateProgress(data.progress, data.message);
-            
-            // Update statistics
-            if (data.total_rows) document.getElementById('totalRows').textContent = data.total_rows;
-            if (data.processed_rows) document.getElementById('processedRows').textContent = data.processed_rows;
-            if (data.success_count) document.getElementById('successCount').textContent = data.success_count;
-            if (data.update_count) document.getElementById('updateCount').textContent = data.update_count;
-            if (data.error_count) document.getElementById('errorCount').textContent = data.error_count;
-            
+
+            const data = await response.json();
+            console.log(`[DEBUG] Received poll data:`, data);
+
+            if (!data.success) {
+                console.log(`[DEBUG] Poll error:`, data.error);
+                if (activePollingInterval) {
+                    clearInterval(activePollingInterval);
+                    activePollingInterval = null;
+                }
+                showUploadError(data.error || 'Upload failed');
+                return;
+            }
+
+            // Calculate progress percentage
+            const progress = data.total_rows > 0
+                ? Math.round((data.completed_count / data.total_rows) * 100)
+                : 0;
+
+            console.log(`[DEBUG] Progress: ${data.completed_count}/${data.total_rows} (${progress}%)`);
+
+            // Update progress bar in upload panel (if open)
+            const statusMessage = data.status === 'processing'
+                ? `Processing... ${data.completed_count}/${data.total_rows} completed`
+                : data.message || 'Processing...';
+            updateProgress(progress, statusMessage);
+
+            // Update statistics in upload panel (if open)
+            const totalRows = document.getElementById('totalRows');
+            const processedRows = document.getElementById('processedRows');
+            const successCount = document.getElementById('successCount');
+            const errorCount = document.getElementById('errorCount');
+
+            if (totalRows) totalRows.textContent = data.total_rows || 0;
+            if (processedRows) processedRows.textContent = data.completed_count || 0;
+            if (successCount) successCount.textContent = data.completed_count || 0;
+            if (errorCount) errorCount.textContent = data.error_count || 0;
+
+            // Update main page progress indicator
+            const mainProgressBar = document.getElementById('mainProgressBar');
+            const mainProgressMessage = document.getElementById('mainProgressMessage');
+            const mainProgressStats = document.getElementById('mainProgressStats');
+            const mainProgressPercent = document.getElementById('mainProgressPercent');
+            const mainPageProgress = document.getElementById('mainPageProgress');
+
+            if (mainPageProgress) mainPageProgress.style.display = 'block';
+            if (mainProgressBar) mainProgressBar.style.width = progress + '%';
+            if (mainProgressMessage) mainProgressMessage.textContent = statusMessage;
+            if (mainProgressStats) mainProgressStats.textContent = `${data.completed_count || 0} / ${data.total_rows || 0} completed`;
+            if (mainProgressPercent) mainProgressPercent.textContent = progress + '%';
+
             // Handle completion
             if (data.status === 'completed') {
                 console.log('[DEBUG] Upload completed');
-                showUploadResult(data);
-                eventSource.close();
-                // Hide progress section after completion
-                // setTimeout(() => {
-                //     document.getElementById('progressSection').style.display = 'none';
-                // }, 3000); // Hide after 3 seconds to show completion message
+                if (activePollingInterval) {
+                    clearInterval(activePollingInterval);
+                    activePollingInterval = null;
+                }
+
+                // Mark upload as no longer in progress
+                isUploadInProgress = false;
+
+                // Hide main page progress and reload to show new learners
+                setTimeout(() => {
+                    const mainPageProgress = document.getElementById('mainPageProgress');
+                    if (mainPageProgress) mainPageProgress.style.display = 'none';
+                    location.reload();
+                }, 2000);
+
+                showUploadResult({
+                    success: true,
+                    message: data.message || 'Upload completed successfully',
+                    total_rows: data.total_rows,
+                    success_count: data.completed_count,
+                    error_count: data.error_count
+                });
             } else if (data.status === 'error') {
                 console.log('[DEBUG] Upload error:', data.message);
-                showUploadError(data.message);
-                eventSource.close();
-                // Hide progress section after error
-                // setTimeout(() => {
-                //     document.getElementById('progressSection').style.display = 'none';
-                // }, 3000); // Hide after 3 seconds to show error message
+                if (activePollingInterval) {
+                    clearInterval(activePollingInterval);
+                    activePollingInterval = null;
+                }
+
+                // Mark upload as no longer in progress
+                isUploadInProgress = false;
+
+                // Hide main page progress
+                const mainPageProgress = document.getElementById('mainPageProgress');
+                if (mainPageProgress) mainPageProgress.style.display = 'none';
+
+                showUploadError(data.message || 'Upload failed');
             }
-            
+
+            // Stop polling if max attempts reached
+            if (pollCount >= maxPollAttempts) {
+                console.log('[DEBUG] Max poll attempts reached');
+                if (activePollingInterval) {
+                    clearInterval(activePollingInterval);
+                    activePollingInterval = null;
+                }
+                showUploadError('Upload is taking too long. Please check the status later.');
+            }
+
         } catch (error) {
-            console.error('[DEBUG] Error parsing SSE data:', error);
+            console.error('[DEBUG] Poll request error:', error);
+            if (pollCount > 3) { // Only show error after a few attempts
+                if (activePollingInterval) {
+                    clearInterval(activePollingInterval);
+                    activePollingInterval = null;
+                }
+                showUploadError('Connection lost. Please check your network connection.');
+            }
         }
     };
-    
-    eventSource.onerror = function(error) {
-        console.error('[DEBUG] SSE connection error:', error);
-        console.error('[DEBUG] Error details:', {
-            readyState: eventSource.readyState,
-            url: eventSource.url
-        });
-        eventSource.close();
-        showUploadError('Connection lost. Please check the upload status.');
-    };
-    
-    // Add timeout to check if connection is working
-    setTimeout(() => {
-        if (eventSource.readyState === 0) { // CONNECTING
-            console.log('[DEBUG] SSE still connecting after 5 seconds...');
-        } else if (eventSource.readyState === 1) { // OPEN
-            console.log('[DEBUG] SSE connection is open');
-        } else if (eventSource.readyState === 2) { // CLOSED
-            console.log('[DEBUG] SSE connection is closed');
-        }
-    }, 5000);
+
+    // Start polling immediately
+    pollStatus();
+
+    // Then poll every 3 seconds and store in global variable
+    activePollingInterval = setInterval(pollStatus, 3000);
 }
 
 function initializeProgress() {
@@ -2671,12 +2869,65 @@ function showUploadError(error) {
             </div>
         </div>
     `;
-    
+
     // Show Done button
     document.getElementById('uploadButton').style.display = 'none';
     document.getElementById('doneButton').style.display = 'inline-flex';
-    
+
     alert('Upload failed: ' + error);
+}
+
+function showValidationErrors(validation_errors) {
+    const progressDetails = document.getElementById('progressDetails');
+
+    // Create detailed error display
+    let errorsHtml = `
+        <div class="progress-detail-item error">
+            <div class="progress-detail-icon error">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <div class="progress-detail-content">
+                <div class="progress-detail-title">Validation Failed</div>
+                <div class="progress-detail-message">Found ${validation_errors.length} row(s) with errors. Please fix and re-upload.</div>
+            </div>
+        </div>
+        <div style="margin-top: 20px;">
+            <h5 style="color: #dc3545; margin-bottom: 15px;">
+                <i class="fas fa-list"></i> Error Details:
+            </h5>
+            <div style="max-height: 400px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; background: #f8f9fa;">
+    `;
+
+    validation_errors.forEach((error, index) => {
+        errorsHtml += `
+            <div style="margin-bottom: 15px; padding: 10px; background: white; border-left: 3px solid #dc3545; border-radius: 4px;">
+                <strong style="color: #dc3545;">Row ${error.row}:</strong>
+                <ul style="margin: 5px 0 0 0; padding-left: 20px; list-style-type: disc;">
+        `;
+
+        error.errors.forEach(errorMsg => {
+            errorsHtml += `<li style="margin: 3px 0; color: #495057;">${errorMsg}</li>`;
+        });
+
+        errorsHtml += `
+                </ul>
+            </div>
+        `;
+    });
+
+    errorsHtml += `
+            </div>
+        </div>
+    `;
+
+    progressDetails.innerHTML = errorsHtml;
+
+    // Show Done button
+    document.getElementById('uploadButton').style.display = 'none';
+    document.getElementById('doneButton').style.display = 'inline-flex';
+
+    // Show alert with summary
+    alert(`Validation failed for ${validation_errors.length} row(s). Please check the error details and fix your Excel file.`);
 }
 
 function completeUpload() {
@@ -3028,9 +3279,53 @@ function loadMoreLearners() {
         });
 }
 
+// Check for active upload sessions on page load
+async function checkActiveUploads() {
+    try {
+        const response = await fetch('/onboarding/learners/active-uploads/');
+        const data = await response.json();
+
+        if (data.success && data.sessions && data.sessions.length > 0) {
+            // Find the most recent processing session
+            const processingSession = data.sessions.find(s => s.status === 'processing');
+
+            if (processingSession) {
+                console.log('[DEBUG] Found active upload session on page load:', processingSession.session_key);
+
+                // Mark upload as in progress
+                isUploadInProgress = true;
+
+                // Show main page progress indicator
+                const mainPageProgress = document.getElementById('mainPageProgress');
+                if (mainPageProgress) {
+                    mainPageProgress.style.display = 'block';
+                }
+
+                // Set initial progress on main page
+                const progress = processingSession.progress_percentage || 0;
+                const mainProgressBar = document.getElementById('mainProgressBar');
+                const mainProgressMessage = document.getElementById('mainProgressMessage');
+                const mainProgressStats = document.getElementById('mainProgressStats');
+                const mainProgressPercent = document.getElementById('mainProgressPercent');
+
+                if (mainProgressBar) mainProgressBar.style.width = progress + '%';
+                if (mainProgressMessage) mainProgressMessage.textContent = `Processing ${processingSession.filename || 'learners'}...`;
+                if (mainProgressStats) mainProgressStats.textContent = `${processingSession.completed_count || 0} / ${processingSession.total_rows || 0} completed`;
+                if (mainProgressPercent) mainProgressPercent.textContent = progress + '%';
+
+                // Start polling for this session
+                startProgressTracking(processingSession.session_key);
+            }
+        }
+    } catch (error) {
+        console.error('[DEBUG] Error checking for active uploads:', error);
+    }
+}
+
 // Initial load
 document.addEventListener('DOMContentLoaded', function() {
     loadMoreLearners();
+    checkActiveUploads(); // Check for active uploads on page load
 });
 
 // Function that was referenced in the form but missing from template
