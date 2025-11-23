@@ -531,6 +531,22 @@
             <!-- B2B: Procedure-Assessor Mapping Table -->
             <div id="editB2BFieldsContainer" style="display: none;">
                 <div style="margin-bottom: 20px;">
+                    <!-- Course Display (Read-only) -->
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label class="form-label">Course</label>
+                        <input type="text" id="editB2BCourseDisplay" class="form-control" readonly
+                               style="background-color: #f5f5f5; cursor: not-allowed;">
+                    </div>
+
+                    <!-- Add Procedure Dropdown -->
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label class="form-label">Add Procedures</label>
+                        <div class="dropdown-container">
+                            <button class="dropdown-btn" id="editB2BProcedureDropdownBtn">Select Procedure to Add</button>
+                            <ul class="dropdown-list" id="editB2BProcedureDropdownList"></ul>
+                        </div>
+                    </div>
+
                     <h4 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #1a202c;">Procedure-Assessor Mappings</h4>
                     <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
                         <div style="max-height: 400px; overflow-y: auto;">
@@ -1972,10 +1988,68 @@
         });
         
         // Remove chips in edit panel
-        $('#editProcedures, #editAssessors').on('click', '.chip .remove', function(){ 
-            $(this).parent().remove(); 
+        $('#editProcedures, #editAssessors').on('click', '.chip .remove', function(){
+            $(this).parent().remove();
         });
-    
+
+        // B2B Edit: Load procedures for add procedure dropdown
+        $('#editB2BProcedureDropdownBtn').off('click').on('click', function(e){
+            e.preventDefault();
+            e.stopPropagation();
+
+            const courseId = window.__editingCourseId;
+            const allProcedures = window.__editB2BCourseProcedures || [];
+
+            if (!courseId || allProcedures.length === 0) {
+                console.warn('Course procedures not loaded yet');
+                return;
+            }
+
+            // Filter out already-selected procedures
+            const selectedIds = getEditB2BSelectedProcedureIds();
+            const availableProcedures = allProcedures.filter(proc =>
+                !selectedIds.includes(String(proc.id))
+            );
+
+            // Populate dropdown
+            const dropdown = $('#editB2BProcedureDropdownList');
+            dropdown.empty();
+
+            if (availableProcedures.length === 0) {
+                dropdown.append('<li style="color:#888; padding: 8px 12px; cursor: default;">All procedures from this course have been added</li>');
+            } else {
+                availableProcedures.forEach(proc => {
+                    dropdown.append(`<li data-id="${proc.id}" data-value="${proc.name}">${proc.name}</li>`);
+                });
+            }
+
+            dropdown.show();
+        });
+
+        // B2B Edit: Handle procedure selection from dropdown
+        $('#editB2BProcedureDropdownList').off('click').on('click', 'li', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const procId = $(this).data('id');
+            const procName = $(this).data('value');
+
+            // Only add if it has valid data
+            if (procId && procName) {
+                // Add procedure row to table
+                addEditB2BProcedureRow(String(procId), String(procName));
+
+                // Remove this option from dropdown
+                $(this).remove();
+
+                // Hide dropdown if empty
+                const remainingItems = $('#editB2BProcedureDropdownList li[data-id]').length;
+                if (remainingItems === 0) {
+                    $('#editB2BProcedureDropdownList').hide();
+                }
+            }
+        });
+
         // UNIVERSAL DROPDOWN HANDLER - FIXED VERSION
         // Use namespace to prevent duplicate handlers
         // Exclude assessor-dropdown-btn as they have their own handler
@@ -2445,7 +2519,8 @@
             $.ajax({
                 url: '/fetch-assessors/',
                 data: {
-                    institution_id: $('#institutionDropdownBtn').attr('data-institution-id')
+                    institution_id: $('#institutionDropdownBtn').attr('data-institution-id'),
+                    unit_type: $('#unitTypeDropdownBtn').attr('data-unit-type')
                 },
                 type: 'GET',
                 success: function (response) {
@@ -2934,7 +3009,8 @@
         return $.ajax({
             url: '/fetch-assessors/',
             data: {
-                institution_id: $('#institutionDropdownBtn').attr('data-institution-id')
+                institution_id: $('#institutionDropdownBtn').attr('data-institution-id'),
+                unit_type: $('#unitTypeDropdownBtn').attr('data-unit-type')
             },
             type: 'GET',
             dataType: 'json'
@@ -3629,8 +3705,8 @@
             }
 
             // Handle B2C response
-            if (testType === 'B2C' && res.test) {
-                const t = res.test;
+            if (testType === 'B2C' && res.data) {
+                const t = res.data;
 
                 // Populate form fields from API (overrides row data)
                 if (t.assessment_name !== undefined && t.assessment_name !== null) {
@@ -3646,14 +3722,14 @@
                     $('#editDate').val(String(t.testdate));
                 }
 
-                // Populate procedures
+                // Populate procedures from procedure_assessor_mappings
                 const procContainer = $('#editProcedures');
                 procContainer.empty();
-                if (t.procedures && Array.isArray(t.procedures) && t.procedures.length > 0) {
-                    t.procedures.forEach(p => {
-                        if (p && p.id && p.name) {
-                            const procId = String(p.id);
-                            const procName = String(p.name);
+                if (t.procedure_assessor_mappings && Array.isArray(t.procedure_assessor_mappings) && t.procedure_assessor_mappings.length > 0) {
+                    t.procedure_assessor_mappings.forEach(mapping => {
+                        if (mapping && mapping.procedure_id && mapping.procedure_name) {
+                            const procId = String(mapping.procedure_id);
+                            const procName = String(mapping.procedure_name);
                             procContainer.append(`<span class="chip" data-id="${procId}">${procName}<span class="remove">&times;</span></span>`);
                         }
                     });
@@ -3711,6 +3787,21 @@
                     $('#editDate').val(String(s.testdate));
                 }
 
+                // Store course and unit information for edit
+                window.__editingCourseId = s.course_id || '';
+                window.__editingCourseName = s.course_name || '';
+                window.__editingUnitId = s.unit_id || '';
+                window.__editingUnitType = s.unit_type || 'institution';
+
+                if (__editingCourseName) {
+                    $('#editB2BCourseDisplay').val(__editingCourseName);
+                }
+
+                // Load available procedures for this course
+                if (__editingCourseId) {
+                    loadEditB2BAvailableProcedures(__editingCourseId);
+                }
+
                 // Populate procedure-assessor mapping table
                 const tableBody = $('#editProcedureAssessorMappingBody');
                 tableBody.empty();
@@ -3759,8 +3850,17 @@
 
     // Helper function to populate assessor dropdown for edit mode (matching create panel)
     function populateEditAssessorDropdownForProcedure(procedureId, selectedAssessors) {
-        // Fetch all assessors
-        fetch('/fetch-assessors/', {
+        // Build query parameters with unit info
+        const params = new URLSearchParams();
+        if (window.__editingUnitId) {
+            params.append('institution_id', window.__editingUnitId);
+        }
+        if (window.__editingUnitType) {
+            params.append('unit_type', window.__editingUnitType);
+        }
+
+        // Fetch assessors with unit context
+        fetch(`/fetch-assessors/?${params.toString()}`, {
             method: 'GET',
             headers: { 'Accept': 'application/json' }
         })
@@ -3830,6 +3930,75 @@
         });
     }
 
+    // Helper function to load available procedures for B2B edit mode
+    function loadEditB2BAvailableProcedures(courseId) {
+        if (!courseId) return;
+
+        fetch(`/fetch-course-procedures/${courseId}/`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+        })
+        .then(response => {
+            if (!response.ok) {
+                console.error('Failed to fetch course procedures');
+                return null;
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data && data.success && data.procedures) {
+                // Store procedures for later filtering
+                window.__editB2BCourseProcedures = data.procedures;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching course procedures:', error);
+        });
+    }
+
+    // Helper function to get currently selected procedure IDs in edit B2B table
+    function getEditB2BSelectedProcedureIds() {
+        const selectedIds = [];
+        $('#editProcedureAssessorMappingBody tr').each(function() {
+            const procId = $(this).data('procedure-id');
+            if (procId) {
+                selectedIds.push(String(procId));
+            }
+        });
+        return selectedIds;
+    }
+
+    // Helper function to add a new procedure row to B2B edit table
+    function addEditB2BProcedureRow(procedureId, procedureName) {
+        const tableBody = $('#editProcedureAssessorMappingBody');
+
+        // Create table row (no batchassignment_id = new procedure)
+        const row = $(`
+            <tr data-procedure-id="${procedureId}" data-ba-id="">
+                <td class="procedure-name-cell" style="padding: 12px; border-bottom: 1px solid #e2e8f0;">
+                    <strong>${procedureName}</strong>
+                </td>
+                <td class="assessor-select-cell" style="padding: 12px; border-bottom: 1px solid #e2e8f0;">
+                    <div class="assessor-select-dropdown">
+                        <button type="button" class="assessor-select-btn" data-procedure-id="${procedureId}">
+                            <span class="assessor-select-text">Select Assessors</span>
+                            <i class="fas fa-chevron-down" style="margin-left: 8px; font-size: 12px;"></i>
+                        </button>
+                        <div class="assessor-select-list" data-procedure-id="${procedureId}">
+                            <!-- Assessor checkboxes will be populated here -->
+                        </div>
+                    </div>
+                    <div class="assessor-chips-inline" data-procedure-id="${procedureId}"></div>
+                </td>
+            </tr>
+        `);
+
+        tableBody.append(row);
+
+        // Populate assessor dropdown for the new procedure (with empty selection)
+        populateEditAssessorDropdownForProcedure(procedureId, []);
+    }
+
     function toggleEditPanel(forceOpen){
         const panel = document.getElementById('editPanel');
         const overlay = document.getElementById('editOverlay');
@@ -3867,7 +4036,9 @@
             $('#editProcedureAssessorMappingBody tr').each(function() {
                 const row = $(this);
                 const procId = row.data('procedure-id');
-                const baId = row.data('ba-id') || null;
+                const baId = row.data('ba-id');
+                // Explicitly convert empty/falsy values to null for new procedures
+                const batchassignmentId = (baId && baId !== '') ? baId : null;
 
                 // Collect assessor IDs from checked checkboxes for this specific procedure
                 const assessorIds = row.find('.assessor-select-list input[type="checkbox"]:checked').map(function() {
@@ -3877,7 +4048,7 @@
                 procedureAssessorMappings.push({
                     procedure_id: procId,
                     assessor_ids: assessorIds,  // Specific assessors for this procedure
-                    batchassignment_id: baId    // Preserve existing batchassignment if available
+                    batchassignment_id: batchassignmentId    // null for new procedures, ID for existing
                 });
             });
 
@@ -3886,6 +4057,7 @@
                 status: $('#editStatus').val(),
                 procedure_assessor_mappings: procedureAssessorMappings
             };
+            console.log('[B2B Edit] Sending payload:', JSON.stringify(payload, null, 2));
             url = `/api/batch-assignment-summaries/${__editingTestId}/update/`;
         } else {
             // B2C payload (original) - collect from simple fields

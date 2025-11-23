@@ -489,10 +489,25 @@ document.addEventListener('DOMContentLoaded', () => {
         fileInput.value = '';
         previewContainer.innerHTML = '';
         validationContainer.innerHTML = '';
+
+        // Reset UI to show upload placeholder
+        const uploadPlaceholder = document.querySelector('.upload-placeholder');
+        const uploadPreview = document.querySelector('.upload-preview');
+        uploadPlaceholder.style.display = 'block';
+        uploadPreview.style.display = 'none';
     }
 
     // Preview Excel
     async function previewExcel(file) {
+    // Update UI to show selected file
+    const uploadPlaceholder = document.querySelector('.upload-placeholder');
+    const uploadPreview = document.querySelector('.upload-preview');
+    const filenameSpan = uploadPreview.querySelector('.filename');
+
+    uploadPlaceholder.style.display = 'none';
+    uploadPreview.style.display = 'flex';
+    filenameSpan.textContent = file.name;
+
     const formData = new FormData();
     formData.append('file', file);
 

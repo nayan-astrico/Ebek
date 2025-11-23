@@ -14,7 +14,10 @@ from .models import EbekUser
 from .forms import EbekUserCreationForm, EbekUserChangeForm
 
 
-admin.site.register(EbekUser)
+class EbekUserAdmin(admin.ModelAdmin):
+    search_fields = ('email',)
+admin.site.register(EbekUser, EbekUserAdmin)
+
 
 admin.site.register(PasswordResetToken)
 

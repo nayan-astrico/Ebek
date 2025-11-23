@@ -1859,12 +1859,12 @@ document.getElementById('batchForm').addEventListener('submit', function(e) {
             toggleAddBatchPanel();
             loadBatches();
         } else {
-            showError('Error creating batch: ' + data.error);
+            showErrorNotification(data.error || 'Error creating batch');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        showError('Error creating batch');
+        showErrorNotification('Error creating batch. Please try again.');
     })
     .finally(() => {
         btnText.style.display = 'inline-block';
@@ -2062,13 +2062,33 @@ function showSuccess(message) {
             </button>
         </div>
     `);
-    
+
     $('body').append(notification);
-    
+
     // Auto remove after 5 seconds
     setTimeout(function() {
         notification.alert('close');
     }, 2000);
+}
+
+function showErrorNotification(message) {
+    // Create an error notification
+    const notification = $(`
+        <div class="alert alert-danger alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-exclamation-circle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+
+    $('body').append(notification);
+
+    // Auto remove after 5 seconds
+    setTimeout(function() {
+        notification.alert('close');
+    }, 5000);
 }
 
 function toggleSelectAllLearners() {
