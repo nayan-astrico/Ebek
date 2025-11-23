@@ -43,24 +43,15 @@
     </button>
 </div>
 
-<!-- Main Page Upload Progress Indicator -->
-<div id="mainPageProgress" style="display: none; margin: 20px 0; padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
-        <i class="fas fa-spinner fa-spin" style="font-size: 24px; color: #2563eb;"></i>
-        <div style="flex: 1;">
-            <h4 style="margin: 0 0 5px 0; color: #1f2937;">Bulk Upload in Progress</h4>
-            <p style="margin: 0; color: #6b7280; font-size: 14px;" id="mainProgressMessage">Processing learners...</p>
+<!-- Latest Upload Session -->
+<div id="uploadSessionsList" style="display: none; margin: 20px 0;">
+    <div style="background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); padding: 20px;">
+        <h3 style="margin: 0 0 20px 0; color: #1f2937; font-size: 18px; font-weight: 600;">
+            <i class="fas fa-upload"></i> Latest Upload
+        </h3>
+        <div id="sessionsContainer">
+            <!-- Latest session will be dynamically populated here -->
         </div>
-        <button onclick="showUploadPanel()" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
-            <i class="fas fa-eye"></i> View Details
-        </button>
-    </div>
-    <div style="background: #f3f4f6; border-radius: 6px; height: 8px; overflow: hidden;">
-        <div id="mainProgressBar" style="height: 100%; background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%); width: 0%; transition: width 0.3s ease;"></div>
-    </div>
-    <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 13px; color: #6b7280;">
-        <span id="mainProgressStats">0 / 0 completed</span>
-        <span id="mainProgressPercent">0%</span>
     </div>
 </div>
 
@@ -225,6 +216,96 @@
                     {% csrf_token %}
                     <button type="submit" class="btn btn-danger">Delete</button>
                 </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Session Details Modal -->
+<div class="modal fade" id="sessionDetailsModal" tabindex="-1" style="display: none;">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%); color: white;">
+                <div>
+                    <h5 class="modal-title" style="margin: 0; font-weight: 600;">
+                        <i class="fas fa-info-circle"></i> Upload Session Details
+                    </h5>
+                    <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;" id="modalFilename">Filename</p>
+                </div>
+                <button type="button" class="close" onclick="closeSessionDetailsModal()" style="color: white; opacity: 0.9;">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <!-- Session Info Summary -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 25px;">
+                    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px;">
+                        <div style="font-size: 13px; color: #6b7280; margin-bottom: 5px;">Status</div>
+                        <div style="font-size: 16px; font-weight: 600; color: #1f2937;" id="modalStatus">-</div>
+                    </div>
+                    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px;">
+                        <div style="font-size: 13px; color: #6b7280; margin-bottom: 5px;">Total Rows</div>
+                        <div style="font-size: 16px; font-weight: 600; color: #1f2937;" id="modalTotalRows">-</div>
+                    </div>
+                    <div style="background: #dcfce7; padding: 15px; border-radius: 8px;">
+                        <div style="font-size: 13px; color: #166534; margin-bottom: 5px;">Passed</div>
+                        <div style="font-size: 16px; font-weight: 600; color: #15803d;" id="modalSuccessCount">-</div>
+                    </div>
+                    <div style="background: #fee2e2; padding: 15px; border-radius: 8px;">
+                        <div style="font-size: 13px; color: #991b1b; margin-bottom: 5px;">Failed</div>
+                        <div style="font-size: 16px; font-weight: 600; color: #dc2626;" id="modalErrorCount">-</div>
+                    </div>
+                    <div style="background: #dbeafe; padding: 15px; border-radius: 8px;" id="modalCreatedCard">
+                        <div style="font-size: 13px; color: #1e40af; margin-bottom: 5px;">Created</div>
+                        <div style="font-size: 16px; font-weight: 600; color: #2563eb;" id="modalCreatedCount">-</div>
+                    </div>
+                </div>
+
+                <!-- Message -->
+                <div id="modalMessageContainer" style="display: none; padding: 12px 16px; background: #eff6ff; border-left: 4px solid #2563eb; border-radius: 6px; margin-bottom: 20px;">
+                    <p style="margin: 0; color: #1e40af; font-size: 14px;" id="modalMessage"></p>
+                </div>
+
+                <!-- Filter Tabs -->
+                <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #e5e7eb; padding-bottom: 0;">
+                    <button onclick="filterRows('all')" id="filterAll" class="filter-tab active" style="padding: 10px 20px; border: none; background: none; cursor: pointer; font-weight: 500; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
+                        All Rows
+                    </button>
+                    <button onclick="filterRows('pass')" id="filterPass" class="filter-tab" style="padding: 10px 20px; border: none; background: none; cursor: pointer; font-weight: 500; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
+                        Passed
+                    </button>
+                    <button onclick="filterRows('fail')" id="filterFail" class="filter-tab" style="padding: 10px 20px; border: none; background: none; cursor: pointer; font-weight: 500; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
+                        Failed
+                    </button>
+                </div>
+
+                <!-- Row Results Table -->
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Row #</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Name</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Email</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Type</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Status</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Errors</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rowResultsTableBody">
+                            <!-- Rows will be dynamically populated -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Empty State -->
+                <div id="emptyState" style="display: none; text-align: center; padding: 60px 20px; color: #9ca3af;">
+                    <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 15px; opacity: 0.5;"></i>
+                    <p style="margin: 0; font-size: 16px;">No rows to display</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeSessionDetailsModal()">Close</button>
             </div>
         </div>
     </div>
@@ -1715,11 +1796,7 @@ document.addEventListener('change', function(e) {
         const id = e.target.getAttribute('data-id');
         if (e.target.checked) selectedLearnerIds.add(id); else selectedLearnerIds.delete(id);
         updateBulkDeleteState();
-        // Keep header checkbox in sync
-        const all = document.querySelectorAll('.row-select');
-        const allChecked = all.length > 0 && Array.from(all).every(cb => cb.checked);
-        const master = document.getElementById('selectAllRows');
-        if (master) master.checked = allChecked;
+        syncSelectAllCheckbox();
     }
     if (e.target && e.target.id === 'selectAllRows') {
         const checks = document.querySelectorAll('.row-select');
@@ -1746,6 +1823,13 @@ function updateBulkDeleteState() {
     } else {
         btn.classList.remove('hover-state');
     }
+}
+
+function syncSelectAllCheckbox() {
+    const all = document.querySelectorAll('.row-select');
+    const allChecked = all.length > 0 && Array.from(all).every(cb => cb.checked);
+    const master = document.getElementById('selectAllRows');
+    if (master) master.checked = allChecked;
 }
 
 function openBulkDeleteConfirm() {
@@ -2074,6 +2158,13 @@ function showUploadPanel() {
 }
 
 function toggleUploadPanel() {
+    // Check if button is disabled (upload in progress)
+    const bulkUploadBtn = document.querySelector('.btn-outline-upload');
+    if (bulkUploadBtn && bulkUploadBtn.disabled && !document.getElementById('uploadPanel').classList.contains('active')) {
+        showError('An upload is currently in progress. Please wait for it to complete before starting a new upload.');
+        return;
+    }
+
     const panel = document.getElementById('uploadPanel');
     const overlay = document.querySelector('.overlay');
     panel.classList.toggle('active');
@@ -2094,21 +2185,67 @@ function toggleUploadPanel() {
         const uploadButton = document.getElementById('uploadButton');
         const warningDiv = document.getElementById('uploadInProgressWarning');
 
-        if (isUploadInProgress) {
-            if (warningDiv) warningDiv.style.display = 'block';
-            if (uploadButton) {
-                uploadButton.disabled = true;
-                uploadButton.style.opacity = '0.5';
-                uploadButton.style.cursor = 'not-allowed';
-            }
-        } else {
-            if (warningDiv) warningDiv.style.display = 'none';
-            if (uploadButton) {
-                uploadButton.disabled = false;
-                uploadButton.style.opacity = '1';
-                uploadButton.style.cursor = 'pointer';
-            }
-        }
+        // Check for active sessions from backend
+        fetch('/onboarding/learners/active-uploads/')
+            .then(response => response.json())
+            .then(data => {
+                let hasActiveSession = false;
+                let activeFilename = '';
+
+                if (data.success && data.sessions && data.sessions.length > 0) {
+                    const activeSession = data.sessions.find(s =>
+                        s.status === 'validating' || s.status === 'validated' || s.status === 'creating'
+                    );
+
+                    if (activeSession) {
+                        hasActiveSession = true;
+                        activeFilename = activeSession.filename;
+                    }
+                }
+
+                if (hasActiveSession || isUploadInProgress) {
+                    if (warningDiv) {
+                        // Update warning message
+                        const warningText = activeFilename
+                            ? `Another file "${activeFilename}" is currently being processed. Please wait for it to complete before uploading a new file.`
+                            : 'Another file is currently being processed. Please wait for it to complete before uploading a new file.';
+
+                        warningDiv.querySelector('p').textContent = warningText;
+                        warningDiv.style.display = 'block';
+                    }
+                    if (uploadButton) {
+                        uploadButton.disabled = true;
+                        uploadButton.style.opacity = '0.5';
+                        uploadButton.style.cursor = 'not-allowed';
+                    }
+                } else {
+                    if (warningDiv) warningDiv.style.display = 'none';
+                    if (uploadButton) {
+                        uploadButton.disabled = false;
+                        uploadButton.style.opacity = '1';
+                        uploadButton.style.cursor = 'pointer';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error checking active sessions:', error);
+                // Fallback to local check
+                if (isUploadInProgress) {
+                    if (warningDiv) warningDiv.style.display = 'block';
+                    if (uploadButton) {
+                        uploadButton.disabled = true;
+                        uploadButton.style.opacity = '0.5';
+                        uploadButton.style.cursor = 'not-allowed';
+                    }
+                } else {
+                    if (warningDiv) warningDiv.style.display = 'none';
+                    if (uploadButton) {
+                        uploadButton.disabled = false;
+                        uploadButton.style.opacity = '1';
+                        uploadButton.style.cursor = 'pointer';
+                    }
+                }
+            });
 
         // Reset upload panel state
         resetUploadPanel();
@@ -2484,9 +2621,9 @@ function showValidationResults(headerValidation) {
 }
 
 function submitUpload() {
-    // Check if an upload is already in progress
+    // Check if an upload is already in progress (local check)
     if (isUploadInProgress) {
-        alert('An upload is already in progress. Please wait for it to complete before uploading another file.');
+        showError('An upload is already in progress. Please wait for it to complete before uploading another file.');
         return;
     }
 
@@ -2500,6 +2637,33 @@ function submitUpload() {
         return;
     }
 
+    // Check for active sessions in backend before proceeding
+    fetch('/onboarding/learners/active-uploads/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.sessions && data.sessions.length > 0) {
+                // Check if any session is actively processing
+                const activeSession = data.sessions.find(s =>
+                    s.status === 'validating' || s.status === 'validated' || s.status === 'creating'
+                );
+
+                if (activeSession) {
+                    showError(`Another upload is currently being processed: "${activeSession.filename}". Please wait for it to complete before uploading a new file.`);
+                    return;
+                }
+            }
+
+            // No active sessions, proceed with upload
+            proceedWithUpload(form, formData, fileInput);
+        })
+        .catch(error => {
+            console.error('Error checking active sessions:', error);
+            // Proceed anyway if check fails
+            proceedWithUpload(form, formData, fileInput);
+        });
+}
+
+function proceedWithUpload(form, formData, fileInput) {
     // Mark upload as in progress
     isUploadInProgress = true;
     
@@ -2534,22 +2698,34 @@ function submitUpload() {
     })
     .then(data => {
         if (data.success && data.session_key) {
-            console.log("Hereee")
-            // Start real-time progress tracking
-            startProgressTracking(data.session_key);
+            // Show success notification
+            showSuccess(data.message || 'Thank you for uploading! We will start with the validation.');
+
+            // Close upload panel
+            toggleUploadPanel();
+
+            // Reset form
+            fileInput.value = '';
+            removeFile();
+
+            // Refresh sessions list immediately
+            fetchUploadSessions();
+
+            // Mark upload as complete
+            isUploadInProgress = false;
         } else {
-            updateProgress(100, 'Upload failed: ' + (data.error || 'Unknown error'));
             // Show detailed validation errors if available
             if (data.validation_errors && data.validation_errors.length > 0) {
                 showValidationErrors(data.validation_errors);
             } else {
                 showUploadError(data.error || 'Unknown error');
             }
+            isUploadInProgress = false;
         }
     })
     .catch(error => {
-        updateProgress(100, 'Upload failed: ' + error.message);
         showUploadError(error.message);
+        isUploadInProgress = false;
     })
     .finally(() => {
         uploadButton.innerHTML = originalText;
@@ -3075,25 +3251,25 @@ function filterLearners(searchQuery) {
 
 function performSearch() {
     console.log('🎯 performSearch - currentSearch:', currentSearch, 'offset:', offset);
-    
+
     // CRITICAL: Reset all state
     offset = 0;
     allLoaded = false;
     loading = false; // Must reset loading flag!
-    
+
     // Clear the table completely
     const tbody = document.getElementById('learnerTableBody');
     if (tbody) {
         tbody.innerHTML = '';
         console.log('✅ Table cleared');
     }
-    
+
     // Show the button
     const showMoreBtn = document.getElementById('showMoreBtn');
     if (showMoreBtn) {
         showMoreBtn.style.display = 'inline-flex';
     }
-    
+
     // Load fresh data
     console.log('📡 Calling loadMoreLearners...');
     loadMoreLearners();
@@ -3116,29 +3292,32 @@ function resetLearnerList() {
     if (showMoreBtn) {
         showMoreBtn.style.display = 'inline-flex';
     }
+    // Clear selected learner IDs and update bulk delete button
+    selectedLearnerIds.clear();
+    updateBulkDeleteState();
 }
 
 function applyFilters() {
     currentFilters = {};
-    
+
     // Get institution filters
     const institutionCheckboxes = document.querySelectorAll('input[name="institution"]:checked');
     if (institutionCheckboxes.length > 0) {
         currentFilters.institution = Array.from(institutionCheckboxes).map(cb => cb.value);
     }
-    
+
     // Get hospital filters
     const hospitalCheckboxes = document.querySelectorAll('input[name="hospital"]:checked');
     if (hospitalCheckboxes.length > 0) {
         currentFilters.hospital = Array.from(hospitalCheckboxes).map(cb => cb.value);
     }
-    
+
     // Get learner type filters
     const learnerTypeCheckboxes = document.querySelectorAll('input[name="learner_type"]:checked');
     if (learnerTypeCheckboxes.length > 0) {
         currentFilters.learner_type = Array.from(learnerTypeCheckboxes).map(cb => cb.value);
     }
-    
+
     resetLearnerList();
     loadMoreLearners();
     toggleFilterPanel();
@@ -3150,26 +3329,29 @@ function clearAllFilters() {
         cb.checked = false;
         cb.indeterminate = false;
     });
-    
+
     // Update all selection counts
     ['institution', 'hospital', 'learner-type'].forEach(category => {
         updateSelectionCount(category);
     });
-    
+
     // Update filter badge
     updateFilterBadge();
-    
+
     // Clear current filters
     currentFilters = {};
 }
 
 function renderLearnerRow(learner) {
     console.log(learner);
-    
+
     var showActions = userPermissions.canEdit || userPermissions.canDelete;
-    
+
+    // Check if this learner is already selected
+    var isChecked = selectedLearnerIds.has(String(learner.id));
+
     var html = '<tr>' +
-        '<td><input type="checkbox" class="row-select" data-id="' + learner.id + '"></td>' +
+        '<td><input type="checkbox" class="row-select" data-id="' + learner.id + '"' + (isChecked ? ' checked' : '') + '></td>' +
         '<td><div class="institution"><span>' + learner.full_name + '</span></div></td>' +
         '<td>' + learner.email + '</td>' +
         '<td>' + learner.phone_number + '</td>' +
@@ -3257,6 +3439,11 @@ function loadMoreLearners() {
             learners.forEach(learner => {
                 tbody.insertAdjacentHTML('beforeend', renderLearnerRow(learner));
             });
+
+            // Update bulk delete button state and select all checkbox after rendering
+            updateBulkDeleteState();
+            syncSelectAllCheckbox();
+
             // If no learners at all, show empty state
             if (offset === 0 && learners.length === 0) {
                 const colspanCount = userPermissions.canEdit || userPermissions.canDelete ? 8 : 7;
@@ -3419,16 +3606,411 @@ function loadHospitals(skillathonId = null, onboardingType = null) {
 function handleSkillathonChange() {
     const skillathonSelect = document.getElementById('id_skillathon_event');
     const onboardingSelect = document.getElementById('id_onboarding_type');
-    
+
     const skillathonId = skillathonSelect ? skillathonSelect.value : null;
     const onboardingType = onboardingSelect ? onboardingSelect.value.toLowerCase() : null;
-    
+
     console.log("DEBUG: Skillathon changed, skillathonId:", skillathonId, "onboardingType:", onboardingType);
-    
+
     // Load institutions and hospitals based on selected skillathon and onboarding type
     loadInstitutions(skillathonId, onboardingType);
     loadHospitals(skillathonId, onboardingType);
 }
+
+// ===== UPLOAD SESSIONS MANAGEMENT =====
+let sessionPollingInterval = null;
+let modalRefreshInterval = null;
+let currentSessionData = null;
+let currentFilteredRows = [];
+let currentSessionKey = null;
+
+// Fetch and display latest upload session only
+function fetchUploadSessions() {
+    fetch('/onboarding/learners/active-uploads/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.sessions && data.sessions.length > 0) {
+                // Get only the latest session (most recent upload)
+                const latestSession = data.sessions.sort((a, b) =>
+                    new Date(b.uploaded_at) - new Date(a.uploaded_at)
+                )[0];
+
+                // Check if session is older than 3 hours
+                const uploadTime = new Date(latestSession.uploaded_at);
+                const currentTime = new Date();
+                const hoursDiff = (currentTime - uploadTime) / (1000 * 60 * 60);
+                // because utc time so 5:30 difference anyway
+                if (hoursDiff <= 11) {
+                    // Show only the latest session
+                    displayUploadSessions([latestSession]);
+                    document.getElementById('uploadSessionsList').style.display = 'block';
+                } else {
+                    // Hide if older than 3 hours
+                    document.getElementById('uploadSessionsList').style.display = 'none';
+                }
+
+                // Update bulk upload button state (check all sessions for active ones)
+                updateBulkUploadButtonState(data.sessions);
+            } else {
+                document.getElementById('uploadSessionsList').style.display = 'none';
+
+                // Enable bulk upload button when no sessions
+                updateBulkUploadButtonState([]);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching upload sessions:', error);
+        });
+}
+
+// Update bulk upload button state based on active sessions
+function updateBulkUploadButtonState(sessions) {
+    const bulkUploadBtn = document.querySelector('.btn-outline-upload');
+    if (!bulkUploadBtn) return;
+
+    const activeSession = sessions.find(s =>
+        s.status === 'validating' || s.status === 'validated' || s.status === 'creating'
+    );
+
+    if (activeSession) {
+        bulkUploadBtn.disabled = true;
+        bulkUploadBtn.style.opacity = '0.6';
+        bulkUploadBtn.style.cursor = 'not-allowed';
+        bulkUploadBtn.title = `Upload in progress: ${activeSession.filename}`;
+    } else {
+        bulkUploadBtn.disabled = false;
+        bulkUploadBtn.style.opacity = '1';
+        bulkUploadBtn.style.cursor = 'pointer';
+        bulkUploadBtn.title = 'Bulk Upload';
+    }
+}
+
+// Display upload sessions list
+function displayUploadSessions(sessions) {
+    const container = document.getElementById('sessionsContainer');
+    container.innerHTML = '';
+
+    sessions.forEach(session => {
+        const statusColors = {
+            'validating': { bg: '#fef3c7', text: '#92400e', icon: 'fa-spinner fa-spin' },
+            'validated': { bg: '#dbeafe', text: '#1e40af', icon: 'fa-check-circle' },
+            'creating': { bg: '#e0e7ff', text: '#4338ca', icon: 'fa-cog fa-spin' },
+            'completed': { bg: '#dcfce7', text: '#166534', icon: 'fa-check-circle' },
+            'error': { bg: '#fee2e2', text: '#991b1b', icon: 'fa-exclamation-circle' }
+        };
+
+        const color = statusColors[session.status] || statusColors['validating'];
+        const statusText = session.status.charAt(0).toUpperCase() + session.status.slice(1);
+
+        const sessionCard = document.createElement('div');
+        sessionCard.style.cssText = 'background: #f9fafb; border-radius: 8px; padding: 20px; margin-bottom: 15px; border: 1px solid #e5e7eb;';
+        sessionCard.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">
+                <div style="flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                        <i class="fas fa-file-excel" style="color: #2563eb; font-size: 18px;"></i>
+                        <h4 style="margin: 0; font-size: 16px; font-weight: 600; color: #1f2937;">${session.filename}</h4>
+                        <span style="padding: 4px 12px; background: ${color.bg}; color: ${color.text}; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                            <i class="fas ${color.icon}"></i> ${statusText}
+                        </span>
+                    </div>
+                    <p style="margin: 0; color: #6b7280; font-size: 13px;">
+                        <i class="fas fa-user"></i> ${session.uploaded_by}
+                        <span style="margin-left: 15px;"><i class="fas fa-clock"></i> ${new Date(session.uploaded_at).toLocaleString()}</span>
+                    </p>
+                    ${session.message ? `<p style="margin: 8px 0 0 0; color: #4b5563; font-size: 13px; font-style: italic;">${session.message}</p>` : ''}
+                </div>
+                <button onclick="viewSessionDetails('${session.session_key}')" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; white-space: nowrap; margin-left: 15px;">
+                    <i class="fas fa-eye"></i> View Details
+                </button>
+            </div>
+            <div style="background: white; border-radius: 6px; height: 8px; overflow: hidden; margin-bottom: 12px;">
+                <div style="height: 100%; background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%); width: ${session.progress_percentage}%; transition: width 0.3s ease;"></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 13px; color: #6b7280;">
+                <div style="display: flex; gap: 20px;">
+                    <span><strong>Total:</strong> ${session.total_rows}</span>
+                    <span><strong>Processed:</strong> ${session.processed_rows}</span>
+                    <span style="color: #15803d;"><strong>Success:</strong> ${session.success_count}</span>
+                    <span style="color: #dc2626;"><strong>Failed:</strong> ${session.error_count}</span>
+                </div>
+                <span><strong>${session.progress_percentage}%</strong></span>
+            </div>
+        `;
+        container.appendChild(sessionCard);
+    });
+}
+
+// View session details in modal
+function viewSessionDetails(sessionKey) {
+    currentSessionKey = sessionKey;
+
+    fetch(`/onboarding/learners/upload-details/${sessionKey}/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentSessionData = data;
+                populateSessionDetailsModal(data);
+                openSessionDetailsModal();
+
+                // Start auto-refresh if still processing
+                if (data.status === 'validating' || data.status === 'validated' || data.status === 'creating') {
+                    startModalRefresh();
+                }
+            } else {
+                alert('Error loading session details: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching session details:', error);
+            alert('Error loading session details');
+        });
+}
+
+// Refresh modal data
+function refreshModalData() {
+    if (!currentSessionKey) return;
+
+    fetch(`/onboarding/learners/upload-details/${currentSessionKey}/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentSessionData = data;
+                populateSessionDetailsModal(data);
+
+                // Stop refreshing if completed or error
+                if (data.status === 'completed' || data.status === 'error') {
+                    stopModalRefresh();
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error refreshing modal data:', error);
+        });
+}
+
+// Start modal auto-refresh
+function startModalRefresh() {
+    if (modalRefreshInterval) {
+        clearInterval(modalRefreshInterval);
+    }
+    modalRefreshInterval = setInterval(refreshModalData, 2000); // Refresh every 2 seconds
+}
+
+// Stop modal auto-refresh
+function stopModalRefresh() {
+    if (modalRefreshInterval) {
+        clearInterval(modalRefreshInterval);
+        modalRefreshInterval = null;
+    }
+}
+
+// Populate modal with session data
+function populateSessionDetailsModal(data) {
+    document.getElementById('modalFilename').textContent = data.filename;
+
+    // Update status with icon
+    const statusElement = document.getElementById('modalStatus');
+    const status = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+
+    if (data.status === 'validating') {
+        statusElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + status;
+    } else if (data.status === 'validated') {
+        statusElement.innerHTML = '<i class="fas fa-check-circle"></i> ' + status;
+    } else if (data.status === 'creating') {
+        statusElement.innerHTML = '<i class="fas fa-cog fa-spin"></i> Creating Learners...';
+    } else if (data.status === 'completed') {
+        statusElement.innerHTML = '<i class="fas fa-check-circle"></i> ' + status;
+    } else if (data.status === 'error') {
+        statusElement.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + status;
+    } else {
+        statusElement.textContent = status;
+    }
+
+    document.getElementById('modalTotalRows').textContent = data.total_rows;
+    document.getElementById('modalSuccessCount').textContent = data.success_count;
+    document.getElementById('modalErrorCount').textContent = data.error_count;
+
+    // Show/hide Created card and update count based on status
+    const createdCard = document.getElementById('modalCreatedCard');
+    const createdCountElement = document.getElementById('modalCreatedCount');
+
+    if (data.status === 'creating' || data.status === 'completed') {
+        createdCard.style.display = 'block';
+        const createdCount = data.created_count || 0;
+        createdCountElement.textContent = `${createdCount} / ${data.success_count}`;
+    } else {
+        createdCard.style.display = 'none';
+    }
+
+    // Show message if available
+    const messageContainer = document.getElementById('modalMessageContainer');
+    const messageText = document.getElementById('modalMessage');
+
+    if (data.message) {
+        messageText.textContent = data.message;
+
+        // Style message container based on content
+        if (data.message.includes('rejected') || data.message.includes('failed')) {
+            messageContainer.style.background = '#fee2e2';
+            messageContainer.style.borderLeftColor = '#dc2626';
+            messageText.style.color = '#991b1b';
+        } else if (data.message.includes('success')) {
+            messageContainer.style.background = '#dcfce7';
+            messageContainer.style.borderLeftColor = '#15803d';
+            messageText.style.color = '#166534';
+        } else {
+            messageContainer.style.background = '#eff6ff';
+            messageContainer.style.borderLeftColor = '#2563eb';
+            messageText.style.color = '#1e40af';
+        }
+
+        messageContainer.style.display = 'block';
+    } else {
+        // Show status-based message
+        let statusMessage = '';
+        messageContainer.style.background = '#eff6ff';
+        messageContainer.style.borderLeftColor = '#2563eb';
+        messageText.style.color = '#1e40af';
+
+        if (data.status === 'validating') {
+            statusMessage = 'Validating rows... Please wait.';
+        } else if (data.status === 'validated') {
+            statusMessage = 'Validation complete. Preparing to create learners...';
+        } else if (data.status === 'creating') {
+            statusMessage = `Creating ${data.success_count} learner(s)... Please wait.`;
+        }
+
+        if (statusMessage) {
+            messageText.textContent = statusMessage;
+            messageContainer.style.display = 'block';
+        } else {
+            messageContainer.style.display = 'none';
+        }
+    }
+
+    // Populate row results table
+    currentFilteredRows = data.row_results || [];
+    displayRowResults(currentFilteredRows);
+}
+
+// Display row results in table
+function displayRowResults(rows) {
+    const tbody = document.getElementById('rowResultsTableBody');
+    tbody.innerHTML = '';
+
+    if (rows.length === 0) {
+        document.getElementById('emptyState').style.display = 'block';
+        tbody.closest('div').querySelector('table').style.display = 'none';
+        return;
+    }
+
+    document.getElementById('emptyState').style.display = 'none';
+    tbody.closest('div').querySelector('table').style.display = 'table';
+
+    rows.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #e5e7eb';
+
+        const statusColor = row.status === 'pass' ? '#15803d' : '#dc2626';
+        const statusBg = row.status === 'pass' ? '#dcfce7' : '#fee2e2';
+        const statusIcon = row.status === 'pass' ? 'fa-check-circle' : 'fa-times-circle';
+
+        const errorsHtml = row.errors && row.errors.length > 0
+            ? row.errors.map(err => `<div style="padding: 4px 0; color: #dc2626; font-size: 12px;"><i class="fas fa-exclamation-triangle"></i> ${err}</div>`).join('')
+            : '<span style="color: #9ca3af; font-size: 12px;">No errors</span>';
+
+        tr.innerHTML = `
+            <td style="padding: 12px; color: #6b7280; font-size: 13px;">${row.row_number}</td>
+            <td style="padding: 12px; color: #1f2937; font-size: 13px;">${row.name || '-'}</td>
+            <td style="padding: 12px; color: #1f2937; font-size: 13px;">${row.email || '-'}</td>
+            <td style="padding: 12px; color: #6b7280; font-size: 13px; text-transform: capitalize;">${row.learner_type || '-'}</td>
+            <td style="padding: 12px;">
+                <span style="padding: 4px 10px; background: ${statusBg}; color: ${statusColor}; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                    <i class="fas ${statusIcon}"></i> ${row.status.toUpperCase()}
+                </span>
+            </td>
+            <td style="padding: 12px; font-size: 13px;">${errorsHtml}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// Filter rows by status
+function filterRows(filter) {
+    // Update active tab
+    document.querySelectorAll('.filter-tab').forEach(tab => {
+        tab.classList.remove('active');
+        tab.style.color = '#6b7280';
+        tab.style.borderBottomColor = 'transparent';
+    });
+
+    const activeTab = document.getElementById('filter' + filter.charAt(0).toUpperCase() + filter.slice(1));
+    activeTab.classList.add('active');
+    activeTab.style.color = '#2563eb';
+    activeTab.style.borderBottomColor = '#2563eb';
+
+    // Filter rows
+    if (filter === 'all') {
+        currentFilteredRows = currentSessionData.row_results || [];
+    } else {
+        currentFilteredRows = (currentSessionData.row_results || []).filter(row => row.status === filter);
+    }
+
+    displayRowResults(currentFilteredRows);
+}
+
+// Open session details modal
+function openSessionDetailsModal() {
+    const modal = document.getElementById('sessionDetailsModal');
+    modal.style.display = 'block';
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+
+    // Reset filter to 'all'
+    filterRows('all');
+}
+
+// Close session details modal
+function closeSessionDetailsModal() {
+    const modal = document.getElementById('sessionDetailsModal');
+    modal.style.display = 'none';
+    modal.classList.remove('show');
+    document.body.style.overflow = 'auto';
+
+    // Stop auto-refresh
+    stopModalRefresh();
+    currentSessionKey = null;
+}
+
+// Start polling for session updates
+function startSessionPolling() {
+    if (sessionPollingInterval) {
+        clearInterval(sessionPollingInterval);
+    }
+
+    // Fetch immediately
+    fetchUploadSessions();
+
+    // Then poll every 3 seconds
+    sessionPollingInterval = setInterval(fetchUploadSessions, 3000);
+}
+
+// Stop polling
+function stopSessionPolling() {
+    if (sessionPollingInterval) {
+        clearInterval(sessionPollingInterval);
+        sessionPollingInterval = null;
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    startSessionPolling();
+
+    // Stop polling when user leaves page
+    window.addEventListener('beforeunload', stopSessionPolling);
+});
 
 </script>
 {% endblock %} 

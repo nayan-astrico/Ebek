@@ -991,12 +991,249 @@ def learner_bulk_upload(request):
                 for chunk in file.chunks():
                     destination.write(chunk)
 
-            # ===== COMPREHENSIVE VALIDATION BEFORE PROCESSING =====
-            print(f"[DEBUG] Validating Excel file...")
+            # ===== BASIC FILE STRUCTURE VALIDATION ONLY =====
+            print(f"[DEBUG] Checking Excel file structure...")
             wb = openpyxl.load_workbook(file_path)
             ws = wb.active
 
-            # Define header mapping
+            # Define required headers
+            required_headers = [
+                'Onboarding Type', 'Learner Type', 'Learner Name', 'Learner Email',
+                'Learner Phone', 'College', 'Hospital', 'Skillathon Event',
+                'Learner Gender'
+            ]
+
+            # Read headers
+            headers = [cell.value for cell in ws[1]]
+
+            # Only validate that required columns exist
+            missing_headers = []
+            for required_col in required_headers:
+                if required_col not in headers:
+                    missing_headers.append(required_col)
+
+            if missing_headers:
+                os.remove(file_path)  # Clean up file
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Missing required columns: {", ".join(missing_headers)}'
+                })
+
+            # Get total row count for progress tracking
+            all_rows = list(ws.iter_rows(min_row=2, values_only=True))
+            non_empty_rows = [
+                row for row in all_rows
+                if any(cell is not None and str(cell).strip() for cell in row)
+            ]
+            total_rows = len(non_empty_rows)
+
+            # ===== FILE ACCEPTED - START BACKGROUND PROCESSING =====
+            session_key = str(uuid.uuid4())
+
+            # Initialize session data for progress tracking
+            from datetime import datetime
+            upload_session = {
+                'session_key': session_key,
+                'filename': file.name,
+                'status': 'validating',
+                'uploaded_by': request.user.email,
+                'uploaded_at': datetime.now().isoformat(),
+                'total_rows': total_rows,
+                'processed_rows': 0,
+                'success_count': 0,
+                'error_count': 0,
+                'created_count': 0,
+                'row_results': []  # Will store {row_number, status, name, email, errors[]}
+            }
+            cache.set(f"upload_session:{session_key}", upload_session, timeout=7200)  # 2 hours
+
+            # Add to active sessions list
+            active_sessions = cache.get('active_upload_sessions', [])
+            active_sessions.append(session_key)
+            cache.set('active_upload_sessions', active_sessions, timeout=7200)
+
+            # Start background processing
+            print(f"[DEBUG] File accepted. Starting background validation for session: {session_key}")
+            background_thread = threading.Thread(
+                target=process_bulk_upload_with_progress,
+                args=(file_path, session_key),
+                daemon=True
+            )
+            background_thread.start()
+
+            return JsonResponse({
+                'success': True,
+                'session_key': session_key,
+                'message': 'Thank you for uploading! We will start with the validation.',
+                'filename': file.name,
+                'total_rows': total_rows
+            })
+
+        except Exception as e:
+            print(e)
+            print(traceback.format_exc())
+            return JsonResponse({
+                'success': False,
+                'error': f'Error processing file: {str(e)}'
+            })
+
+    return JsonResponse({
+        'success': False,
+        'error': 'Invalid request method'
+    })
+
+def process_bulk_upload_with_progress(file_path, session_key):
+    """
+    Validate and process bulk upload in background, tracking row-wise results
+    """
+    print(f"[DEBUG] Starting background validation for session: {session_key}")
+
+    try:
+        # Load Excel file
+        wb = openpyxl.load_workbook(file_path)
+        ws = wb.active
+
+        # Read headers
+        headers = [cell.value for cell in ws[1]]
+
+        # Get all rows and filter out empty ones
+        all_rows = list(ws.iter_rows(min_row=2, values_only=True))
+        non_empty_rows = [
+            (idx, row) for idx, row in enumerate(all_rows, start=2)
+            if any(cell is not None and str(cell).strip() for cell in row)
+        ]
+
+        print(f"[DEBUG] Validating {len(non_empty_rows)} rows...")
+
+        # ===== PHASE 1: VALIDATION =====
+        # Get all reference data from database
+        all_skillathons = set(SkillathonEvent.objects.values_list('name', flat=True))
+        all_colleges = set(Institution.objects.values_list('name', flat=True))
+        all_hospitals = set(Hospital.objects.values_list('name', flat=True))
+        existing_emails = set(EbekUser.objects.values_list('email', flat=True))
+
+        # Helper function to safely get string value
+        def safe_str(value):
+            if value is None:
+                return ''
+            return str(value).strip()
+
+        # Helper function to validate email format
+        def is_valid_email(email):
+            import re
+            pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            return re.match(pattern, email) is not None
+
+        # Validate each row and store results
+        seen_emails = set()
+        row_results = []
+
+        for row_idx, row in non_empty_rows:
+            row_data = dict(zip(headers, row))
+            row_errors = []
+
+            # Extract basic info
+            learner_name = safe_str(row_data.get('Learner Name'))
+            email = safe_str(row_data.get('Learner Email'))
+            learner_type = safe_str(row_data.get('Learner Type')).lower()
+
+            # Validate Onboarding Type
+            onboarding_type = safe_str(row_data.get('Onboarding Type')).upper()
+            if onboarding_type not in ['B2B', 'B2C']:
+                row_errors.append(f"Onboarding Type must be 'B2B' or 'B2C', found: '{row_data.get('Onboarding Type', '')}'")
+
+            # Validate Learner Name
+            if not learner_name:
+                row_errors.append("Learner Name cannot be empty")
+
+            # Validate Email
+            if not email:
+                row_errors.append("Learner Email cannot be empty")
+            else:
+                if not is_valid_email(email):
+                    row_errors.append(f"Invalid email format: '{email}'")
+                if email in seen_emails:
+                    row_errors.append(f"Duplicate email address in file: '{email}'")
+                else:
+                    seen_emails.add(email)
+                if email in existing_emails:
+                    row_errors.append(f"Email address already exists in system: '{email}'")
+
+            # Validate Phone Number
+            phone = safe_str(row_data.get('Learner Phone'))
+            if not phone:
+                row_errors.append("Learner Phone cannot be empty")
+
+            # Validate Learner Gender
+            gender = safe_str(row_data.get('Learner Gender'))
+            if gender and gender.lower() not in ['male', 'female', 'other']:
+                row_errors.append(f"Learner Gender must be 'Male', 'Female', or 'Other', found: '{gender}'")
+
+            # Validate Learner Type
+            if learner_type not in ['student', 'nurse']:
+                row_errors.append(f"Learner Type must be 'Student' or 'Nurse', found: '{row_data.get('Learner Type', '')}'")
+
+            # Validate Skillathon Event
+            skillathon = safe_str(row_data.get('Skillathon Event'))
+            if skillathon and skillathon not in all_skillathons:
+                row_errors.append(f"Skillathon Event '{skillathon}' does not exist. Please create it first before uploading.")
+
+            # Validate College for students
+            if learner_type == 'student':
+                college = safe_str(row_data.get('College'))
+                if not college:
+                    row_errors.append("College cannot be empty for students")
+                elif college not in all_colleges:
+                    row_errors.append(f"College '{college}' does not exist in system. Please create it first before uploading.")
+
+            # Validate Hospital for nurses
+            if learner_type == 'nurse':
+                hospital = safe_str(row_data.get('Hospital'))
+                if not hospital:
+                    row_errors.append("Hospital cannot be empty for nurses")
+                elif hospital not in all_hospitals:
+                    row_errors.append(f"Hospital '{hospital}' does not exist in system. Please create it first before uploading.")
+
+            # Store row result
+            row_result = {
+                'row_number': row_idx,
+                'name': learner_name,
+                'email': email,
+                'learner_type': learner_type,
+                'status': 'fail' if row_errors else 'pass',
+                'errors': row_errors
+            }
+            row_results.append(row_result)
+
+        # Update session with validation results
+        session_data = cache.get(f"upload_session:{session_key}", {})
+        if session_data:
+            session_data['status'] = 'validated'
+            session_data['row_results'] = row_results
+            session_data['processed_rows'] = len(row_results)
+            session_data['success_count'] = sum(1 for r in row_results if r['status'] == 'pass')
+            session_data['error_count'] = sum(1 for r in row_results if r['status'] == 'fail')
+            cache.set(f"upload_session:{session_key}", session_data, timeout=7200)
+
+        print(f"[DEBUG] Validation complete: {session_data['success_count']} passed, {session_data['error_count']} failed")
+
+        # ===== CHECK: ALL-OR-NOTHING VALIDATION =====
+        # If even 1 row fails, reject entire upload
+        if session_data['error_count'] > 0:
+            session_data = cache.get(f"upload_session:{session_key}", {})
+            if session_data:
+                session_data['status'] = 'completed'
+                session_data['message'] = f'Upload rejected: {session_data["error_count"]} row(s) failed validation. Please fix all errors and re-upload. No learners were created.'
+                cache.set(f"upload_session:{session_key}", session_data, timeout=7200)
+            logger.info(f"[DEBUG] Upload rejected due to validation errors: {session_data['error_count']} row(s) failed")
+            return
+
+        # ===== PHASE 2: CREATE LEARNERS FOR PASSED ROWS =====
+        if session_data['success_count'] > 0:
+            session_data['status'] = 'creating'
+            cache.set(f"upload_session:{session_key}", session_data, timeout=7200)
+
+            # Define header mapping for form data
             header_map = {
                 'Onboarding Type': 'onboarding_type',
                 'Learner Type': 'learner_type',
@@ -1023,281 +1260,77 @@ def learner_bulk_upload(request):
                 'Educational Institution': 'educational_institution',
             }
 
-            # Read headers
-            headers = [cell.value for cell in ws[1]]
+            User = get_user_model()
+            created_count = 0
+            skillathon_learner_ids = []
+            skillathon_name = ""
 
-            # 1. Validate all columns match template
-            missing_headers = []
-            for excel_col in header_map.keys():
-                if excel_col not in headers:
-                    missing_headers.append(excel_col)
-
-            if missing_headers:
-                return JsonResponse({
-                    'success': False,
-                    'error': f'Missing required columns: {", ".join(missing_headers)}'
-                })
-
-            # Get all rows and filter out empty ones
-            all_rows = list(ws.iter_rows(min_row=2, values_only=True))
-            non_empty_rows = [
-                (idx, row) for idx, row in enumerate(all_rows, start=2)
-                if any(cell is not None and str(cell).strip() for cell in row)
-            ]
-
-            # Get all skillathon events from backend
-            all_skillathons = set(SkillathonEvent.objects.values_list('name', flat=True))
-
-            # Helper function to safely get string value (handles None from openpyxl)
-            def safe_str(value):
-                """Convert value to string, treating None as empty string"""
-                if value is None:
-                    return ''
-                return str(value).strip()
-
-            # Validate each row
-            validation_errors = []
-            seen_emails = set()
+            # Process only rows that passed validation
+            print(f"[DEBUG] Starting to create learners for {len(non_empty_rows)} total rows")
+            print(f"[DEBUG] Row results count: {len(row_results)}")
 
             for row_idx, row in non_empty_rows:
-                row_data = dict(zip(headers, row))
-                row_errors = []
+                # Find the result for this row
+                row_result = next((r for r in row_results if r['row_number'] == row_idx), None)
+                if not row_result:
+                    print(f"[DEBUG] Row {row_idx}: No validation result found")
+                    continue
+                if row_result['status'] != 'pass':
+                    print(f"[DEBUG] Row {row_idx}: Validation failed, skipping")
+                    continue
 
-                # 2. Validate Onboarding Type (B2B or B2C, case-insensitive)
-                onboarding_type = safe_str(row_data.get('Onboarding Type')).upper()
-                if onboarding_type not in ['B2B', 'B2C']:
-                    row_errors.append(f"Onboarding Type must be 'B2B' or 'B2C', found: '{row_data.get('Onboarding Type', '')}'")
+                print(f"[DEBUG] Row {row_idx}: Starting creation process")
+                try:
+                    row_data = dict(zip(headers, row))
 
-                # 3. Check for duplicate emails
-                email = safe_str(row_data.get('Learner Email'))
-                if email:
-                    if email in seen_emails:
-                        row_errors.append(f"Duplicate email address: '{email}'")
-                    else:
-                        seen_emails.add(email)
-                else:
-                    row_errors.append("Learner Email cannot be empty")
+                    # Prepare form data
+                    form_data = {}
+                    for excel_col, form_field in header_map.items():
+                        value = row_data.get(excel_col)
+                        if value is not None:
+                            # Convert to string first (handles both strings and numbers)
+                            value_str = str(value).strip()
+                            if value_str:
+                                # Handle ForeignKeys by name
+                                if form_field == 'college' and value_str:
+                                    try:
+                                        form_data['college'] = Institution.objects.get(name=value_str).id
+                                    except Institution.DoesNotExist:
+                                        form_data['college'] = None
+                                elif form_field == 'hospital' and value_str:
+                                    try:
+                                        form_data['hospital'] = Hospital.objects.get(name=value_str).id
+                                    except Hospital.DoesNotExist:
+                                        form_data['hospital'] = None
+                                else:
+                                    form_data[form_field] = value_str
 
-                # 4. Validate Learner Gender (Male, Female, or Other - case-insensitive)
-                gender = safe_str(row_data.get('Learner Gender'))
-                if gender and gender.lower() not in ['male', 'female', 'other']:
-                    row_errors.append(f"Learner Gender must be 'Male', 'Female', or 'Other', found: '{gender}'")
+                                # Convert to lowercase
+                                if form_field == 'onboarding_type':
+                                    form_data['onboarding_type'] = value_str.lower()
+                                if form_field == 'learner_type':
+                                    form_data['learner_type'] = value_str.lower()
+                                if form_field == 'learner_gender':
+                                    form_data['learner_gender'] = value_str.lower()
+                                if form_field == 'skillathon_event':
+                                    try:
+                                        form_data['skillathon_event'] = SkillathonEvent.objects.get(name=value_str).id
+                                        skillathon_name = value_str
+                                    except SkillathonEvent.DoesNotExist:
+                                        form_data['skillathon_event'] = None
 
-                # 10. Validate Learner Type (Student or Nurse - case-insensitive)
-                learner_type = safe_str(row_data.get('Learner Type')).lower()
-                if learner_type not in ['student', 'nurse']:
-                    row_errors.append(f"Learner Type must be 'Student' or 'Nurse', found: '{row_data.get('Learner Type', '')}'")
+                    # Add required user fields (convert to string to handle both text and numbers)
+                    learner_name = row_data.get('Learner Name', '')
+                    form_data['learner_name'] = str(learner_name).strip() if learner_name else ''
 
-                # 5. Validate Skillathon Event (if provided, must exist in backend)
-                skillathon = safe_str(row_data.get('Skillathon Event'))
-                if skillathon:  # Only validate if not blank
-                    if skillathon not in all_skillathons:
-                        row_errors.append(f"Skillathon Event '{skillathon}' does not exist. Please create it first before uploading.")
+                    learner_email = row_data.get('Learner Email', '')
+                    form_data['learner_email'] = str(learner_email).strip() if learner_email else ''
 
-                # 8. Validate College for students
-                if learner_type == 'student':
-                    college = safe_str(row_data.get('College'))
-                    if not college:
-                        row_errors.append("College cannot be empty for students")
+                    learner_phone = row_data.get('Learner Phone', '')
+                    form_data['learner_phone'] = str(learner_phone).strip()[:10] if learner_phone else ''
 
-                # 9. Validate Hospital for nurses
-                if learner_type == 'nurse':
-                    hospital = safe_str(row_data.get('Hospital'))
-                    if not hospital:
-                        row_errors.append("Hospital cannot be empty for nurses")
-
-                # Collect errors for this row
-                if row_errors:
-                    validation_errors.append({
-                        'row': row_idx,
-                        'errors': row_errors
-                    })
-
-            # If validation failed, return errors immediately
-            if validation_errors:
-                return JsonResponse({
-                    'success': False,
-                    'error': f'Validation failed for {len(validation_errors)} row(s). Please fix the errors and re-upload.',
-                    'validation_errors': validation_errors
-                })
-
-            # ===== VALIDATION PASSED - START BACKGROUND PROCESSING =====
-            session_key = str(uuid.uuid4())
-
-            # Extract pending learners list from Excel for progress tracking
-            pending_learners = []
-            for row_idx, row in non_empty_rows:
-                row_data = dict(zip(headers, row))
-                pending_learners.append({
-                    'name': str(row_data.get('Learner Name', '')).strip(),
-                    'email': str(row_data.get('Learner Email', '')).strip(),
-                    'learner_type': str(row_data.get('Learner Type', '')).strip().lower(),
-                })
-
-            # Initialize session data for progress tracking
-            from datetime import datetime
-            upload_session = {
-                'session_key': session_key,
-                'filename': file.name,
-                'status': 'processing',
-                'uploaded_by': request.user.email,
-                'uploaded_at': datetime.now().isoformat(),
-                'total_rows': len(non_empty_rows),
-                'completed_count': 0,
-                'pending_learners': pending_learners,
-                'completed_learners': [],
-                'error_count': 0,
-                'errors': []
-            }
-            cache.set(f"upload_session:{session_key}", upload_session, timeout=7200)  # 2 hours
-
-            # Add to active sessions list
-            active_sessions = cache.get('active_upload_sessions', [])
-            active_sessions.append(session_key)
-            cache.set('active_upload_sessions', active_sessions, timeout=7200)
-
-            # Start background processing
-            print(f"[DEBUG] Validation passed. Starting background thread for session: {session_key}")
-            background_thread = threading.Thread(
-                target=process_bulk_upload_with_progress,
-                args=(file_path, session_key),
-                daemon=True
-            )
-            background_thread.start()
-
-            return JsonResponse({
-                'success': True,
-                'session_key': session_key,
-                'message': 'Validation passed. Upload started.',
-                'filename': file.name,
-                'total_rows': len(non_empty_rows)
-            })
-
-        except Exception as e:
-            print(e)
-            print(traceback.format_exc())
-            return JsonResponse({
-                'success': False,
-                'error': f'Error processing file: {str(e)}'
-            })
-
-    return JsonResponse({
-        'success': False,
-        'error': 'Invalid request method'
-    })
-
-def process_bulk_upload_with_progress(file_path, session_key):
-    """
-    Process bulk upload and track created learners for polling
-    """
-    print(f"[DEBUG] Starting bulk upload process for session: {session_key}")
-
-    try:
-        # Load Excel file
-        wb = openpyxl.load_workbook(file_path)
-        ws = wb.active
-
-        # Define header mapping
-        header_map = {
-            'Onboarding Type': 'onboarding_type',
-            'Learner Type': 'learner_type',
-            'Learner Name': 'learner_name',
-            'Learner Email': 'learner_email',
-            'Learner Phone': 'learner_phone',
-            'College': 'college',
-            'Course': 'course',
-            'Stream': 'stream',
-            'Year of Study': 'year_of_study',
-            'Hospital': 'hospital',
-            'Designation': 'designation',
-            'Years of Experience': 'years_of_experience',
-            'Educational Qualification': 'educational_qualification',
-            'Speciality': 'speciality',
-            'State': 'state',
-            'District': 'district',
-            'Pincode': 'pincode',
-            'Address': 'address',
-            'Date of Birth': 'date_of_birth',
-            'Certifications': 'certifications',
-            'Learner Gender': 'learner_gender',
-            'Skillathon Event': 'skillathon_event',
-            'Educational Institution': 'educational_institution',
-        }
-
-        # Read headers
-        headers = [cell.value for cell in ws[1]]
-
-        # Get all rows and filter out empty ones
-        all_rows = list(ws.iter_rows(min_row=2, values_only=True))
-        non_empty_rows = [
-            (idx, row) for idx, row in enumerate(all_rows, start=2)
-            if any(cell is not None and str(cell).strip() for cell in row)
-        ]
-
-        print(f"[DEBUG] Processing {len(non_empty_rows)} rows...")
-
-        User = get_user_model()
-        created_learners = []
-        skillathon_learner_ids = []
-        skillathon_name = ""
-
-        # Process rows - signals will fire normally for Firebase sync
-        for idx, (row_idx, row) in enumerate(non_empty_rows):
-            try:
-                row_data = dict(zip(headers, row))
-
-                # Prepare form data
-                form_data = {}
-                for excel_col, form_field in header_map.items():
-                    value = row_data.get(excel_col)
-
-                    if value is not None:
-                        value = str(value).strip()
-                        if value:
-                            # Handle ForeignKeys by name
-                            if form_field == 'college' and value:
-                                try:
-                                    form_data['college'] = Institution.objects.get(name=value).id
-                                except Institution.DoesNotExist:
-                                    form_data['college'] = None
-                            elif form_field == 'hospital' and value:
-                                try:
-                                    form_data['hospital'] = Hospital.objects.get(name=value).id
-                                except Hospital.DoesNotExist:
-                                    form_data['hospital'] = None
-                            else:
-                                form_data[form_field] = value
-
-                            # Convert to lowercase
-                            if form_field == 'onboarding_type' and value:
-                                form_data['onboarding_type'] = value.lower()
-
-                            if form_field == 'learner_type' and value:
-                                form_data['learner_type'] = value.lower()
-
-                            if form_field == 'learner_gender' and value:
-                                form_data['learner_gender'] = value.lower()
-
-                            if form_field == 'skillathon_event' and value:
-                                try:
-                                    form_data['skillathon_event'] = SkillathonEvent.objects.get(name=value.strip()).id
-                                    skillathon_name = value.strip()
-                                except SkillathonEvent.DoesNotExist:
-                                    form_data['skillathon_event'] = None
-
-                # Add required user fields
-                form_data['learner_name'] = row_data.get('Learner Name', '').strip()
-                form_data['learner_email'] = row_data.get('Learner Email', '').strip()
-                form_data['learner_phone'] = str(row_data.get('Learner Phone', '')).strip()[:10]
-
-                form = LearnerForm(form_data)
-                if form.is_valid():
-                    # Check if learner already exists
-                    existing_learner = Learner.objects.filter(
-                        learner_user__email=form.cleaned_data['learner_email']
-                    ).first()
-
-                    if not existing_learner:
+                    form = LearnerForm(form_data)
+                    if form.is_valid():
                         # Create new learner
                         email = form.cleaned_data['learner_email']
                         full_name = form.cleaned_data['learner_name']
@@ -1307,7 +1340,6 @@ def process_bulk_upload_with_progress(file_path, session_key):
                             defaults={'full_name': full_name, 'phone_number': phone, 'is_active': True}
                         )
                         if user_created:
-                            # Set default password for new users
                             default_password = 'Success@123$'
                             user.set_password(default_password)
                             user.save()
@@ -1315,65 +1347,55 @@ def process_bulk_upload_with_progress(file_path, session_key):
                         learner = form.save(commit=False)
                         learner.learner_user = user
                         learner.save()
-                        # Signals will handle Firebase sync automatically
-
-                        # Add to created learners list
-                        learner_data = {
-                            'id': learner.id,
-                            'name': user.full_name,
-                            'email': user.email,
-                            'phone': user.phone_number,
-                            'learner_type': learner.learner_type,
-                            'college': learner.college.name if learner.college else None,
-                            'hospital': learner.hospital.name if learner.hospital else None,
-                        }
-                        created_learners.append(learner_data)
+                        created_count += 1
 
                         # Track for skillathon assignments
                         if learner.skillathon_event:
                             skillathon_learner_ids.append(user.id)
 
-                        # Update session cache: move from pending to completed
-                        session_data = cache.get(f"upload_session:{session_key}", {})
-                        if session_data:
-                            # Remove from pending list
-                            session_data['pending_learners'] = [
-                                l for l in session_data.get('pending_learners', [])
-                                if l['email'] != user.email
-                            ]
-                            # Add to completed list
-                            session_data['completed_learners'].append(learner_data)
-                            session_data['completed_count'] = len(session_data['completed_learners'])
-                            cache.set(f"upload_session:{session_key}", session_data, timeout=7200)
+                        print(f"[DEBUG] Created learner: {full_name} ({created_count}/{session_data['success_count']})")
 
-                        print(f"[DEBUG] Created learner: {user.full_name} ({idx + 1}/{len(non_empty_rows)})")
+                        # Update progress in cache after each learner creation
+                        progress_data = cache.get(f"upload_session:{session_key}", {})
+                        if progress_data:
+                            progress_data['created_count'] = created_count
+                            progress_data['message'] = f'Creating learner {created_count} of {session_data["success_count"]}: {full_name}'
+                            cache.set(f"upload_session:{session_key}", progress_data, timeout=7200)
+                    else:
+                        print(f"[DEBUG] Row {row_idx}: Form validation failed")
+                        print(f"[DEBUG] Form errors: {form.errors}")
+                        logger.error(f"Form validation failed for row {row_idx}: {form.errors}")
 
-            except Exception as e:
-                logger.error(f"Processing error for row {row_idx}: {str(e)}")
-                logger.error(traceback.format_exc())
+                except Exception as e:
+                    logger.error(f"Error creating learner for row {row_idx}: {str(e)}")
+                    logger.error(traceback.format_exc())
 
-        logger.info(f"[DEBUG] Created {len(created_learners)} new learners")
-        # Note: Firebase sync happens automatically via on_save signals
+            # Create scheduler object for skillathon assignments
+            if skillathon_learner_ids and skillathon_name:
+                logger.info(f"[DEBUG] Creating scheduler for {len(skillathon_learner_ids)} learners with skillathon: {skillathon_name}")
+                SchedularObject.objects.create(
+                    data=json.dumps({
+                        "learner_ids": skillathon_learner_ids,
+                        "skillathon_name": skillathon_name
+                    }),
+                    is_completed=False
+                )
 
-        # Create scheduler object for skillathon assignments
-        if skillathon_learner_ids and skillathon_name:
-            logger.info(f"[DEBUG] Creating scheduler for {len(skillathon_learner_ids)} learners with skillathon: {skillathon_name}")
-            SchedularObject.objects.create(
-                data=json.dumps({
-                    "learner_ids": skillathon_learner_ids,
-                    "skillathon_name": skillathon_name
-                }),
-                is_completed=False
-            )
+            # Update final status
+            session_data = cache.get(f"upload_session:{session_key}", {})
+            if session_data:
+                session_data['status'] = 'completed'
+                session_data['message'] = f'Validation complete. {created_count} learner(s) created successfully. {session_data["error_count"]} row(s) failed validation.'
+                cache.set(f"upload_session:{session_key}", session_data, timeout=7200)
 
-        # Update final status
-        session_data = cache.get(f"upload_session:{session_key}", {})
-        if session_data:
-            session_data['status'] = 'completed'
-            session_data['message'] = f'Successfully created {len(created_learners)} learners'
-            cache.set(f"upload_session:{session_key}", session_data, timeout=7200)
-
-        logger.info(f"[DEBUG] Bulk upload completed for session: {session_key}")
+            logger.info(f"[DEBUG] Bulk upload completed: {created_count} created, {session_data['error_count']} failed")
+        else:
+            # No valid rows to create
+            session_data = cache.get(f"upload_session:{session_key}", {})
+            if session_data:
+                session_data['status'] = 'completed'
+                session_data['message'] = f'Validation complete. All {session_data["error_count"]} row(s) failed validation. No learners created.'
+                cache.set(f"upload_session:{session_key}", session_data, timeout=7200)
 
     except Exception as e:
         # Handle any unexpected errors
@@ -1397,25 +1419,33 @@ def get_active_upload_sessions(request):
     for session_key in active_session_keys:
         session_data = cache.get(f"upload_session:{session_key}")
         if session_data:
-            # Only include if still processing or recently completed
-            if session_data.get('status') in ['processing', 'completed']:
-                sessions.append({
-                    'session_key': session_key,
-                    'filename': session_data.get('filename', ''),
-                    'status': session_data.get('status', 'processing'),
-                    'uploaded_by': session_data.get('uploaded_by', ''),
-                    'uploaded_at': session_data.get('uploaded_at', ''),
-                    'total_rows': session_data.get('total_rows', 0),
-                    'completed_count': session_data.get('completed_count', 0),
-                    'progress_percentage': int((session_data.get('completed_count', 0) / session_data.get('total_rows', 1)) * 100)
-                })
-            else:
-                # Remove completed/error sessions from active list after some time
-                if session_data.get('status') == 'completed':
-                    active_session_keys.remove(session_key)
+            # Include all statuses (validating, validated, creating, completed, error)
+            status = session_data.get('status', 'validating')
+            total_rows = session_data.get('total_rows', 0)
+            processed_rows = session_data.get('processed_rows', 0)
 
-    # Update active sessions list
-    cache.set('active_upload_sessions', active_session_keys, timeout=7200)
+            # Calculate progress percentage
+            if status in ['validating', 'validated', 'creating']:
+                # Show progress based on processed rows
+                progress_percentage = int((processed_rows / total_rows * 100)) if total_rows > 0 else 0
+            elif status == 'completed':
+                progress_percentage = 100
+            else:
+                progress_percentage = 0
+
+            sessions.append({
+                'session_key': session_key,
+                'filename': session_data.get('filename', ''),
+                'status': status,
+                'uploaded_by': session_data.get('uploaded_by', ''),
+                'uploaded_at': session_data.get('uploaded_at', ''),
+                'total_rows': total_rows,
+                'processed_rows': processed_rows,
+                'success_count': session_data.get('success_count', 0),
+                'error_count': session_data.get('error_count', 0),
+                'progress_percentage': progress_percentage,
+                'message': session_data.get('message', '')
+            })
 
     return JsonResponse({
         'success': True,
@@ -1426,7 +1456,7 @@ def get_active_upload_sessions(request):
 def get_upload_session_details(request, session_key):
     """
     API endpoint to get detailed info about a specific upload session.
-    Returns completed and pending learners for the download icon expansion.
+    Returns row-wise validation results for display in modal.
     """
     session_data = cache.get(f"upload_session:{session_key}")
 
@@ -1440,15 +1470,15 @@ def get_upload_session_details(request, session_key):
         'success': True,
         'session_key': session_key,
         'filename': session_data.get('filename', ''),
-        'status': session_data.get('status', 'processing'),
+        'status': session_data.get('status', 'validating'),
         'uploaded_by': session_data.get('uploaded_by', ''),
         'uploaded_at': session_data.get('uploaded_at', ''),
         'total_rows': session_data.get('total_rows', 0),
-        'completed_count': session_data.get('completed_count', 0),
-        'pending_learners': session_data.get('pending_learners', []),
-        'completed_learners': session_data.get('completed_learners', []),
+        'processed_rows': session_data.get('processed_rows', 0),
+        'success_count': session_data.get('success_count', 0),
         'error_count': session_data.get('error_count', 0),
-        'errors': session_data.get('errors', []),
+        'created_count': session_data.get('created_count', 0),
+        'row_results': session_data.get('row_results', []),
         'message': session_data.get('message', '')
     })
 
