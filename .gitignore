@@ -28,3 +28,4 @@ assessments/migrations/00*
 firebase_key.json
 populate_data.py
 media/Testing_New_metadata.xlsx
+firebase-debug.log
