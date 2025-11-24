@@ -6435,7 +6435,7 @@ def update_procedure(request):
                     if step_text in step_texts:
                         return JsonResponse({
                             'status': 'error',
-                            'message': f'Duplicate step found: "{step.get('question', '').strip()}". Each step must have unique wording.'
+                            'message': f'Duplicate step found: "{step.get("question", "").strip()}". Each step must have unique wording.'
                         }, status=400)
                     step_texts.append(step_text)
 
