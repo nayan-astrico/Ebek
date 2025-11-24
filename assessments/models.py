@@ -420,13 +420,21 @@ class SkillathonEvent(models.Model):
         return self.assessor_set.count()
 
 class SchedularObject(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('passed', 'Passed'),
+        ('failed', 'Failed'),
+    ]
+
     created_at = models.DateTimeField(auto_now_add=True)
     is_completed = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    error_message = models.TextField(null=True, blank=True)
     data = models.TextField(null=True, blank=True)
     update_data = models.TextField(null=True, blank=True)
 
     def __str__(self):
-        return str(self.created_at)
+        return f"{self.created_at} - {self.status}"
 
 class ExamAssignment(models.Model):
     learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
