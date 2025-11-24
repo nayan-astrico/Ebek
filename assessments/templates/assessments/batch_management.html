@@ -144,6 +144,16 @@
                 </div>
 
                 <div class="form-group">
+                    <label>Unit Type <span class="text-danger">*</span></label>
+                    <select class="form-control" id="unitType" name="unitType" onchange="handleUnitTypeChange()" required>
+                        <option value="">Select Unit Type</option>
+                        <option value="hospital">Hospital</option>
+                        <option value="institution">Institution</option>
+                    </select>
+                    <div class="error-message" id="unitTypeError"></div>
+                </div>
+
+                <div class="form-group">
                     <label>Semester</label>
                     <select class="form-control" id="semester" name="semester">
                         <option value="">Select Semester</option>
@@ -159,15 +169,7 @@
                     <div class="error-message" id="semesterError"></div>
                 </div>
 
-                <div class="form-group">
-                    <label>Unit Type <span class="text-danger">*</span></label>
-                    <select class="form-control" id="unitType" name="unitType" onchange="handleUnitTypeChange()" required>
-                        <option value="">Select Unit Type</option>
-                        <option value="hospital">Hospital</option>
-                        <option value="institution">Institution</option>
-                    </select>
-                    <div class="error-message" id="unitTypeError"></div>
-                </div>
+                
 
                 <div class="form-group">
                     <label>Unit <span class="text-danger">*</span></label>
@@ -1500,20 +1502,32 @@ function handleUnitTypeChange() {
     const unitDropdownInput = document.getElementById('unitDropdownInput');
     const learnersInput = document.getElementById('learnersInput');
     const learnersRequired = document.getElementById('learnersRequired');
-    
+    const semesterSelect = document.getElementById('semester');
+
     // Reset unit selection
     selectedUnit = null;
     document.getElementById('unitPlaceholder').textContent = 'Select Unit';
     document.getElementById('unitPlaceholder').className = 'placeholder';
     document.getElementById('unitSelect').value = '';
-    
+
     if (unitType) {
         unitDropdownInput.style.pointerEvents = 'auto';
         unitDropdownInput.style.opacity = '1';
         learnersInput.style.pointerEvents = 'auto';
         learnersInput.style.opacity = '1';
         learnersRequired.style.display = 'inline';
-        
+
+        // Handle semester based on unit type
+        if (unitType === 'hospital') {
+            // For hospitals, set semester to 1 and disable
+            semesterSelect.value = '1';
+            semesterSelect.disabled = true;
+        } else {
+            // For institutions, enable semester selection
+            semesterSelect.disabled = false;
+            semesterSelect.value = ''; // Reset to default
+        }
+
         // Load units for the selected type
         loadUnits(unitType);
     } else {
@@ -1522,11 +1536,15 @@ function handleUnitTypeChange() {
         learnersInput.style.pointerEvents = 'none';
         learnersInput.style.opacity = '0.5';
         learnersRequired.style.display = 'none';
-        
+
+        // Reset semester when no unit type is selected
+        semesterSelect.disabled = false;
+        semesterSelect.value = '';
+
         // Clear unit options
         document.getElementById('unitOptionsContainer').innerHTML = '';
     }
-    
+
     // Clear learners when unit type changes
     availableLearners = [];
     document.getElementById('learnersOptions').innerHTML = '';
