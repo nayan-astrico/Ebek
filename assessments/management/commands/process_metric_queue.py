@@ -456,8 +456,9 @@ class Command(BaseCommand):
                 except:
                     date_str = str(test_date)
             
-            # Fetch batch name from Batches collection
+            # Fetch batch name and total students from Batches collection
             batch_name = 'N/A'
+            total_batch_students = 0
             batch_id = bas_data.get('batch_id', '')
             if batch_id:
                 try:
@@ -465,6 +466,8 @@ class Command(BaseCommand):
                     if batch_doc.exists:
                         batch_data = batch_doc.to_dict()
                         batch_name = batch_data.get('batchName', batch_id)
+                        # Count total learners in this batch
+                        total_batch_students = len(batch_data.get('learners', []))
                 except Exception as e:
                     print(f"Error fetching batch name for {batch_id}: {str(e)}")
                     batch_name = batch_id
@@ -528,12 +531,14 @@ class Command(BaseCommand):
             # Calculate OSCE-level metrics (student-centric with total marks)
             avg_score = round(sum(student_percentages) / len(student_percentages), 2) if student_percentages else 0
             pass_rate = round((students_passing / len(student_percentages) * 100), 2) if student_percentages else 0
-            
+
             osce_timeline.append({
                 'osce_level': osce_level,
                 'batch_name': batch_name,
                 'date_conducted': date_str,
-                'num_students': len(osce_students),
+                'students_attempted': len(student_osce_marks),  # Students who completed at least one exam
+                'total_students': total_batch_students,  # Total enrolled in batch
+                'num_students': len(osce_students),  # Keep for backward compatibility
                 'avg_score': avg_score,
                 'pass_percentage': pass_rate
             })
@@ -782,7 +787,6 @@ class Command(BaseCommand):
             type_student_overall_percentages = []
             type_completed_students = set()
             type_grade_dist = Counter()
-            type_category_scores = defaultdict(list)
             type_skills_perf = {}
             type_osce_timeline = []
             type_student_batch_report = []
@@ -798,41 +802,135 @@ class Command(BaseCommand):
                     type_student_overall_percentages.append(type_student_pct)
                     type_grade_dist[self._get_grade(type_student_pct)] += 1
 
-            # Calculate category performance for this OSCE type
+            # Calculate category performance for this OSCE type using Student-Average Method with Total Marks
+            # This ensures consistency with main category_performance calculation
+            self.stdout.write(f"\n🔍 DEBUG: Calculating category_performance for OSCE Type: {osce_type}")
+
+            # DEBUG: Count total exams by type
+            exam_type_counts = {}
+            for user_id, student_data in students_data.items():
+                for exam in student_data['exam_attempts']:
+                    exam_type = exam.get('exam_type', 'Unknown')
+                    exam_type_counts[exam_type] = exam_type_counts.get(exam_type, 0) + 1
+            self.stdout.write(f"  Total exams by type: {exam_type_counts}")
+
+            type_category_performance = {}
+            for category in ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Pre-Procedure', 'Critical Thinking']:
+                student_category_averages = []
+                exams_found_for_category = 0
+                all_exam_scores_for_category = []  # DEBUG: Track all exam scores
+
+                # For each student, calculate their category percentage for this OSCE type
+                for user_id, student_data in students_data.items():
+                    type_marks = student_data['marks_by_type'].get(osce_type, {})
+                    if type_marks and type_marks.get('max', 0) > 0:
+                        # Aggregate marks for this category from exams of this type
+                        category_obtained = 0
+                        category_max = 0
+
+                        for exam in student_data['exam_attempts']:
+                            if exam.get('exam_type') == osce_type and exam.get('category') == category:
+                                exams_found_for_category += 1
+                                exam_obtained = exam.get('marks_obtained', 0)
+                                exam_max = exam.get('max_marks', 0)
+                                category_obtained += exam_obtained
+                                category_max += exam_max
+
+                                # DEBUG: Track exam score
+                                if exam_max > 0:
+                                    exam_score = round((exam_obtained / exam_max) * 100, 2)
+                                    all_exam_scores_for_category.append(exam_score)
+
+                        # Calculate this student's category percentage using Total Marks Method
+                        if category_max > 0:
+                            student_category_pct = (category_obtained / category_max) * 100
+                            student_category_averages.append(student_category_pct)
+
+                # Average all student category percentages
+                if student_category_averages:
+                    type_category_performance[category] = round(sum(student_category_averages) / len(student_category_averages), 2)
+
+                    # DEBUG: Show all exam scores and student averages
+                    exam_avg = round(sum(all_exam_scores_for_category) / len(all_exam_scores_for_category), 2) if all_exam_scores_for_category else 0
+                    self.stdout.write(f"  📊 {category}:")
+                    self.stdout.write(f"     Exam scores ({len(all_exam_scores_for_category)}): {all_exam_scores_for_category}")
+                    self.stdout.write(f"     Exam-level avg: {exam_avg}%")
+                    self.stdout.write(f"     Student percentages ({len(student_category_averages)}): {[round(p, 2) for p in student_category_averages]}")
+                    self.stdout.write(f"     Student-level avg: {type_category_performance[category]}%")
+                else:
+                    type_category_performance[category] = None
+                    self.stdout.write(f"  {category}: {exams_found_for_category} exams, No student data")
+
+            # Calculate skills performance for this OSCE type
+            # Must recalculate from student exam_attempts to get type-specific data
             for user_id, student_data in students_data.items():
                 type_marks = student_data['marks_by_type'].get(osce_type, {})
                 if type_marks and type_marks.get('max', 0) > 0:
-                    # Get category scores for exams of this type
+                    # Process exams of this type
                     for exam in student_data['exam_attempts']:
                         if exam.get('exam_type') == osce_type:
-                            category = exam.get('category')
-                            if category:
-                                type_category_scores[category].append(exam.get('score', 0))
+                            procedure_id = exam.get('procedure_id')
+                            procedure_name = exam.get('procedure_name')
+                            if procedure_id and procedure_name:
+                                # Initialize skill if not exists
+                                if procedure_id not in type_skills_perf:
+                                    type_skills_perf[procedure_id] = {
+                                        'skill_name': procedure_name,
+                                        'category': exam.get('category', 'N/A'),
+                                        'attempts': 0,
+                                        'students': set(),
+                                        'scores': [],
+                                        'student_marks': {}
+                                    }
 
-            # Calculate category performance
-            type_category_performance = {}
-            for category in ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Pre-Procedure', 'Critical Thinking']:
-                if category in type_category_scores and type_category_scores[category]:
-                    type_category_performance[category] = round(sum(type_category_scores[category]) / len(type_category_scores[category]), 2)
-                else:
-                    type_category_performance[category] = None
+                                # Track exam-level data
+                                type_skills_perf[procedure_id]['attempts'] += 1
+                                type_skills_perf[procedure_id]['students'].add(user_id)
 
-            # Filter skills for this OSCE type
-            for skill_id, skill_data in skills_data.items():
-                if osce_type in skill_data['osce_types'] and skill_data['scores']:
-                    avg_score = round(sum(skill_data['scores']) / len(skill_data['scores']), 2)
-                    pass_rate = round((sum(1 for s in skill_data['scores'] if s >= 80) / len(skill_data['scores']) * 100), 2)
-                    type_skills_perf[skill_id] = {
+                                # Calculate exam percentage
+                                exam_obtained = exam.get('marks_obtained', 0)
+                                exam_max = exam.get('max_marks', 0)
+                                if exam_max > 0:
+                                    exam_pct = round((exam_obtained / exam_max) * 100, 2)
+                                    type_skills_perf[procedure_id]['scores'].append(exam_pct)
+
+                                # Track student-level marks
+                                if user_id not in type_skills_perf[procedure_id]['student_marks']:
+                                    type_skills_perf[procedure_id]['student_marks'][user_id] = {'obtained': 0, 'max': 0}
+                                type_skills_perf[procedure_id]['student_marks'][user_id]['obtained'] += exam_obtained
+                                type_skills_perf[procedure_id]['student_marks'][user_id]['max'] += exam_max
+
+            # Calculate aggregated metrics for each skill
+            type_skills_perf_final = {}
+            for skill_id, skill_data in type_skills_perf.items():
+                if skill_data['scores']:
+                    # Exam-level average
+                    skill_avg_score = round(sum(skill_data['scores']) / len(skill_data['scores']), 2)
+                    skill_pass_rate = round((sum(1 for s in skill_data['scores'] if s >= 80) / len(skill_data['scores']) * 100), 2)
+
+                    # Student-level average
+                    student_skill_averages = []
+                    for student_id, marks in skill_data['student_marks'].items():
+                        if marks['max'] > 0:
+                            student_skill_pct = (marks['obtained'] / marks['max']) * 100
+                            student_skill_averages.append(student_skill_pct)
+
+                    avg_skill_score_student_method = round(sum(student_skill_averages) / len(student_skill_averages), 2) if student_skill_averages else skill_avg_score
+
+                    type_skills_perf_final[skill_id] = {
                         'skill_name': skill_data['skill_name'],
                         'category': skill_data['category'],
                         'attempts': skill_data['attempts'],
                         'students_attempted': len(skill_data['students']),
-                        'avg_score': avg_score,
-                        'pass_rate': pass_rate,
+                        'avg_score': skill_avg_score,  # Exam-level average
+                        'avg_score_student_method': avg_skill_score_student_method,  # Student-level average
+                        'pass_rate': skill_pass_rate,
                         'highest_score': max(skill_data['scores']),
                         'lowest_score': min(skill_data['scores']),
                         'osce_types': [osce_type]
                     }
+
+            type_skills_perf = type_skills_perf_final
 
             # Filter OSCE timeline for this type
             for osce in osce_timeline:
@@ -957,7 +1055,7 @@ class Command(BaseCommand):
         # ============================================
         # PHASE 5: STORE IN FIRESTORE
         # ============================================
-        
+
         # Store semester metrics
         semester_metrics = {
             'unit_name': unit_name,
@@ -1048,7 +1146,8 @@ class Command(BaseCommand):
             .stream()
 
         # Student-level aggregation (same as METRICS_CALCULATION_GUIDE.md)
-        # Collect each student's overall percentage, then average across all students
+        # Collect each STUDENT's overall percentage from student_batch_report across all semesters
+        # If a student appears in multiple semesters, they contribute multiple data points
         student_overall_percentages = []
         total_osces = 0
         assessed_student_ids = set()
@@ -1061,8 +1160,11 @@ class Command(BaseCommand):
             sem_data = sem_doc.to_dict()
             semester_num = sem_data.get('semester')
 
-            # Collect student percentages from this semester
-            student_overall_percentages.extend(sem_data.get('raw_scores', []))
+            # Collect student-level percentages from student_batch_report
+            # This ensures we use STUDENT averages (not exam-level raw_scores)
+            for student in sem_data.get('student_batch_report', []):
+                student_overall_percentages.append(student.get('overall_avg', 0))
+
             total_osces += sem_data.get('osces_conducted', 0)
 
             # Track students assessed and skills evaluated from each semester
@@ -1119,7 +1221,7 @@ class Command(BaseCommand):
             'category_performance': category_performance,
             'semester_breakdown': semester_breakdown,
             'grade_distribution': dict(total_grade_dist),
-            'raw_scores': student_overall_percentages,  # Store raw student percentages
+            'raw_scores': student_overall_percentages,  # Student-level percentages from all semesters (student can appear multiple times if in multiple semesters)
             'last_updated': firestore.SERVER_TIMESTAMP
         }
         

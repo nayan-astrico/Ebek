@@ -1777,6 +1777,7 @@ async function applySemesterFilters() {
                         grade_letter: typeData.grade_letter,
                         grade_distribution: typeData.grade_distribution,
                         category_performance: typeData.category_performance,
+                        category_details: typeData.category_details,  // Add category drill-down data for filtered view
                         skills_performance: typeData.skills_performance,
                         osce_activity_timeline: typeData.osce_activity_timeline,
                         student_batch_report: typeData.student_batch_report,
@@ -1979,7 +1980,7 @@ function renderSemesterDashboard(data, filterState = {}) {
                                 <th>Date</th>
                                 <th>Batch</th>
                                 <th>OSCE Level</th>
-                                <th>Students</th>
+                                <th>Students Attempted</th>
                                 <th>Avg Score</th>
                                 <th>Pass Rate</th>
                             </tr>
@@ -2173,7 +2174,13 @@ function renderOSCETimeline(timeline) {
         return '<tr><td colspan="6" style="text-align: center; color: #64748b;">No OSCE data available</td></tr>';
     }
 
-    return timeline.map(osce => `
+    return timeline.map(osce => {
+        // Format students as "attempted/total"
+        const studentsAttempted = osce.students_attempted || osce.num_students || 0;
+        const totalStudents = osce.total_students || 0;
+        const studentsDisplay = totalStudents > 0 ? `${studentsAttempted}/${totalStudents}` : studentsAttempted;
+
+        return `
         <tr>
             <td style="color: #1a202c; font-weight: 500;">${osce.date_conducted || 'N/A'}</td>
             <td style="color: #475569; font-weight: 500;">${osce.batch_name || 'N/A'}</td>
@@ -2182,11 +2189,12 @@ function renderOSCETimeline(timeline) {
                     ${osce.osce_level || 'N/A'}
                 </span>
             </td>
-            <td style="color: #1a202c;">${osce.num_students || 0}</td>
+            <td style="color: #1a202c;">${studentsDisplay}</td>
             <td style="color: #1a202c; font-weight: 500;">${osce.avg_score || 0}%</td>
             <td style="color: #1a202c; font-weight: 500;">${osce.pass_percentage || 0}%</td>
         </tr>
-    `).join('');
+        `;
+    }).join('');
 }
 
 // Render Skills Performance
