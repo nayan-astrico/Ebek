@@ -75,7 +75,13 @@ class ExamAssignmentAdmin(admin.ModelAdmin):
 
 admin.site.register(ExamAssignment, ExamAssignmentAdmin)
 
-admin.site.register(SchedularObject)
+class SchedularObjectAdmin(admin.ModelAdmin):
+    list_display = ('id', 'created_at', 'is_completed', 'status', 'error_message', 'data', 'update_data')
+    list_filter = ('status', 'is_completed', 'created_at')
+    search_fields = ('data', 'error_message')
+    readonly_fields = ('created_at',)
+
+admin.site.register(SchedularObject, SchedularObjectAdmin)
 
 class PermissionAdmin(admin.ModelAdmin):
     list_display = ('code', 'name', 'category', 'is_active', 'created_at')
