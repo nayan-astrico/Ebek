@@ -232,35 +232,57 @@ def cascade_delete_user_firebase_data(user_email):
 
         print(f"Found {len(exam_assignment_ids)} ExamAssignment(s) for user {firebase_user_id}")
 
-        # Step 2: Remove user from all Batches
+        # Step 2: Remove user from all Batches and collect batch references
         batches_query = db.collection('Batches').where('learners', 'array_contains', firebase_user_ref).stream()
         batch_count = 0
+        batch_refs = []
+
         for batch_doc in batches_query:
-            batch_ref = db.collection('Batches').document(batch_doc.id)
+            batch_id = batch_doc.id
+            batch_ref = db.collection('Batches').document(batch_id)
+            batch_refs.append(batch_doc.reference)
+
             batch_ref.update({
                 'learners': firestore.ArrayRemove([firebase_user_ref])
             })
             batch_count += 1
-            print(f"Removed user from Batch: {batch_doc.id}")
+            print(f"Removed user from Batch: {batch_id} (ref: {batch_doc.reference.path})")
 
         print(f"Removed user from {batch_count} Batch(es)")
+        print(f"Batch references to check: {[ref.path for ref in batch_refs]}")
 
-        # Step 3: Remove ExamAssignment references from BatchAssignment
-        if exam_assignment_refs:
-            batch_assignments_query = db.collection('BatchAssignment').stream()
-            for ba_doc in batch_assignments_query:
-                ba_data = ba_doc.to_dict()
-                ba_ref = db.collection('BatchAssignment').document(ba_doc.id)
+        # Step 3: Remove ExamAssignment references from BatchAssignment for relevant batches only
+        if exam_assignment_refs and batch_refs:
+            print(f"Looking for BatchAssignments with batch references in: {[ref.path for ref in batch_refs]}")
 
-                exam_array = ba_data.get('examAssignmentArray', [])
+            # Query BatchAssignments only for the batches the user was in
+            for batch_ref in batch_refs:
+                batch_assignments_query = db.collection('BatchAssignment').where('batch', '==', batch_ref).stream()
 
-                # Check each exam assignment reference
-                for exam_ref in exam_assignment_refs:
-                    if exam_ref in exam_array:
-                        ba_ref.update({
-                            'examAssignmentArray': firestore.ArrayRemove([exam_ref])
-                        })
-                        print(f"Removed ExamAssignment {exam_ref.id} from BatchAssignment: {ba_doc.id}")
+                for ba_doc in batch_assignments_query:
+                    ba_data = ba_doc.to_dict()
+                    ba_id = ba_doc.id
+                    ba_ref_doc = db.collection('BatchAssignment').document(ba_id)
+
+                    print(f"Found BatchAssignment: {ba_id} for batch: {batch_ref.path}")
+                    print(f"  Current examassignment array: {[ref.path for ref in ba_data.get('examassignment', [])]}")
+
+                    exam_array = ba_data.get('examassignment', [])
+
+                    # Check each exam assignment reference
+                    removed_count = 0
+                    for exam_ref in exam_assignment_refs:
+                        if exam_ref in exam_array:
+                            ba_ref_doc.update({
+                                'examassignment': firestore.ArrayRemove([exam_ref])
+                            })
+                            removed_count += 1
+                            print(f"  Removed ExamAssignment {exam_ref.id} from BatchAssignment: {ba_id}")
+
+                    if removed_count == 0:
+                        print(f"  No matching exam assignments found in this BatchAssignment")
+        elif exam_assignment_refs and not batch_refs:
+            print(f"Warning: User has {len(exam_assignment_refs)} exam assignments but was not found in any batches")
 
         # Step 4: Remove ExamAssignment references from ProcedureAssignment
         if exam_assignment_refs:
