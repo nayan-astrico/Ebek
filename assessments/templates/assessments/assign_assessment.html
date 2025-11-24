@@ -2403,57 +2403,24 @@
                 $(this).toggle(text.includes(searchTerm));
             });
         });
-    
-        // Batch selection - Handle both checkbox changes and li clicks
+
+        // Batch selection - Single selection
         $(document).on('click', '#batchDropdownList li', function(e) {
             e.preventDefault();
             e.stopPropagation();
-            
-            const li = $(this);
-            const checkbox = li.find('input[type="checkbox"]');
-            const value = li.data('value');
-            const id = li.data('id');
-            
-            // Toggle checkbox
-            checkbox.prop('checked', !checkbox.prop('checked'));
-            
-            if (checkbox.is(':checked')) {
-                if ($(`#batchChipsContainer .chip[data-id="${id}"]`).length === 0) {
-                    $('#batchChipsContainer').append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
-                }
-            } else {
-                $(`#batchChipsContainer .chip[data-id="${id}"]`).remove();
-            }
-            
-            // Update courses based on all selected batches
+
+            const batchName = $(this).data('value');
+            const batchId = $(this).data('id');
+
+            // Store both text and ID on the button
+            $('#batchDropdownBtn').text(batchName).attr('data-batch-id', batchId);
+            $('#batchDropdownList').hide().removeClass('show');
+            $('#batchDropdownBtn').removeClass('active');
+
+            // Update courses based on selected batch
             updateCoursesForSelectedBatches();
         });
-        
-        // Prevent li click toggle when clicking directly on batch checkbox
-        $(document).on('click', '#batchDropdownList input[type="checkbox"]', function(e) {
-            e.stopPropagation();
-        });
 
-        // Also handle direct checkbox clicks (without re-triggering li click)
-        $(document).on('change', '#batchDropdownList input[type="checkbox"]', function(e) {
-            e.stopPropagation();
-            const checkbox = $(this);
-            const li = checkbox.closest('li');
-            const value = li.data('value');
-            const id = li.data('id');
-
-            if (checkbox.is(':checked')) {
-                if ($(`#batchChipsContainer .chip[data-id="${id}"]`).length === 0) {
-                    $('#batchChipsContainer').append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
-                }
-            } else {
-                $(`#batchChipsContainer .chip[data-id="${id}"]`).remove();
-            }
-
-            // Update dependent courses based on selected batches
-            updateCoursesForSelectedBatches();
-        });
-    
         // Course selection - Handle li clicks
         $(document).on('click', '#courseDropdownList li', function(e) {
             e.preventDefault();
@@ -2886,94 +2853,48 @@
         }
     }
 
-    // Function to update courses based on all selected batches
+    // Function to update courses based on selected batch (single selection)
     function updateCoursesForSelectedBatches() {
-        // Get all selected batch IDs from chips
-        const selectedBatchIds = $('#batchChipsContainer .chip').map(function() {
-            return $(this).data('id');
-        }).get();
-        
+        // Get selected batch ID from button
+        const selectedBatchId = $('#batchDropdownBtn').attr('data-batch-id');
+
         // Clear course dropdown and reset button
         $('#courseDropdownList').empty();
         $('#courseDropdownBtn').text('Select Course').removeAttr('data-course-id');
-        
-        // If no batches selected, show empty message
-        if (selectedBatchIds.length === 0) {
-            $('#courseDropdownList').append('<li style="color:#888; cursor:default; padding: 8px 12px;">Please select at least one batch</li>');
+
+        // If no batch selected, show empty message
+        if (!selectedBatchId) {
+            $('#courseDropdownList').append('<li style="color:#888; cursor:default; padding: 8px 12px;">Please select a batch</li>');
             return;
         }
-        
-        // Fetch courses for all selected batches
-        const coursePromises = selectedBatchIds.map(batchId => {
-            return $.ajax({
-                url: `/api/batches/${batchId}/courses/`,
-                type: 'GET',
-                dataType: 'json'
-            });
-        });
-        
-        // Wait for all requests to complete using $.when
-        if (coursePromises.length === 0) {
-            $('#courseDropdownList').append('<li style="color:#888; cursor:default; padding: 8px 12px;">Please select at least one batch</li>');
-            return;
-        }
-        
-        $.when.apply($, coursePromises).done(function() {
-            console.log('All course responses received');
-            console.log('Arguments:', arguments);
-            
-            // $.when returns arguments in format: data1, data2, data3, ... or [data, status, xhr] for single
-            // Convert arguments to array
-            const responses = coursePromises.length === 1 ? [arguments[0]] : Array.from(arguments);
-            
-            // Extract course arrays from responses
-            const allCourseArrays = responses.map(function(response) {
-                // response is the data object: {success: true, courses: [...]}
-                console.log('Processing response:', response);
-                
+
+        // Fetch courses for the selected batch
+        $.ajax({
+            url: `/api/batches/${selectedBatchId}/courses/`,
+            type: 'GET',
+            dataType: 'json',
+            success: function(response) {
+                console.log('Courses response:', response);
+
                 if (response && response.success && Array.isArray(response.courses)) {
-                    return response.courses.map(course => ({
+                    const courses = response.courses.map(course => ({
                         id: course.id,
                         name: course.name || course.courseName
                     }));
-                }
-                console.warn('Unexpected response format:', response);
-                return [];
-            });
-            
-            console.log('All course arrays:', allCourseArrays);
-            
-            // Find intersection: courses that exist in ALL batches
-            let commonCourses = [];
-            if (allCourseArrays.length > 0) {
-                // Filter out empty arrays
-                const nonEmptyArrays = allCourseArrays.filter(arr => arr.length > 0);
-                
-                if (nonEmptyArrays.length > 0) {
-                    // Start with courses from first non-empty batch
-                    commonCourses = nonEmptyArrays[0];
-                    
-                    // Filter to keep only courses that exist in all other batches
-                    for (let i = 1; i < nonEmptyArrays.length; i++) {
-                        const currentBatchCourses = nonEmptyArrays[i];
-                        commonCourses = commonCourses.filter(course1 => 
-                            currentBatchCourses.some(course2 => course1.id === course2.id)
-                        );
+
+                    if (courses.length > 0) {
+                        populateDropdown('courseDropdownList', courses, 'name');
+                    } else {
+                        $('#courseDropdownList').append('<li style="color:#888; cursor:default; padding: 8px 12px;">No courses found for this batch</li>');
                     }
+                } else {
+                    $('#courseDropdownList').append('<li style="color:#888; cursor:default; padding: 8px 12px;">No courses available</li>');
                 }
+            },
+            error: function(xhr) {
+                console.error('Failed to fetch courses:', xhr);
+                $('#courseDropdownList').append('<li style="color:#888; cursor:default; padding: 8px 12px;">Error loading courses</li>');
             }
-            
-            console.log('Common courses:', commonCourses);
-            
-            // Populate dropdown with common courses
-            if (commonCourses.length > 0) {
-                populateDropdown('courseDropdownList', commonCourses, 'name');
-            } else {
-                $('#courseDropdownList').append('<li style="color:#888; cursor:default; padding: 8px 12px;">No common courses found for selected batches</li>');
-            }
-        }).fail(function() {
-            console.error('Failed to fetch courses for batches');
-            $('#courseDropdownList').append('<li style="color:#888; cursor:default; padding: 8px 12px;">Error loading courses</li>');
         });
     }
 
@@ -3351,15 +3272,16 @@
         let institutionId = null;
         
         if (testType === 'B2B') {
-            batchIds = $('#batchChipsContainer .chip').map(function () {
-                return $(this).data('id');
-            }).get();
-            
-            // Validation: Check if batches are selected
-            if (batchIds.length === 0) {
-                alert('Please select at least one batch');
+            // Get single batch ID from button
+            const batchId = $('#batchDropdownBtn').attr('data-batch-id');
+
+            // Validation: Check if batch is selected
+            if (!batchId) {
+                alert('Please select a batch');
                 return false;
             }
+
+            batchIds = [batchId]; // Convert to array for consistency
             
             // Get selected course ID
             courseId = $('#courseDropdownBtn').attr('data-course-id');
