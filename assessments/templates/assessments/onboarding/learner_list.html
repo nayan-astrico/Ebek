@@ -39,7 +39,7 @@
     </button>
     <button id="bulkDeleteBtn" class="btn btn-primary" style="margin-left: 8px;" onclick="openBulkDeleteConfirm()" disabled>
         <i class="fas fa-trash"></i>
-        Delete Selected (0)
+        Delete Selected
     </button>
 </div>
 
@@ -216,6 +216,73 @@
                     {% csrf_token %}
                     <button type="submit" class="btn btn-danger">Delete</button>
                 </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Delete Modal -->
+<div class="modal fade" id="bulkDeleteModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); color: white;">
+                <div>
+                    <h5 class="modal-title" style="margin: 0; font-weight: 600;">
+                        <i class="fas fa-trash-alt"></i> Confirm Bulk Delete
+                    </h5>
+                    <p style="margin: 5px 0 0 0; font-size: 13px; opacity: 0.9;">
+                        Review learners before deletion
+                    </p>
+                </div>
+                <button type="button" class="close" data-dismiss="modal" style="color: white; opacity: 1;">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 0;">
+                <!-- Warning Banner -->
+                <div style="padding: 16px 20px; background: #fef2f2; border-bottom: 1px solid #fee2e2;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <i class="fas fa-exclamation-triangle" style="color: #dc2626; font-size: 20px;"></i>
+                        <div>
+                            <p style="margin: 0; font-weight: 600; color: #991b1b; font-size: 14px;">
+                                You are about to delete <span id="bulkDeleteCount">0</span> learner(s)
+                            </p>
+                            <p style="margin: 3px 0 0 0; color: #b91c1c; font-size: 13px;">
+                                This action cannot be undone. All related data will be permanently removed.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Learners List -->
+                <div style="padding: 20px;">
+                    <h6 style="margin: 0 0 15px 0; color: #374151; font-weight: 600; font-size: 14px;">
+                        Learners to be deleted:
+                    </h6>
+                    <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead style="position: sticky; top: 0; background: #f9fafb; z-index: 1;">
+                                <tr style="border-bottom: 2px solid #e5e7eb;">
+                                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Name</th>
+                                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Email</th>
+                                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Type</th>
+                                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Institution</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bulkDeleteLearnersList">
+                                <!-- Learners will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="background: #f9fafb; border-top: 2px solid #e5e7eb;">
+                <button type="button" class="btn btn-light" data-dismiss="modal">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button type="button" class="btn btn-danger" onclick="executeBulkDelete()" id="confirmBulkDeleteBtn">
+                    <i class="fas fa-trash-alt"></i> Delete <span id="bulkDeleteCountBtn">0</span> Learner(s)
+                </button>
             </div>
         </div>
     </div>
@@ -1762,39 +1829,39 @@ function confirmDelete(button) {
 }
 
 // Bulk delete support
-let selectedLearnerIds = new Set();
 
 // Make entire row clickable to toggle checkbox (except action buttons)
 document.addEventListener('click', function(e) {
     // Find the closest table row
     const row = e.target.closest('tr');
     if (!row) return;
-    
+
     // Don't toggle if clicking on:
     // - Action buttons or their children
     // - The checkbox itself (to avoid double-toggling - let checkbox handle its own click)
     // - Links or buttons
-    if (e.target.closest('.actions') || 
-        e.target.closest('a') || 
+    if (e.target.closest('.actions') ||
+        e.target.closest('a') ||
         e.target.closest('button') ||
         e.target.classList.contains('row-select') ||
         e.target.type === 'checkbox') {
         return;
     }
-    
+
     // Find the checkbox in this row
     const checkbox = row.querySelector('.row-select');
     if (!checkbox) return;
-    
+
     // Toggle the checkbox
     checkbox.checked = !checkbox.checked;
-    checkbox.dispatchEvent(new Event('change'));
+
+    // Update bulk delete state and sync select all checkbox
+    updateBulkDeleteState();
+    syncSelectAllCheckbox();
 });
 
 document.addEventListener('change', function(e) {
     if (e.target && e.target.classList.contains('row-select')) {
-        const id = e.target.getAttribute('data-id');
-        if (e.target.checked) selectedLearnerIds.add(id); else selectedLearnerIds.delete(id);
         updateBulkDeleteState();
         syncSelectAllCheckbox();
     }
@@ -1802,8 +1869,6 @@ document.addEventListener('change', function(e) {
         const checks = document.querySelectorAll('.row-select');
         checks.forEach(cb => {
             cb.checked = e.target.checked;
-            const id = cb.getAttribute('data-id');
-            if (e.target.checked) selectedLearnerIds.add(id); else selectedLearnerIds.delete(id);
         });
         updateBulkDeleteState();
     }
@@ -1812,13 +1877,15 @@ document.addEventListener('change', function(e) {
 function updateBulkDeleteState() {
     const btn = document.getElementById('bulkDeleteBtn');
     if (!btn) return;
-    const count = selectedLearnerIds.size;
-    btn.disabled = count === 0;
-    // Update label with count
-    btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected (' + count + ')';
+
+    // Count checked checkboxes directly from DOM
+    const checkedCount = document.querySelectorAll('.row-select:checked').length;
+
+    btn.disabled = checkedCount === 0;
+    btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected';
     btn.classList.remove('btn-danger');
     btn.classList.add('btn-primary');
-    if (count > 0) {
+    if (checkedCount > 0) {
         btn.classList.add('hover-state');
     } else {
         btn.classList.remove('hover-state');
@@ -1833,45 +1900,100 @@ function syncSelectAllCheckbox() {
 }
 
 function openBulkDeleteConfirm() {
-    if (selectedLearnerIds.size === 0) return;
-    document.getElementById('deleteItemName').textContent = selectedLearnerIds.size + ' learner(s)';
-    const form = document.getElementById('deleteForm');
-    form.action = '';
-    form.dataset.bulk = 'true';
-    $('#deleteModal').modal('show');
+    // Get all checked checkboxes
+    const checkedBoxes = document.querySelectorAll('.row-select:checked');
+
+    if (checkedBoxes.length === 0) {
+        return;
+    }
+
+    // Gather learner data from the table rows
+    const learnersToDelete = [];
+    checkedBoxes.forEach(checkbox => {
+        const row = checkbox.closest('tr');
+        const cells = row.querySelectorAll('td');
+
+        learnersToDelete.push({
+            id: checkbox.getAttribute('data-id'),
+            name: cells[1].textContent.trim(),
+            email: cells[2].textContent.trim(),
+            type: cells[4].textContent.trim(),
+            institution: cells[5].textContent.trim()
+        });
+    });
+
+    // Update modal counts
+    document.getElementById('bulkDeleteCount').textContent = learnersToDelete.length;
+    document.getElementById('bulkDeleteCountBtn').textContent = learnersToDelete.length;
+
+    // Populate the learners list in modal
+    const tbody = document.getElementById('bulkDeleteLearnersList');
+    tbody.innerHTML = '';
+
+    learnersToDelete.forEach((learner, index) => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #e5e7eb';
+        if (index % 2 === 0) tr.style.background = '#f9fafb';
+
+        tr.innerHTML = `
+            <td style="padding: 12px;">${learner.name}</td>
+            <td style="padding: 12px; color: #6b7280; font-size: 13px;">${learner.email}</td>
+            <td style="padding: 12px;">
+                <span style="padding: 4px 8px; background: ${learner.type.toLowerCase() === 'student' ? '#dbeafe' : '#fef3c7'}; color: ${learner.type.toLowerCase() === 'student' ? '#1e40af' : '#92400e'}; border-radius: 4px; font-size: 12px; font-weight: 500;">
+                    ${learner.type}
+                </span>
+            </td>
+            <td style="padding: 12px; color: #6b7280; font-size: 13px;">${learner.institution}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    // Show the modal
+    $('#bulkDeleteModal').modal('show');
 }
 
-// Intercept delete modal submit for bulk
-document.addEventListener('submit', function(e) {
-    const form = e.target;
-    if (form && form.id === 'deleteForm' && form.dataset.bulk === 'true') {
-        e.preventDefault();
-        const ids = Array.from(selectedLearnerIds);
-        fetch('{% url "learners_bulk_delete" %}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            body: JSON.stringify({ ids })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                $('#deleteModal').modal('hide');
-                showSuccess('Deleted ' + data.deleted + ' learner(s) successfully.');
-                // Reload list
-                location.reload();
-            } else {
-                showError(data.error || 'Failed to delete learners');
-            }
-        })
-        .catch(err => {
-            console.error(err);
-            showError('Failed to delete learners');
-        });
+function executeBulkDelete() {
+    // Get all checked checkboxes
+    const checkedBoxes = document.querySelectorAll('.row-select:checked');
+    const ids = Array.from(checkedBoxes).map(cb => cb.getAttribute('data-id'));
+
+    if (ids.length === 0) {
+        return;
     }
-});
+
+    // Disable the delete button to prevent double-clicks
+    const deleteBtn = document.getElementById('confirmBulkDeleteBtn');
+    deleteBtn.disabled = true;
+    deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+
+    fetch('{% url "learners_bulk_delete" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({ ids })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            $('#bulkDeleteModal').modal('hide');
+            showSuccess('Deleted ' + data.deleted + ' learner(s) successfully.');
+            // Reload list after a short delay
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showError(data.error || 'Failed to delete learners');
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Delete ' + ids.length + ' Learner(s)';
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        showError('Failed to delete learners');
+        deleteBtn.disabled = false;
+        deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Delete ' + ids.length + ' Learner(s)';
+    });
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     const learnerTypeSelect = document.getElementById('learner_type');
@@ -3270,6 +3392,9 @@ function performSearch() {
         showMoreBtn.style.display = 'inline-flex';
     }
 
+    // Update bulk delete button state
+    updateBulkDeleteState();
+
     // Load fresh data
     console.log('📡 Calling loadMoreLearners...');
     loadMoreLearners();
@@ -3292,8 +3417,7 @@ function resetLearnerList() {
     if (showMoreBtn) {
         showMoreBtn.style.display = 'inline-flex';
     }
-    // Clear selected learner IDs and update bulk delete button
-    selectedLearnerIds.clear();
+    // Update bulk delete button state
     updateBulkDeleteState();
 }
 
@@ -3347,11 +3471,8 @@ function renderLearnerRow(learner) {
 
     var showActions = userPermissions.canEdit || userPermissions.canDelete;
 
-    // Check if this learner is already selected
-    var isChecked = selectedLearnerIds.has(String(learner.id));
-
     var html = '<tr>' +
-        '<td><input type="checkbox" class="row-select" data-id="' + learner.id + '"' + (isChecked ? ' checked' : '') + '></td>' +
+        '<td><input type="checkbox" class="row-select" data-id="' + learner.id + '"></td>' +
         '<td><div class="institution"><span>' + learner.full_name + '</span></div></td>' +
         '<td>' + learner.email + '</td>' +
         '<td>' + learner.phone_number + '</td>' +
