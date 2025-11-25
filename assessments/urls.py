@@ -114,6 +114,7 @@ urlpatterns = [
     path('api/batches/<str:batch_id>/', views.fetch_batch_details, name='fetch_batch_details'),
     path('api/batches/<str:batch_id>/update/', views.update_batch, name='update_batch'),
     path('api/batches/<str:batch_id>/delete/', views.delete_batch, name='delete_batch'),
+    path('api/batches/<str:batch_id>/toggle-status/', views.toggle_batch_status, name='toggle_batch_status'),
     path('api/batches/<str:batch_id>/remove-learners/', views.remove_learners_from_batch, name='remove_learners_from_batch'),
     path('api/batches/<str:batch_id>/add-learners/', views.add_learners_to_batch, name='add_learners_to_batch'),
     path('api/batches/<str:batch_id>/available-learners/', views.fetch_available_learners_for_batch, name='fetch_available_learners_for_batch'),

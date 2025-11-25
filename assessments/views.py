@@ -4223,9 +4223,16 @@ def fetch_batches(request):
         search = request.GET.get('search', '').strip().lower()
         page = int(request.GET.get('page', 1))
         page_size = int(request.GET.get('page_size', 10))
-        
+        include_inactive = request.GET.get('include_inactive', '').lower() == 'true'
+
         unit_types = [u.strip().lower() for u in unit_type_param.split(',') if u.strip()] if unit_type_param else []
-        statuses = [s.strip().lower() for s in status_param.split(',') if s.strip()] if status_param else []
+        # Default to active batches only unless status is explicitly provided or include_inactive is true
+        if status_param:
+            statuses = [s.strip().lower() for s in status_param.split(',') if s.strip()]
+        elif include_inactive:
+            statuses = []  # No status filter, show all
+        else:
+            statuses = ['active']  # Default to active batches only
 
 
         # Limit batches to units assigned to current user (by reference)
@@ -4708,6 +4715,40 @@ def delete_batch(request, batch_id):
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
     
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@csrf_exempt
+def toggle_batch_status(request, batch_id):
+    """API endpoint to toggle batch status between active and inactive."""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            new_status = data.get('status', '').strip().lower()
+
+            if new_status not in ['active', 'inactive']:
+                return JsonResponse({'error': 'Invalid status. Must be "active" or "inactive"'}, status=400)
+
+            batch_ref = db.collection('Batches').document(batch_id)
+            batch_doc = batch_ref.get()
+
+            if not batch_doc.exists:
+                return JsonResponse({'error': 'Batch not found'}, status=404)
+
+            # Update the batch status
+            batch_ref.update({'status': new_status})
+
+            message = f'Batch marked as {new_status} successfully'
+            if new_status == 'inactive':
+                message += '. This batch will no longer appear in the create assessment dropdown.'
+
+            return JsonResponse({
+                'success': True,
+                'message': message
+            }, status=200)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 @csrf_exempt
