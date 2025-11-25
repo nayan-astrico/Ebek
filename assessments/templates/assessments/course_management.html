@@ -207,9 +207,45 @@
             Create Course
         </button>
         {% endif %}
-        <script>
-            // Declare variables first
-            var canCreateCourse = false;
+    </div>
+</div>
+
+<!-- Confirmation Modal for Marking Course as Inactive -->
+<div class="modal-overlay" id="inactiveCourseModal" style="display: none;">
+    <div class="confirmation-modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-exclamation-triangle" style="color: #F16564;"></i> Mark Course as Inactive</h3>
+        </div>
+        <div class="modal-body">
+            <p><strong>Please note the following:</strong></p>
+            <ul style="list-style: none; padding-left: 0; margin: 16px 0;">
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-info-circle" style="color: #F16564; margin-right: 8px;"></i>
+                    This course will be <strong>automatically removed</strong> from all batches currently using it
+                </li>
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-redo" style="color: #F16564; margin-right: 8px;"></i>
+                    If you mark this course as active again later, you will need to <strong>manually re-add</strong> it to the desired batches
+                </li>
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-mobile-alt" style="color: #F16564; margin-right: 8px;"></i>
+                    This course will <strong>no longer be visible</strong> in the SHINE mobile application
+                </li>
+            </ul>
+            <p style="margin-top: 16px; color: #666;">Are you sure you want to mark this course as inactive?</p>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-light" onclick="cancelInactiveCourse()">Cancel</button>
+            <button class="btn btn-danger" onclick="confirmInactiveCourse()">
+                <i class="fas fa-check"></i> Yes, Mark as Inactive
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Declare variables first
+    var canCreateCourse = false;
             var canEditCourse = false;
             var canDeleteCourse = false;
             var canUpdateStatus = false;
@@ -343,6 +379,87 @@
 .empty-state p {
     margin: 0 0 24px 0;
     color: #718096;
+}
+
+/* Confirmation Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.confirmation-modal {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    max-width: 500px;
+    width: 90%;
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #2d3748;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+.modal-body p {
+    margin: 0 0 8px 0;
+    color: #4a5568;
+    line-height: 1.6;
+}
+
+.modal-body ul li {
+    color: #4a5568;
+    line-height: 1.8;
+}
+
+.modal-actions {
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.btn-danger {
+    background: #F16564;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #e45857;
 }
 
 /* Side Panel Styles */
@@ -1061,8 +1178,8 @@ function renderCourseRow(course) {
     if (showStatus) {
         html += '<td>' +
                 '<label class="switch">' +
-                    '<input type="checkbox" ' + (course.status === 'active' ? 'checked' : '') + 
-                    ' onchange="toggleCourseStatus(\'' + course.id + '\', this.checked ? \'active\' : \'inactive\')">' +
+                    '<input type="checkbox" ' + (course.status === 'active' ? 'checked' : '') +
+                    ' onchange="handleCourseStatusChange(\'' + course.id + '\', this.checked ? \'active\' : \'inactive\', this)">' +
                     '<span class="slider round"></span>' +
                 '</label>' +
                 '</td>';
@@ -1234,27 +1351,7 @@ function setupEventListeners() {
     });
 }
 
-function loadCourses() {
-    showLoading(true);
-    $.ajax({
-        url: '/fetch-courses/',
-        method: 'GET',
-        dataType: 'json',
-        success: function(data) {
-            allCourses = data.courses || [];
-            displayCourses(allCourses);
-            // Load filter options after courses are loaded
-            loadFilterCourseOptions();
-        },
-        error: function(xhr, status, error) {
-            console.error('Error loading courses:', error);
-            showError('Failed to load courses');
-        },
-        complete: function() {
-            showLoading(false);
-        }
-    });
-}
+
 
 function loadProcedures() {
     $.ajax({
@@ -1341,48 +1438,6 @@ function populateProceduresDropdown() {
             clearError('procedures');
             e.stopPropagation();
         });
-    });
-}
-
-function displayCourses(courses) {
-    const tbody = document.getElementById('coursesTableBody');
-    const emptyState = document.getElementById('emptyState');
-    
-    if (courses.length === 0) {
-        tbody.innerHTML = '';
-        emptyState.style.display = 'block';
-        return;
-    }
-    
-    emptyState.style.display = 'none';
-    tbody.innerHTML = '';
-    
-    courses.forEach(course => {
-        const row = document.createElement('tr');
-        row.className = 'course-row';
-        // row.onclick = function() {
-        //     window.location.href = `/course-management/${course.id}/`;
-        // };
-        
-        row.innerHTML = `
-            <td>${course.name}</td>
-            <td>${course.procedure_count}</td>
-            <td>
-                <label class="switch">
-                    <input type="checkbox" ${course.status === 'active' ? 'checked' : ''} onchange="toggleCourseStatus('${course.id}', this.checked ? 'active' : 'inactive')">
-                    <span class="slider round"></span>
-                </label>
-            </td>
-            <td>
-                <div class="actions">
-                    <button class="btn-icon" onclick="event.stopPropagation(); editCourse('${course.id}')" title="Edit Course">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                </div>
-            </td>
-        `;
-        
-        tbody.appendChild(row);
     });
 }
 
@@ -2010,6 +2065,65 @@ function getCookie(name) {
 }
 
 // Placeholder functions for future implementation
+// Variables to store course info for the modal
+let pendingCourseId = null;
+let pendingCourseStatus = null;
+let pendingCheckbox = null;
+
+function handleCourseStatusChange(courseId, newStatus, checkboxElement) {
+    console.log('[MODAL] handleCourseStatusChange called:', courseId, newStatus);
+    if (newStatus === 'inactive') {
+        // Store the pending info and show confirmation modal
+        pendingCourseId = courseId;
+        pendingCourseStatus = newStatus;
+        pendingCheckbox = checkboxElement;
+
+        console.log('[MODAL] Showing modal for course:', courseId);
+        const modal = document.getElementById('inactiveCourseModal');
+        console.log('[MODAL] Modal element:', modal);
+
+        // Show the modal
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    } else {
+        // If marking as active, no confirmation needed
+        console.log('[MODAL] Marking as active, no confirmation needed');
+        toggleCourseStatus(courseId, newStatus);
+    }
+}
+
+function confirmInactiveCourse() {
+    // Hide modal
+    document.getElementById('inactiveCourseModal').style.display = 'none';
+    document.body.style.overflow = '';
+
+    // Proceed with status change
+    if (pendingCourseId && pendingCourseStatus) {
+        toggleCourseStatus(pendingCourseId, pendingCourseStatus);
+    }
+
+    // Clear pending data
+    pendingCourseId = null;
+    pendingCourseStatus = null;
+    pendingCheckbox = null;
+}
+
+function cancelInactiveCourse() {
+    // Hide modal
+    document.getElementById('inactiveCourseModal').style.display = 'none';
+    document.body.style.overflow = '';
+
+    // Revert the checkbox
+    if (pendingCheckbox) {
+        pendingCheckbox.checked = true; // Revert to active (checked)
+    }
+
+    // Clear pending data
+    pendingCourseId = null;
+    pendingCourseStatus = null;
+    pendingCheckbox = null;
+}
+
 function toggleCourseStatus(courseId, status) {
     $.ajax({
         url: `/courses/${courseId}/toggle-status/`,
@@ -2021,7 +2135,11 @@ function toggleCourseStatus(courseId, status) {
             'X-CSRFToken': getCookie('csrftoken')
         },
         success: function(data) {
-            showSuccess('Course status updated successfully!');
+            if (data.message) {
+                showSuccess(data.message);
+            } else {
+                showSuccess('Course status updated successfully!');
+            }
         },
         error: function(xhr, status, error) {
             let errorMessage = 'Failed to update course status';

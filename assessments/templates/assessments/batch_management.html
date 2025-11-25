@@ -297,7 +297,10 @@
                         <th>Unit Type</th>
                         <th>Unit Name</th>
                         <th>Learners</th>
-                        {% if "edit_batch" in request.user.get_all_permissions or "delete_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
+                        {% if "update_batch_status" in request.user.get_all_permissions or request.user.has_all_permissions %}
+                        <th>Status</th>
+                        {% endif %}
+                        {% if "edit_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
                         <th>Actions</th>
                         {% endif %}
                     </tr>
@@ -334,6 +337,7 @@
         var canCreateBatch = false;
         var canEditBatch = false;
         var canDeleteBatch = false;
+        var canUpdateStatus = false;
 
         // Then set them based on permissions
         {% if "create_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
@@ -348,14 +352,49 @@
         canDeleteBatch = true;
         {% endif %}
 
+        {% if "update_batch_status" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canUpdateStatus = true;
+        {% endif %}
+
         var userPermissions = {
             canCreate: canCreateBatch,
             canEdit: canEditBatch,
-            canDelete: canDeleteBatch
+            canDelete: canDeleteBatch,
+            canUpdateStatus: canUpdateStatus
         };
 
-        var showActionsColumn = userPermissions.canEdit || userPermissions.canDelete;
+        var showStatusColumn = userPermissions.canUpdateStatus;
+        var showActionsColumn = userPermissions.canEdit;
         </script>
+    </div>
+</div>
+
+<!-- Confirmation Modal for Marking Batch as Inactive -->
+<div class="modal-overlay" id="inactiveBatchModal" style="display: none;">
+    <div class="confirmation-modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-exclamation-triangle" style="color: #F16564;"></i> Mark Batch as Inactive</h3>
+        </div>
+        <div class="modal-body">
+            <p><strong>Please note the following:</strong></p>
+            <ul style="list-style: none; padding-left: 0; margin: 16px 0;">
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-eye-slash" style="color: #F16564; margin-right: 8px;"></i>
+                    This batch will <strong>no longer be visible</strong> in the create assessment dropdown
+                </li>
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-redo" style="color: #F16564; margin-right: 8px;"></i>
+                    You can mark it as active again later if needed
+                </li>
+            </ul>
+            <p style="margin-top: 16px; color: #666;">Are you sure you want to mark this batch as inactive?</p>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-light" onclick="cancelInactiveBatch()">Cancel</button>
+            <button class="btn btn-danger" onclick="confirmInactiveBatch()">
+                <i class="fas fa-check"></i> Yes, Mark as Inactive
+            </button>
+        </div>
     </div>
 </div>
 
@@ -1147,6 +1186,139 @@
 .select-all-item:hover .select-all-text {
     color: #F16564;
 }
+
+/* Toggle Switch for Status */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: #1AA09A;
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* Confirmation Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.confirmation-modal {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    max-width: 500px;
+    width: 90%;
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #2d3748;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+.modal-body p {
+    margin: 0 0 8px 0;
+    color: #4a5568;
+    line-height: 1.6;
+}
+
+.modal-body ul li {
+    color: #4a5568;
+    line-height: 1.8;
+}
+
+.modal-actions {
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.btn-danger {
+    background: #F16564;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #e45857;
+}
 </style>
 
 <script>
@@ -1354,7 +1526,7 @@ document.addEventListener('DOMContentLoaded', function() {
 function loadBatches() {
     const searchText = document.getElementById('searchInput').value.trim();
     const filters = getBatchFilters();
-    let url = `/api/batches/?page=${currentPage}&page_size=${batchesPerPage}&search=${searchText}&`;
+    let url = `/api/batches/?page=${currentPage}&page_size=${batchesPerPage}&search=${searchText}&include_inactive=true&`;
     if (filters.unitTypes.length > 0) {
         url += 'unitType=' + filters.unitTypes.join(',') + '&';
     }
@@ -1402,9 +1574,10 @@ function displayBatches(batches) {
     
     batches.forEach(batch => {
         const row = document.createElement('tr');
-        
-        var showActions = userPermissions.canEdit || userPermissions.canDelete;
-        
+
+        var showStatus = userPermissions.canUpdateStatus;
+        var showActions = userPermissions.canEdit;
+
         var semesterDisplay = batch.semester ? 'Semester ' + batch.semester : '-';
         var html = '<td>' + batch.batchName + '</td>' +
                    '<td>' + (batch.yearOfBatch || '-') + '</td>' +
@@ -1412,26 +1585,32 @@ function displayBatches(batches) {
                    '<td>' + (batch.unitType.charAt(0).toUpperCase() + batch.unitType.slice(1)) + '</td>' +
                    '<td>' + batch.unitName + '</td>' +
                    '<td>' + batch.learnerCount + '</td>';
-        
-        // Actions column - only if user has permission
+
+        // Status column - toggle switch
+        if (showStatus) {
+            var isActive = batch.status === 'active';
+            html += '<td>' +
+                    '<label class="switch">' +
+                        '<input type="checkbox" ' + (isActive ? 'checked' : '') +
+                        ' onchange="handleBatchStatusChange(\'' + batch.id + '\', this.checked ? \'active\' : \'inactive\', this)">' +
+                        '<span class="slider round"></span>' +
+                    '</label>' +
+                    '</td>';
+        }
+
+        // Actions column - only edit button (delete removed)
         if (showActions) {
             html += '<td><div class="actions">';
-            
+
             if (userPermissions.canEdit) {
                 html += '<button class="btn-icon" onclick="editBatch(\'' + batch.id + '\')">' +
                         '<i class="fas fa-edit"></i>' +
                         '</button>';
             }
-            
-            if (userPermissions.canDelete) {
-                html += '<button class="btn-icon btn-danger" onclick="deleteBatch(\'' + batch.id + '\')">' +
-                        '<i class="fas fa-trash"></i>' +
-                        '</button>';
-            }
-            
+
             html += '</div></td>';
         }
-        
+
         row.innerHTML = html;
         tbody.appendChild(row);
     });
@@ -1450,7 +1629,7 @@ function loadMoreBatches() {
     currentPage++;
     const searchText = document.getElementById('searchInput').value.trim();
     const filters = getBatchFilters();
-    let url = `/api/batches/?page=${currentPage}&page_size=${batchesPerPage}&search=${searchText}&`;
+    let url = `/api/batches/?page=${currentPage}&page_size=${batchesPerPage}&search=${searchText}&include_inactive=true&`;
     if (filters.unitTypes.length > 0) {
         url += 'unitType=' + filters.unitTypes.join(',') + '&';
     }
@@ -1925,31 +2104,94 @@ function editBatch(batchId) {
     window.location.href = `/batch-management/${batchId}/`;
 }
 
-function deleteBatch(batchId) {
-    if (confirm('Are you sure you want to delete this batch?')) {
-        fetch(`/api/batches/${batchId}/delete/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showSuccess('Batch deleted successfully!');
-                currentPage = 1;
-                allBatches = [];
-                loadBatches();
-            } else {
-                showError('Error deleting batch: ' + (data.error || 'Unknown error'));
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showError('Error deleting batch');
-        });
+// Variables to store batch info for the modal
+let pendingBatchId = null;
+let pendingBatchStatus = null;
+let pendingCheckbox = null;
+
+function handleBatchStatusChange(batchId, newStatus, checkboxElement) {
+    console.log('[MODAL] handleBatchStatusChange called:', batchId, newStatus);
+    if (newStatus === 'inactive') {
+        // Store the pending info and show confirmation modal
+        pendingBatchId = batchId;
+        pendingBatchStatus = newStatus;
+        pendingCheckbox = checkboxElement;
+
+        console.log('[MODAL] Showing modal for batch:', batchId);
+        const modal = document.getElementById('inactiveBatchModal');
+        console.log('[MODAL] Modal element:', modal);
+
+        // Show the modal
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    } else {
+        // If marking as active, no confirmation needed
+        console.log('[MODAL] Marking as active, no confirmation needed');
+        toggleBatchStatus(batchId, newStatus);
     }
+}
+
+function confirmInactiveBatch() {
+    // Hide modal
+    document.getElementById('inactiveBatchModal').style.display = 'none';
+    document.body.style.overflow = '';
+
+    // Proceed with status change
+    if (pendingBatchId && pendingBatchStatus) {
+        toggleBatchStatus(pendingBatchId, pendingBatchStatus);
+    }
+
+    // Clear pending data
+    pendingBatchId = null;
+    pendingBatchStatus = null;
+    pendingCheckbox = null;
+}
+
+function cancelInactiveBatch() {
+    // Hide modal
+    document.getElementById('inactiveBatchModal').style.display = 'none';
+    document.body.style.overflow = '';
+
+    // Revert the checkbox
+    if (pendingCheckbox) {
+        pendingCheckbox.checked = true; // Revert to active (checked)
+    }
+
+    // Clear pending data
+    pendingBatchId = null;
+    pendingBatchStatus = null;
+    pendingCheckbox = null;
+}
+
+function toggleBatchStatus(batchId, status) {
+    fetch(`/api/batches/${batchId}/toggle-status/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({ status: status })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showSuccess(data.message || 'Batch status updated successfully!');
+        } else {
+            showErrorNotification(data.error || 'Failed to update batch status');
+            // Reload batches to revert the toggle
+            currentPage = 1;
+            allBatches = [];
+            loadBatches();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showErrorNotification('Error updating batch status');
+        // Reload batches to revert the toggle
+        currentPage = 1;
+        allBatches = [];
+        loadBatches();
+    });
 }
 
 function getBatchFilters() {
