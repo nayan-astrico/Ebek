@@ -1078,11 +1078,11 @@ function renderCourseRow(course) {
                     '</button>';
         }
         
-        if (userPermissions.canDelete) {
-            html += '<button class="btn-icon btn-danger" onclick="event.stopPropagation(); deleteCourse(\'' + course.id + '\')">' +
-                    '<i class="fas fa-trash"></i>' +
-                    '</button>';
-        }
+        // if (userPermissions.canDelete) {
+        //     html += '<button class="btn-icon btn-danger" onclick="event.stopPropagation(); deleteCourse(\'' + course.id + '\')">' +
+        //             '<i class="fas fa-trash"></i>' +
+        //             '</button>';
+        // }
         
         html += '</div></td>';
     }
@@ -1377,9 +1377,6 @@ function displayCourses(courses) {
                 <div class="actions">
                     <button class="btn-icon" onclick="event.stopPropagation(); editCourse('${course.id}')" title="Edit Course">
                         <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn-icon btn-danger" onclick="event.stopPropagation(); deleteCourse('${course.id}')">
-                        <i class="fas fa-trash"></i>
                     </button>
                 </div>
             </td>

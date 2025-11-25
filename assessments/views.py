@@ -3999,28 +3999,59 @@ def toggle_course_status(request, course_id):
         try:
             data = json.loads(request.body)
             new_status = data.get('status', 'active')
-            
+
             course_ref = db.collection('Courses').document(course_id)
             course_doc = course_ref.get()
-            
+
             if not course_doc.exists:
                 return JsonResponse({'error': 'Course not found'}, status=404)
-            
+
             # Update the course status
             course_ref.update({
                 'status': new_status,
                 'updatedAt': firestore.SERVER_TIMESTAMP
             })
-            
+
+            # If course is being marked as inactive, remove it from all batches
+            if new_status == 'inactive':
+                print(f"[COURSE STATUS] Course {course_id} marked as inactive, removing from all batches")
+
+                # Query all batches that have this course
+                batches_query = db.collection('Batches').where('courses', 'array_contains', course_ref).stream()
+                removed_from_batches = 0
+
+                for batch_doc in batches_query:
+                    batch_id = batch_doc.id
+                    batch_ref = db.collection('Batches').document(batch_id)
+                    batch_data = batch_doc.to_dict()
+
+                    # Remove the course reference from the batch
+                    batch_ref.update({
+                        'courses': firestore.ArrayRemove([course_ref])
+                    })
+                    removed_from_batches += 1
+                    print(f"[COURSE STATUS] Removed course {course_id} from batch: {batch_id} ({batch_data.get('batchName', 'Unknown')})")
+
+                print(f"[COURSE STATUS] Removed course from {removed_from_batches} batch(es)")
+
+                return JsonResponse({
+                    'success': True,
+                    'status': new_status,
+                    'message': f'Course status updated to inactive and removed from {removed_from_batches} batch(es)'
+                }, status=200)
+
             return JsonResponse({
                 'success': True,
                 'status': new_status,
                 'message': 'Course status updated successfully'
             }, status=200)
-            
+
         except Exception as e:
+            print(f"[COURSE STATUS] Error: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return JsonResponse({'error': str(e)}, status=500)
-    
+
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 @csrf_exempt
@@ -4884,6 +4915,8 @@ def fetch_batch_courses(request, batch_id):
             course_doc = course_ref.get()
             if course_doc.exists:
                 course_data = course_doc.to_dict()
+                if course_data.get("status").lower() != "active":
+                    continue
                 procedure_refs = course_data.get('procedures', [])
                 
                 # Get procedure names

@@ -23,7 +23,7 @@
             </button>
             {% endif %}
             {% if "delete_course" in request.user.get_all_permissions or request.user.has_all_permissions %}
-            <button class="btn btn-primary" style="background: #F16564; color: white; border-color: #F16564;" onclick="deleteCourse()">
+            <button class="btn btn-primary" style="background: #F16564; color: white; border-color: #F16564;display: none;" onclick="deleteCourse()">
                 <i class="fas fa-trash"></i>
                 Delete Course
             </button>
