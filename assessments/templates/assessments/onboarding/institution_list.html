@@ -1001,15 +1001,15 @@ function renderInstitutionRow(inst) {
                     '</a>';
         }
         
-        if (userPermissions.canDelete) {
-            html += '<button type="button" class="btn-icon btn-danger" ' +
-                    'data-name="' + inst.name + '" ' +
-                    'data-url="' + inst.delete_url + '" ' +
-                    'onclick="confirmDelete(this)" ' +
-                    'title="Delete">' +
-                    '<i class="fas fa-trash"></i>' +
-                    '</button>';
-        }
+        // if (userPermissions.canDelete) {
+        //     html += '<button type="button" class="btn-icon btn-danger" ' +
+        //             'data-name="' + inst.name + '" ' +
+        //             'data-url="' + inst.delete_url + '" ' +
+        //             'onclick="confirmDelete(this)" ' +
+        //             'title="Delete">' +
+        //             '<i class="fas fa-trash"></i>' +
+        //             '</button>';
+        // }
         
         html += '</div></td>';
     }
