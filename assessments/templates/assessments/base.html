@@ -506,7 +506,9 @@
             font-weight: 500;
         }
         #sidebar #onboardingSubmenu .nav-link,
-        #sidebar #onboardingSubmenu .submenu-link {
+        #sidebar #onboardingSubmenu .submenu-link,
+        #sidebar #reportsSubmenu .nav-link,
+        #sidebar #reportsSubmenu .submenu-link {
             border-radius: 8px;
             margin-bottom: 2px;
             width: 100%;
@@ -515,18 +517,26 @@
         #sidebar #onboardingSubmenu .nav-link:hover,
         #sidebar #onboardingSubmenu .nav-link:focus,
         #sidebar #onboardingSubmenu .submenu-link:hover,
-        #sidebar #onboardingSubmenu .submenu-link:focus {
+        #sidebar #onboardingSubmenu .submenu-link:focus,
+        #sidebar #reportsSubmenu .nav-link:hover,
+        #sidebar #reportsSubmenu .nav-link:focus,
+        #sidebar #reportsSubmenu .submenu-link:hover,
+        #sidebar #reportsSubmenu .submenu-link:focus {
             background-color: #FFFFFF33;
             color: #fff;
         }
         #sidebar #onboardingSubmenu .nav-link.active,
-        #sidebar #onboardingSubmenu .submenu-link.active {
+        #sidebar #onboardingSubmenu .submenu-link.active,
+        #sidebar #reportsSubmenu .nav-link.active,
+        #sidebar #reportsSubmenu .submenu-link.active {
             background-color: #FFFFFF33;
             color: #fff;
             font-weight: 600;
         }
         #sidebar #onboardingSubmenu .nav-link.active i,
-        #sidebar #onboardingSubmenu .submenu-link.active i {
+        #sidebar #onboardingSubmenu .submenu-link.active i,
+        #sidebar #reportsSubmenu .nav-link.active i,
+        #sidebar #reportsSubmenu .submenu-link.active i {
             color: var(--primary-color) !important;
         }
 
@@ -692,19 +702,25 @@
     <div class="nav-items">  
         {% if request.user|check_icon_navigation_permissions:'reports' %}
         <div class="nav-item">
-            <a href="{% url 'exam_reports_page' %}" class="nav-link" title="View Assessment Reports">
+            <a href="#reportsSubmenu" class="nav-link" data-toggle="collapse" aria-expanded="false" title="View Reports">
                 <i class="fas fa-chart-bar"></i>
                 <span>Reports</span>
+                <i class="fas fa-chevron-down ml-auto"></i>
             </a>
-        </div>
-        {% endif %}
-
-        {% if request.user.is_staff or request.user.is_superuser %}
-        <div class="nav-item">
-            <a href="{% url 'view_metrics_data' %}" class="nav-link" title="View Metrics Data">
-                <i class="fas fa-database"></i>
-                <span>Metrics Viewer</span>
-            </a>
+            <div class="collapse" id="reportsSubmenu">
+                {% if request.user.is_staff or request.user.is_superuser %}
+                <div class="nav-item submenu-item">
+                    <a href="{% url 'view_metrics_data' %}" class="nav-link submenu-link" title="OSCE Reports">
+                        OSCE
+                    </a>
+                </div>
+                {% endif %}
+                <div class="nav-item submenu-item">
+                    <a href="{% url 'exam_reports_page' %}" class="nav-link submenu-link" title="Skillathon Reports">
+                        Skillathon
+                    </a>
+                </div>
+            </div>
         </div>
         {% endif %}
 
@@ -728,7 +744,7 @@
         {% if request.user|check_icon_navigation_permissions:'onboarding' %}
         <div class="nav-item">
             <a href="#onboardingSubmenu" class="nav-link" data-toggle="collapse" aria-expanded="false" title="Onboarding and Management">
-        <i class="fas fa-university"></i>
+                <i class="fas fa-university"></i>
                 <span>Onboarding</span>
                 <i class="fas fa-chevron-down ml-auto"></i>
             </a>

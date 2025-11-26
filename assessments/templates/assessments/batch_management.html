@@ -1733,11 +1733,11 @@ function handleUnitTypeChange() {
 }
 
 function loadUnits(unitType) {
-    const endpoint = unitType === 'hospital' ? '/api/fetch-hospitals/' : '/fetch-institutes/';
+    const endpoint = unitType === 'hospital' ? '/api/fetch-hospitals/?onboarding_type=b2b' : '/fetch-institutes/?onboarding_type=b2b&unit_type=institution';
     const container = document.getElementById('unitOptionsContainer');
-    
+
     console.log('Loading units for type:', unitType, 'from endpoint:', endpoint);
-    
+
     // Show loading state
     container.innerHTML = `
         <div class="loading-units">
@@ -1745,7 +1745,7 @@ function loadUnits(unitType) {
             <div>Loading units...</div>
         </div>
     `;
-    
+
     fetch(endpoint)
         .then(response => {
             console.log('Response status:', response.status);
@@ -1753,14 +1753,14 @@ function loadUnits(unitType) {
         })
         .then(data => {
             console.log('API response:', data);
-            
+
             let units = [];
             if (unitType === 'hospital' && data.success && data.units) {
                 units = data.units;
             } else if (unitType === 'institution' && data.institutes) {
                 units = data.institutes;
             }
-            
+
             console.log('Available units:', units);
             availableUnits = units;
             displayUnits(availableUnits);
