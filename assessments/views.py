@@ -4532,7 +4532,7 @@ def fetch_learners(request, unit_type, unit_id):
             return JsonResponse({'success': False, 'error': 'Invalid unit type'}, status=400)
 
         # Query users by string field
-        learners_ref = db.collection('Users').where(user_field, '==', unit_name).where('role', 'in', ['student', 'nurse'])
+        learners_ref = db.collection('Users').where(user_field, '==', unit_name).where('role', 'in', ['student', 'nurse']).where('is_active','==',True)
         learners = []
         for doc in learners_ref.stream():
             learner_data = doc.to_dict()

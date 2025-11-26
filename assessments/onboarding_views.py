@@ -1889,8 +1889,8 @@ def cascade_delete_learner_data(learner):
 
         print(f"Starting cascading delete for learner user: {user_path}, onboarding_type: {learner.onboarding_type}")
 
-        # Step 1: Find all ExamAssignments for this user (using string path as ExamAssignment stores it as string)
-        exam_assignments_query = db.collection('ExamAssignment').where('user', '==', user_path).where('status', '!=', 'Completed').stream()
+        # Step 1: Find all ExamAssignments for this user (using DocumentReference)
+        exam_assignments_query = db.collection('ExamAssignment').where('user', '==', user_ref).where('status', '==', 'Pending').stream()
         exam_assignment_ids = []
         exam_assignment_paths = []
 

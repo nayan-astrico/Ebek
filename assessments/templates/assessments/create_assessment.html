@@ -50,7 +50,7 @@
                     <th>Procedure</th>
                     <th>Questions</th>
                     <th>Category</th>
-                    <th>Active</th>
+                    
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -1370,12 +1370,6 @@ function renderProcedureRow(proc) {
         <td style="cursor: pointer;">${proc.name}</td>
         <td>${proc.questions}</td>
         <td>${proc.category}</td>
-        <td>
-            <label class="switch">
-                <input type="checkbox" ${proc.active ? 'checked' : ''} onchange="toggleActive('${proc.id}', this)">
-                <span class="slider round"></span>
-            </label>
-        </td>
         <td>
             <div class="actions">
                 <button class="btn-icon" onclick="event.stopPropagation(); editProcedure('${proc.id}')" title="Edit">
