@@ -321,8 +321,7 @@ def on_user_save(sender, instance, created, **kwargs):
     if hasattr(instance, "_raw_password"):
         password = instance._raw_password
     sync_user_to_firestore(instance)
-    if instance.user_role != 'student' or instance.user_role != 'nurse':
-        sync_user_to_firebase_auth(instance, password=password)
+    sync_user_to_firebase_auth(instance, password=password)
 
 @receiver(post_delete, sender=EbekUser)
 def on_user_delete(sender, instance, **kwargs):
@@ -556,7 +555,7 @@ def on_learner_save(sender, instance, created, **kwargs):
                 "onboarding_type": instance.onboarding_type if instance.onboarding_type else None,
                 "pincode": instance.pincode if instance.pincode else None,
                 "address": instance.address if instance.address else None,
-                "is_active": instance.is_active if instance.is_active else None,
+                "is_active": instance.is_active if instance.is_active else False,
                 "educational_institution_nurse": instance.educational_institution if instance.educational_institution else None,
             }
             
