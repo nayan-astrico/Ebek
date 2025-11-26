@@ -559,7 +559,7 @@ function renderHospitalRow(hospital) {
         }
         
         if (userPermissions.canDelete) {
-            html += '<button type="button" class="btn-icon btn-danger" ' +
+            html += '<button type="button" class="btn-icon btn-danger" style="display:none" ' +
                     'data-name="' + hospital.name + '" ' +
                     'data-url="' + hospital.delete_url + '" ' +
                     'onclick="confirmDelete(this)" ' +
