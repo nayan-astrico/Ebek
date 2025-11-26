@@ -362,7 +362,7 @@ def fetch_institutes(request):
                     })
         else:
             # Default behavior: fetch from Firebase InstituteNames collection
-            institutes_ref = db.collection('InstituteNames')
+            institutes_ref = db.collection('InstituteNames').where('is_active', '==', True)
             for doc in institutes_ref.stream():
                 institute_data = doc.to_dict()
                 institutes.append({
@@ -4468,7 +4468,7 @@ def create_batch(request):
 def fetch_hospitals(request):
     """API endpoint to fetch all hospitals."""
     try:
-        hospitals_ref = db.collection('HospitalNames')
+        hospitals_ref = db.collection('HospitalNames').where('is_active', '==', True)
         hospitals = []
         
         for doc in hospitals_ref.stream():
@@ -4734,6 +4734,28 @@ def toggle_batch_status(request, batch_id):
             if not batch_doc.exists:
                 return JsonResponse({'error': 'Batch not found'}, status=404)
 
+            # Get batch data to check the unit
+            batch_data = batch_doc.to_dict()
+            unit_ref = batch_data.get('unit')
+            unit_type = batch_data.get('unitType')
+            print("UNIT TYPE")
+            print(unit_ref)
+            print("Unit REF")
+            print(unit_type)
+
+            # Check if the associated institution/hospital is active
+            if unit_ref and unit_type:
+                unit_doc = unit_ref.get()
+                if unit_doc.exists:
+                    unit_data = unit_doc.to_dict()
+                    unit_is_active = unit_data.get('is_active', True)
+
+                    if not unit_is_active:
+                        unit_name = unit_data.get('name', 'Unknown')
+                        return JsonResponse({
+                            'error': f'Cannot modify batch status. The associated {unit_type} is currently inactive.'
+                        }, status=400)
+
             # Update the batch status
             batch_ref.update({'status': new_status})
 
@@ -4896,7 +4918,7 @@ def fetch_available_learners_for_batch(request, batch_id):
             user_field = 'hospital'
         
         # Query all learners from the unit
-        learners_ref = db.collection('Users').where(user_field, '==', unit_name).where('role', 'in', ['student', 'nurse'])
+        learners_ref = db.collection('Users').where(user_field, '==', unit_name).where('role', 'in', ['student', 'nurse']).where('is_active', '==', True)
         available_learners = []
         
         for doc in learners_ref.stream():

@@ -181,8 +181,10 @@
                 <th>Type</th>
                 <th>Institution/Hospital</th>
                 <th>Skillathon</th>
+                {% if "update_learner_status" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <th>Status</th>
-                {% if "edit_learner" in request.user.get_all_permissions or "delete_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
+                {% endif %}
+                {% if "edit_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <th>Actions</th>
                 {% endif %}
             </tr>
@@ -228,10 +230,10 @@
             <div class="modal-header" style="background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); color: white;">
                 <div>
                     <h5 class="modal-title" style="margin: 0; font-weight: 600;">
-                        <i class="fas fa-trash-alt"></i> Confirm Bulk Delete
+                        <i class="fas fa-trash-alt"></i> Confirm Bulk Deactivation
                     </h5>
                     <p style="margin: 5px 0 0 0; font-size: 13px; opacity: 0.9;">
-                        Review learners before deletion
+                        Review learners before deactivating
                     </p>
                 </div>
                 <button type="button" class="close" data-dismiss="modal" style="color: white; opacity: 1;">
@@ -245,10 +247,10 @@
                         <i class="fas fa-exclamation-triangle" style="color: #dc2626; font-size: 20px;"></i>
                         <div>
                             <p style="margin: 0; font-weight: 600; color: #991b1b; font-size: 14px;">
-                                You are about to delete <span id="bulkDeleteCount">0</span> learner(s)
+                                You are about to deactivate <span id="bulkDeleteCount">0</span> learner(s)
                             </p>
                             <p style="margin: 3px 0 0 0; color: #b91c1c; font-size: 13px;">
-                                This action cannot be undone. All related data will be permanently removed.
+                                This action cannot be undone. All related data will be permanently deactivated.
                             </p>
                         </div>
                     </div>
@@ -257,7 +259,7 @@
                 <!-- Learners List -->
                 <div style="padding: 20px;">
                     <h6 style="margin: 0 0 15px 0; color: #374151; font-weight: 600; font-size: 14px;">
-                        Learners to be deleted:
+                        Learners to be deactivated:
                     </h6>
                     <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
                         <table style="width: 100%; border-collapse: collapse;">
@@ -281,7 +283,7 @@
                     <i class="fas fa-times"></i> Cancel
                 </button>
                 <button type="button" class="btn btn-danger" onclick="executeBulkDelete()" id="confirmBulkDeleteBtn">
-                    <i class="fas fa-trash-alt"></i> Delete <span id="bulkDeleteCountBtn">0</span> Learner(s)
+                    <i class="fas fa-trash-alt"></i> Deactivate <span id="bulkDeleteCountBtn">0</span> Learner(s)
                 </button>
             </div>
         </div>
@@ -377,6 +379,223 @@
         </div>
     </div>
 </div>
+
+<!-- Confirmation Modal for Marking Learner as Inactive -->
+<div class="modal-overlay" id="inactiveLearnerModal" style="display: none;">
+    <div class="confirmation-modal">
+        <div class="modal-header-custom">
+            <h3><i class="fas fa-exclamation-triangle" style="color: #F16564;"></i> Mark Learner as Inactive</h3>
+        </div>
+        <div class="modal-body-custom">
+            <p><strong>Please note the following:</strong></p>
+            <ul style="list-style: none; padding-left: 0; margin: 16px 0;">
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-user-slash" style="color: #F16564; margin-right: 8px;"></i>
+                    The learner's account will be <strong>disabled</strong>
+                </li>
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-trash-alt" style="color: #F16564; margin-right: 8px;"></i>
+                    All <strong>incomplete exam assignments</strong> will be removed
+                </li>
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-users-slash" style="color: #F16564; margin-right: 8px;"></i>
+                    The learner will be <strong>removed from all batches</strong>
+                </li>
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-redo" style="color: #F16564; margin-right: 8px;"></i>
+                    You can mark them as active again later if needed
+                </li>
+            </ul>
+            <p style="margin-top: 16px; color: #666;">Are you sure you want to mark this learner as inactive?</p>
+        </div>
+        <div class="modal-actions-custom">
+            <button class="btn btn-light" onclick="cancelInactiveLearner()">Cancel</button>
+            <button class="btn btn-danger" id="confirmInactiveLearnerBtn" onclick="confirmInactiveLearner()">
+                <i class="fas fa-check"></i> Yes, Mark as Inactive
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="statusLoadingOverlay" style="display: none;">
+    <div class="loading-content">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin" style="font-size: 48px; color: #1AA09A;"></i>
+        </div>
+        <p id="loadingMessage" style="margin-top: 20px; font-size: 16px; color: #2d3748;">Updating learner status...</p>
+    </div>
+</div>
+
+<style>
+/* Toggle Switch for Status */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: #1AA09A;
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* Confirmation Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.confirmation-modal {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    max-width: 500px;
+    width: 90%;
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-header-custom {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-header-custom h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #2d3748;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-body-custom {
+    padding: 24px;
+}
+
+.modal-body-custom p {
+    margin: 0 0 8px 0;
+    color: #4a5568;
+    line-height: 1.6;
+}
+
+.modal-body-custom ul li {
+    color: #4a5568;
+    line-height: 1.8;
+}
+
+.modal-actions-custom {
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.btn-danger {
+    background: #F16564;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #e45857;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+}
+
+.loading-content {
+    background: white;
+    border-radius: 12px;
+    padding: 40px 60px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.loading-spinner {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+</style>
 
 <!-- Bulk Upload Panel -->
 <div class="upload-panel" id="uploadPanel">
@@ -1771,6 +1990,7 @@
 // Declare variables first
 var canEditLearner = false;
 var canDeleteLearner = false;
+var canUpdateStatus = false;
 
 // Then set them based on permissions
 {% if "edit_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
@@ -1781,9 +2001,14 @@ canEditLearner = true;
 canDeleteLearner = true;
 {% endif %}
 
+{% if "update_learner_status" in request.user.get_all_permissions or request.user.has_all_permissions %}
+canUpdateStatus = true;
+{% endif %}
+
 var userPermissions = {
     canEdit: canEditLearner,
-    canDelete: canDeleteLearner
+    canDelete: canDeleteLearner,
+    canUpdateStatus: canUpdateStatus
 };
 
 function getCookie(name) {
@@ -1882,7 +2107,7 @@ function updateBulkDeleteState() {
     const checkedCount = document.querySelectorAll('.row-select:checked').length;
 
     btn.disabled = checkedCount === 0;
-    btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected';
+    btn.innerHTML = '<i class="fas fa-trash"></i>Deactivate Selected';
     btn.classList.remove('btn-danger');
     btn.classList.add('btn-primary');
     if (checkedCount > 0) {
@@ -1964,7 +2189,7 @@ function executeBulkDelete() {
     // Disable the delete button to prevent double-clicks
     const deleteBtn = document.getElementById('confirmBulkDeleteBtn');
     deleteBtn.disabled = true;
-    deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+    deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deactivating...';
 
     fetch('{% url "learners_bulk_delete" %}', {
         method: 'POST',
@@ -1978,7 +2203,7 @@ function executeBulkDelete() {
     .then(data => {
         if (data.success) {
             $('#bulkDeleteModal').modal('hide');
-            showSuccess('Deleted ' + data.deleted + ' learner(s) successfully.');
+            showSuccess('Deactivated ' + data.deleted + ' learner(s) successfully.');
             // Reload list after a short delay
             setTimeout(() => location.reload(), 1000);
         } else {
@@ -3469,7 +3694,8 @@ function clearAllFilters() {
 function renderLearnerRow(learner) {
     console.log(learner);
 
-    var showActions = userPermissions.canEdit || userPermissions.canDelete;
+    var showActions = userPermissions.canEdit;
+    var showStatus = userPermissions.canUpdateStatus;
 
     var html = '<tr>' +
         '<td><input type="checkbox" class="row-select" data-id="' + learner.id + '"></td>' +
@@ -3478,34 +3704,33 @@ function renderLearnerRow(learner) {
         '<td>' + learner.phone_number + '</td>' +
         '<td>' + learner.learner_type + '</td>' +
         '<td>' + learner.institution + '</td>' +
-        '<td>' + learner.skillathon + '</td>' +
-        '<td>' +
-            '<span class="badge ' + (learner.is_active ? 'active' : 'inactive') + '">' +
-                (learner.is_active ? 'Active' : 'Inactive') +
-            '</span>' +
-        '</td>';
-    
+        '<td>' + learner.skillathon + '</td>';
+
+    // Status column - toggle switch
+    if (showStatus) {
+        var isActive = learner.is_active;
+        html += '<td>' +
+                '<label class="switch">' +
+                    '<input type="checkbox" ' + (isActive ? 'checked' : '') +
+                    ' onchange="handleLearnerStatusChange(' + learner.id + ', this.checked ? \'active\' : \'inactive\', this)">' +
+                    '<span class="slider round"></span>' +
+                '</label>' +
+                '</td>';
+    }
+
+    // Actions column - only edit button (delete removed)
     if (showActions) {
         html += '<td><div class="actions">';
-        
+
         if (userPermissions.canEdit) {
             html += '<a href="javascript:void(0);" class="btn-icon" onclick="openLearnerFormPanel(\'' + learner.edit_url + '\', \'Edit Learner\')">' +
                 '<i class="fas fa-edit"></i>' +
                 '</a>';
         }
-        
-        if (userPermissions.canDelete) {
-            html += '<button type="button" class="btn-icon btn-danger" ' +
-                'data-name="' + learner.full_name + '" ' +
-                'data-url="' + learner.delete_url + '" ' +
-                'onclick="confirmDelete(this)" title="Delete">' +
-                '<i class="fas fa-trash"></i>' +
-                '</button>';
-        }
-        
+
         html += '</div></td>';
     }
-    
+
     html += '</tr>';
     return html;
 }
@@ -4132,6 +4357,140 @@ document.addEventListener('DOMContentLoaded', function() {
     // Stop polling when user leaves page
     window.addEventListener('beforeunload', stopSessionPolling);
 });
+
+// Variables to store learner info for the modal
+let pendingLearnerId = null;
+let pendingLearnerStatus = null;
+let pendingCheckbox = null;
+
+function handleLearnerStatusChange(learnerId, newStatus, checkboxElement) {
+    console.log('[LEARNER MODAL] handleLearnerStatusChange called:', learnerId, newStatus);
+    if (newStatus === 'inactive') {
+        // Store the pending info and show confirmation modal
+        pendingLearnerId = learnerId;
+        pendingLearnerStatus = newStatus;
+        pendingCheckbox = checkboxElement;
+
+        console.log('[LEARNER MODAL] Showing modal for learner:', learnerId);
+        const modal = document.getElementById('inactiveLearnerModal');
+        console.log('[LEARNER MODAL] Modal element:', modal);
+
+        // Show the modal
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    } else {
+        // If marking as active, no confirmation needed
+        console.log('[LEARNER MODAL] Marking as active, no confirmation needed');
+        toggleLearnerStatus(learnerId, newStatus);
+    }
+}
+
+function confirmInactiveLearner() {
+    // Disable button and show loading state
+    const confirmBtn = document.getElementById('confirmInactiveLearnerBtn');
+    confirmBtn.disabled = true;
+    confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+
+    // Proceed with status change
+    if (pendingLearnerId && pendingLearnerStatus) {
+        toggleLearnerStatus(pendingLearnerId, pendingLearnerStatus);
+    }
+}
+
+function cancelInactiveLearner() {
+    // Hide modal
+    document.getElementById('inactiveLearnerModal').style.display = 'none';
+    document.body.style.overflow = '';
+
+    // Revert the checkbox
+    if (pendingCheckbox) {
+        pendingCheckbox.checked = true; // Revert to active (checked)
+    }
+
+    // Clear pending data
+    pendingLearnerId = null;
+    pendingLearnerStatus = null;
+    pendingCheckbox = null;
+}
+
+function toggleLearnerStatus(learnerId, status) {
+    // Hide confirmation modal
+    document.getElementById('inactiveLearnerModal').style.display = 'none';
+
+    // Show loading overlay
+    const loadingOverlay = document.getElementById('statusLoadingOverlay');
+    const loadingMessage = document.getElementById('loadingMessage');
+    loadingMessage.textContent = status === 'active'
+        ? 'Activating learner account...'
+        : 'Deactivating learner and removing from batches...';
+    loadingOverlay.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    fetch(`/onboarding/learners/${learnerId}/toggle-status/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({ status: status })
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Hide loading overlay
+        loadingOverlay.style.display = 'none';
+        document.body.style.overflow = '';
+
+        // Clear pending data
+        pendingLearnerId = null;
+        pendingLearnerStatus = null;
+        pendingCheckbox = null;
+
+        // Reset confirm button
+        const confirmBtn = document.getElementById('confirmInactiveLearnerBtn');
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = '<i class="fas fa-check"></i> Yes, Mark as Inactive';
+
+        if (data.success) {
+            showSuccess(data.message || 'Learner status updated successfully!');
+            // Reload learners to reflect changes
+            offset = 0;
+            allLoaded = false;
+            document.getElementById('learnerTableBody').innerHTML = '';
+            loadMoreLearners();
+        } else {
+            showError(data.error || 'Failed to update learner status');
+            // Reload learners to revert the toggle
+            offset = 0;
+            allLoaded = false;
+            document.getElementById('learnerTableBody').innerHTML = '';
+            loadMoreLearners();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+
+        // Hide loading overlay
+        loadingOverlay.style.display = 'none';
+        document.body.style.overflow = '';
+
+        // Clear pending data
+        pendingLearnerId = null;
+        pendingLearnerStatus = null;
+        pendingCheckbox = null;
+
+        // Reset confirm button
+        const confirmBtn = document.getElementById('confirmInactiveLearnerBtn');
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = '<i class="fas fa-check"></i> Yes, Mark as Inactive';
+
+        showError('Error updating learner status');
+        // Reload learners to revert the toggle
+        offset = 0;
+        allLoaded = false;
+        document.getElementById('learnerTableBody').innerHTML = '';
+        loadMoreLearners();
+    });
+}
 
 </script>
 {% endblock %} 

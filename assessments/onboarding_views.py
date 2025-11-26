@@ -27,7 +27,7 @@ from django.http import JsonResponse
 from .firebase_sync import sync_user_to_firestore, sync_user_to_firebase_auth, batch_sync_users_to_firebase_auth, create_test_and_exam_assignments, DisableSignals, enable_all_signals
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import Signal
-from firebase_admin import firestore
+from firebase_admin import firestore, auth as firebase_auth
 import traceback
 import json
 import os
@@ -45,6 +45,8 @@ from .firebase_sync import (
 import threading
 from django.db.models import Q
 import logging
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -385,6 +387,195 @@ def institution_delete(request, pk):
     return redirect('institution_list')
 
 @login_required
+def institution_toggle_status(request, pk):
+    """Toggle institution active/inactive status with progress tracking"""
+    if not (request.user.has_all_permissions() or 'update_institute_status' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    if request.method == 'POST':
+        try:
+
+            data = json.loads(request.body)
+            new_status = data.get('status', '').strip().lower()
+
+            if new_status not in ['active', 'inactive']:
+                return JsonResponse({'error': 'Invalid status. Must be "active" or "inactive"'}, status=400)
+
+            institution = get_object_or_404(Institution, pk=pk)
+            is_active = (new_status == 'active')
+
+            # Generate unique task ID
+            task_id = str(uuid.uuid4())
+
+            # Get all users to update
+            learners = list(Learner.objects.filter(college=institution).select_related('learner_user'))
+            assessor_users = list(EbekUser.objects.filter(assigned_institutions=institution).prefetch_related('assigned_institutions'))
+
+            # Filter assessors who only have this institution
+            assessors_to_update = []
+            for user in assessor_users:
+                if user.assigned_institutions.count() == 1:
+                    try:
+                        assessor = Assessor.objects.get(assessor_user=user)
+                        assessors_to_update.append((user, assessor))
+                    except Assessor.DoesNotExist:
+                        pass
+
+            total_learners = len(learners)
+            total_assessors = len(assessors_to_update)
+
+            # Get batch count - use pk not institute_id UUID
+            institution_ref = db.collection('InstituteNames').document(str(institution.pk))
+            print(f"[BATCH COUNT] Querying batches for institution reference: {institution_ref.path}")
+            batches_list = list(db.collection('Batches').where('unit', '==', institution_ref).stream())
+            total_batches = sum(1 for b in batches_list if b.to_dict().get('unitType') == 'institution')
+            print(f"[BATCH COUNT] Found {total_batches} institution batches (out of {len(batches_list)} total batches with this reference)")
+
+            # Initialize progress in cache
+            cache.set(f'status_update_{task_id}', {
+                'status': 'running',
+                'total_learners': total_learners,
+                'updated_learners': 0,
+                'total_assessors': total_assessors,
+                'updated_assessors': 0,
+                'total_batches': total_batches,
+                'updated_batches': 0,
+                'current_user': 'Starting updates...'
+            }, timeout=600)
+
+            # Background task - updates EVERYTHING
+            def update_all_in_background():
+                try:
+                    # Update institution first
+                    institution.is_active = is_active
+                    institution.save()
+
+                    # Update learners
+                    for idx, learner in enumerate(learners, 1):
+                        learner.is_active = is_active
+                        learner.save()
+
+                        if learner.learner_user and learner.learner_user.email:
+                            cache.set(f'status_update_{task_id}', {
+                                'status': 'running',
+                                'total_learners': total_learners,
+                                'updated_learners': idx,
+                                'total_assessors': total_assessors,
+                                'updated_assessors': 0,
+                                'total_batches': total_batches,
+                                'updated_batches': 0,
+                                'current_user': f'{learner.learner_user.email}'
+                            }, timeout=600)
+
+                            try:
+                                firebase_user = firebase_auth.get_user_by_email(learner.learner_user.email)
+                                firebase_auth.update_user(firebase_user.uid, disabled=(not is_active))
+                            except Exception as e:
+                                print(f"Error updating Firebase for learner {learner.learner_user.email}: {str(e)}")
+
+                    # Update assessors
+                    for idx, (user, assessor) in enumerate(assessors_to_update, 1):
+                        user.is_active = is_active
+                        user.save()
+                        assessor.is_active = is_active
+                        assessor.save()
+
+                        cache.set(f'status_update_{task_id}', {
+                            'status': 'running',
+                            'total_learners': total_learners,
+                            'updated_learners': total_learners,
+                            'total_assessors': total_assessors,
+                            'updated_assessors': idx,
+                            'total_batches': total_batches,
+                            'updated_batches': 0,
+                            'current_user': f'{user.email}'
+                        }, timeout=600)
+
+                        if user.email:
+                            try:
+                                firebase_user = firebase_auth.get_user_by_email(user.email)
+                                firebase_auth.update_user(firebase_user.uid, disabled=(not is_active))
+                            except Exception as e:
+                                print(f"Error updating Firebase for assessor {user.email}: {str(e)}")
+
+                    # Update all batches associated with this institution
+                    try:
+                        import traceback
+                        institution_ref = db.collection('InstituteNames').document(str(institution.pk))
+                        print(f"[BATCH UPDATE] Searching for batches with unit reference: {institution_ref.path}")
+
+                        batches_query = db.collection('Batches').where('unit', '==', institution_ref).stream()
+
+                        batch_count = 0
+                        for batch_doc in batches_query:
+                            batch_data = batch_doc.to_dict()
+                            print(f"[BATCH UPDATE] Found batch {batch_doc.id}: unitType={batch_data.get('unitType')}, current status={batch_data.get('status')}")
+
+                            # Only update if it's an institution batch
+                            if batch_data.get('unitType') == 'institution':
+                                print(f"[BATCH UPDATE] Updating batch {batch_doc.id} status to {'active' if is_active else 'inactive'}")
+                                batch_doc.reference.update({
+                                    'status': 'active' if is_active else 'inactive'
+                                })
+                                batch_count += 1
+
+                                cache.set(f'status_update_{task_id}', {
+                                    'status': 'running',
+                                    'total_learners': total_learners,
+                                    'updated_learners': total_learners,
+                                    'total_assessors': total_assessors,
+                                    'updated_assessors': total_assessors,
+                                    'total_batches': total_batches,
+                                    'updated_batches': batch_count,
+                                    'current_user': f'Updating batches ({batch_count}/{total_batches})...'
+                                }, timeout=600)
+                            else:
+                                print(f"[BATCH UPDATE] Skipping batch {batch_doc.id} (unitType mismatch)")
+
+                        print(f"[BATCH UPDATE] Updated {batch_count} batches for institution {institution.name}")
+                    except Exception as e:
+                        print(f"[BATCH UPDATE ERROR] Error updating batches for institution: {str(e)}")
+                        traceback.print_exc()
+
+                    # Mark as complete
+                    cache.set(f'status_update_{task_id}', {
+                        'status': 'completed',
+                        'total_learners': total_learners,
+                        'updated_learners': total_learners,
+                        'total_assessors': total_assessors,
+                        'updated_assessors': total_assessors,
+                        'total_batches': total_batches,
+                        'updated_batches': total_batches,
+                        'current_user': 'All updates completed!'
+                    }, timeout=600)
+
+                except Exception as e:
+                    cache.set(f'status_update_{task_id}', {
+                        'status': 'error',
+                        'error': str(e),
+                        'current_user': f'Error: {str(e)}'
+                    }, timeout=600)
+                    print(f"Error in background update: {str(e)}")
+
+            # Start background thread
+            thread = threading.Thread(target=update_all_in_background, daemon=True)
+            thread.start()
+
+            return JsonResponse({
+                'success': True,
+                'task_id': task_id,
+                'total_learners': total_learners,
+                'total_assessors': total_assessors,
+                'total_batches': total_batches,
+                'message': f'Starting update of {total_learners} learner(s), {total_assessors} assessor(s), and {total_batches} batch(es)...'
+            }, status=200)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@login_required
 def institution_list_api(request):
     # Sync strength counts from Firebase before loading the data
     if not (request.user.has_all_permissions() or 'view_institutes' in request.user.get_all_permissions()):
@@ -594,6 +785,204 @@ def hospital_delete(request, pk):
         messages.success(request, 'Hospital deleted successfully.')
         return redirect('hospital_list')
     return redirect('hospital_list')
+
+@login_required
+def hospital_toggle_status(request, pk):
+    """Toggle hospital active/inactive status with progress tracking"""
+    if not (request.user.has_all_permissions() or 'update_hospital_status' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            new_status = data.get('status', '').strip().lower()
+
+            if new_status not in ['active', 'inactive']:
+                return JsonResponse({'error': 'Invalid status. Must be "active" or "inactive"'}, status=400)
+
+            hospital = get_object_or_404(Hospital, pk=pk)
+            is_active = (new_status == 'active')
+
+            # Generate unique task ID
+            task_id = str(uuid.uuid4())
+
+            # Get all users to update
+            learners = list(Learner.objects.filter(hospital=hospital).select_related('learner_user'))
+            assessor_users = list(EbekUser.objects.filter(assigned_hospitals=hospital).prefetch_related('assigned_hospitals'))
+
+            # Filter assessors who only have this hospital
+            assessors_to_update = []
+            for user in assessor_users:
+                if user.assigned_hospitals.count() == 1:
+                    try:
+                        assessor = Assessor.objects.get(assessor_user=user)
+                        assessors_to_update.append((user, assessor))
+                    except Assessor.DoesNotExist:
+                        pass
+
+            total_learners = len(learners)
+            total_assessors = len(assessors_to_update)
+
+            # Get batch count - use pk not hospital_id UUID
+            hospital_ref = db.collection('HospitalNames').document(str(hospital.pk))
+            print(f"[BATCH COUNT] Querying batches for hospital reference: {hospital_ref.path}")
+            batches_list = list(db.collection('Batches').where('unit', '==', hospital_ref).stream())
+            total_batches = sum(1 for b in batches_list if b.to_dict().get('unitType') == 'hospital')
+            print(f"[BATCH COUNT] Found {total_batches} hospital batches (out of {len(batches_list)} total batches with this reference)")
+
+            # Initialize progress in cache
+            cache.set(f'status_update_{task_id}', {
+                'status': 'running',
+                'total_learners': total_learners,
+                'updated_learners': 0,
+                'total_assessors': total_assessors,
+                'updated_assessors': 0,
+                'total_batches': total_batches,
+                'updated_batches': 0,
+                'current_user': 'Starting updates...'
+            }, timeout=600)
+
+            # Background task - updates EVERYTHING
+            def update_all_in_background():
+                try:
+                    # Update hospital first
+                    hospital.is_active = is_active
+                    hospital.save()
+
+                    # Update learners
+                    for idx, learner in enumerate(learners, 1):
+                        learner.is_active = is_active
+                        learner.save()
+
+                        if learner.learner_user and learner.learner_user.email:
+                            cache.set(f'status_update_{task_id}', {
+                                'status': 'running',
+                                'total_learners': total_learners,
+                                'updated_learners': idx,
+                                'total_assessors': total_assessors,
+                                'updated_assessors': 0,
+                                'total_batches': total_batches,
+                                'updated_batches': 0,
+                                'current_user': f'{learner.learner_user.email}'
+                            }, timeout=600)
+
+                            try:
+                                firebase_user = firebase_auth.get_user_by_email(learner.learner_user.email)
+                                firebase_auth.update_user(firebase_user.uid, disabled=(not is_active))
+                            except Exception as e:
+                                print(f"Error updating Firebase for learner {learner.learner_user.email}: {str(e)}")
+
+                    # Update assessors
+                    for idx, (user, assessor) in enumerate(assessors_to_update, 1):
+                        user.is_active = is_active
+                        user.save()
+                        assessor.is_active = is_active
+                        assessor.save()
+
+                        cache.set(f'status_update_{task_id}', {
+                            'status': 'running',
+                            'total_learners': total_learners,
+                            'updated_learners': total_learners,
+                            'total_assessors': total_assessors,
+                            'updated_assessors': idx,
+                            'total_batches': total_batches,
+                            'updated_batches': 0,
+                            'current_user': f'{user.email}'
+                        }, timeout=600)
+
+                        if user.email:
+                            try:
+                                firebase_user = firebase_auth.get_user_by_email(user.email)
+                                firebase_auth.update_user(firebase_user.uid, disabled=(not is_active))
+                            except Exception as e:
+                                print(f"Error updating Firebase for assessor {user.email}: {str(e)}")
+
+                    # Update all batches associated with this hospital
+                    try:
+                        import traceback
+                        hospital_ref = db.collection('HospitalNames').document(str(hospital.pk))
+                        print(f"[BATCH UPDATE] Searching for batches with unit reference: {hospital_ref.path}")
+
+                        batches_query = db.collection('Batches').where('unit', '==', hospital_ref).stream()
+
+                        batch_count = 0
+                        for batch_doc in batches_query:
+                            batch_data = batch_doc.to_dict()
+                            print(f"[BATCH UPDATE] Found batch {batch_doc.id}: unitType={batch_data.get('unitType')}, current status={batch_data.get('status')}")
+
+                            # Only update if it's a hospital batch
+                            if batch_data.get('unitType') == 'hospital':
+                                print(f"[BATCH UPDATE] Updating batch {batch_doc.id} status to {'active' if is_active else 'inactive'}")
+                                batch_doc.reference.update({
+                                    'status': 'active' if is_active else 'inactive'
+                                })
+                                batch_count += 1
+
+                                cache.set(f'status_update_{task_id}', {
+                                    'status': 'running',
+                                    'total_learners': total_learners,
+                                    'updated_learners': total_learners,
+                                    'total_assessors': total_assessors,
+                                    'updated_assessors': total_assessors,
+                                    'total_batches': total_batches,
+                                    'updated_batches': batch_count,
+                                    'current_user': f'Updating batches ({batch_count}/{total_batches})...'
+                                }, timeout=600)
+                            else:
+                                print(f"[BATCH UPDATE] Skipping batch {batch_doc.id} (unitType mismatch)")
+
+                        print(f"[BATCH UPDATE] Updated {batch_count} batches for hospital {hospital.name}")
+                    except Exception as e:
+                        print(f"[BATCH UPDATE ERROR] Error updating batches for hospital: {str(e)}")
+                        traceback.print_exc()
+
+                    # Mark as complete
+                    cache.set(f'status_update_{task_id}', {
+                        'status': 'completed',
+                        'total_learners': total_learners,
+                        'updated_learners': total_learners,
+                        'total_assessors': total_assessors,
+                        'updated_assessors': total_assessors,
+                        'current_user': 'All updates completed!'
+                    }, timeout=600)
+
+                except Exception as e:
+                    cache.set(f'status_update_{task_id}', {
+                        'status': 'error',
+                        'error': str(e),
+                        'current_user': f'Error: {str(e)}'
+                    }, timeout=600)
+                    print(f"Error in background update: {str(e)}")
+
+            # Start background thread
+            thread = threading.Thread(target=update_all_in_background, daemon=True)
+            thread.start()
+
+            return JsonResponse({
+                'success': True,
+                'task_id': task_id,
+                'total_learners': total_learners,
+                'total_assessors': total_assessors,
+                'total_batches': total_batches,
+                'message': f'Starting update of {total_learners} learner(s), {total_assessors} assessor(s), and {total_batches} batch(es)...'
+            }, status=200)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@login_required
+def check_status_update_progress(request, task_id):
+    """API endpoint to check progress of status update"""
+    from django.core.cache import cache
+
+    progress = cache.get(f'status_update_{task_id}')
+
+    if not progress:
+        return JsonResponse({'error': 'Task not found or expired'}, status=404)
+
+    return JsonResponse(progress, status=200)
 
 @login_required
 def hospital_list_api(request):
@@ -1494,12 +1883,14 @@ def cascade_delete_learner_data(learner):
             return
 
         user_id = learner.learner_user.id
-        user_path = f'/Users/{user_id}'
+        # Create DocumentReference instead of string path
+        user_ref = db.collection('Users').document(str(user_id))
+        user_path = f'/Users/{user_id}'  # Keep for logging
 
         print(f"Starting cascading delete for learner user: {user_path}, onboarding_type: {learner.onboarding_type}")
 
-        # Step 1: Find all ExamAssignments for this user
-        exam_assignments_query = db.collection('ExamAssignment').where('user', '==', user_path).stream()
+        # Step 1: Find all ExamAssignments for this user (using string path as ExamAssignment stores it as string)
+        exam_assignments_query = db.collection('ExamAssignment').where('user', '==', user_path).where('status', '!=', 'Completed').stream()
         exam_assignment_ids = []
         exam_assignment_paths = []
 
@@ -1512,8 +1903,8 @@ def cascade_delete_learner_data(learner):
         if learner.onboarding_type.lower() == 'b2b':
             # B2B: Remove from Batches, BatchAssignment, then delete ExamAssignments
 
-            # Step 2a: Remove user from all Batches and collect batch paths
-            batches_query = db.collection('Batches').where('learners', 'array_contains', user_path).stream()
+            # Step 2a: Remove user from all Batches and collect batch paths (using DocumentReference)
+            batches_query = db.collection('Batches').where('learners', 'array_contains', user_ref).stream()
             batch_count = 0
             batch_paths = []
 
@@ -1523,8 +1914,9 @@ def cascade_delete_learner_data(learner):
                 batch_paths.append(batch_path)
 
                 batch_ref = db.collection('Batches').document(batch_id)
+                # Use DocumentReference in ArrayRemove
                 batch_ref.update({
-                    'learners': firestore.ArrayRemove([user_path])
+                    'learners': firestore.ArrayRemove([user_ref])
                 })
                 batch_count += 1
                 print(f"Removed user from Batch: {batch_id} (path: {batch_path})")
@@ -1604,6 +1996,67 @@ def learner_delete(request, pk):
     return redirect('learner_list')
 
 @login_required
+def learner_toggle_status(request, pk):
+    """Toggle learner status between active and inactive."""
+    if not (request.user.has_all_permissions() or 'update_learner_status' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+    try:
+        learner = get_object_or_404(Learner, pk=pk)
+        
+        data = json.loads(request.body)
+        new_status = data.get('status', '').strip().lower()
+
+        if new_status not in ['active', 'inactive']:
+            return JsonResponse({'error': 'Invalid status. Must be "active" or "inactive"'}, status=400)
+
+        is_active = (new_status == 'active')
+
+        # If marking as inactive, perform cascade delete
+        if not is_active:
+            cascade_delete_learner_data(learner)    
+
+        if is_active:
+            
+            if learner.college:
+                if learner.college.is_active == False:
+                    return JsonResponse({'error': 'The institute assosciated is not active'}, status=400)   
+
+            if learner.hospital:
+                if learner.hospital.is_active == False:
+                    return JsonResponse({'error': 'The hospital assosciated is not active'}, status=400)             
+
+        # Update learner user status
+        if learner.learner_user:
+            learner.learner_user.is_active = is_active
+            learner.learner_user.save()
+
+            # Update Firebase Auth account
+            if learner.learner_user.email:
+                try:
+                    firebase_user = firebase_auth.get_user_by_email(learner.learner_user.email)
+                    firebase_auth.update_user(firebase_user.uid, disabled=(not is_active))
+                except Exception as e:
+                    print(f"Error updating Firebase Auth for learner {learner.learner_user.email}: {str(e)}")
+
+        message = f'Learner marked as {new_status} successfully'
+        if not is_active:
+            message += '. The learner has been removed from all batches and incomplete exam assignments have been deleted.'
+
+        learner.is_active = is_active
+        learner.save()
+        return JsonResponse({
+            'success': True,
+            'message': message
+        }, status=200)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
 def learners_bulk_delete(request):
     if not (request.user.has_all_permissions() or 'delete_learner' in request.user.get_all_permissions()):
         return JsonResponse({'error': 'Permission denied'}, status=403)
@@ -1619,7 +2072,11 @@ def learners_bulk_delete(request):
         for learner in qs:
             # Perform cascading delete before deleting the learner
             cascade_delete_learner_data(learner)
-            learner.delete()
+            learner_user = learner.learner_user
+            learner_user.is_active = False
+            learner_user.save()
+            learner.is_active = False
+            learner.save()
         return JsonResponse({'success': True, 'deleted': count})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)

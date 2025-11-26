@@ -84,6 +84,139 @@
     font-weight: 600;
     color: #1a202c;
 }
+
+/* Toggle Switch for Status */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: #1AA09A;
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* Confirmation Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.confirmation-modal {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    max-width: 500px;
+    width: 90%;
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #2d3748;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+.modal-body p {
+    margin: 0 0 8px 0;
+    color: #4a5568;
+    line-height: 1.6;
+}
+
+.modal-body ul li {
+    color: #4a5568;
+    line-height: 1.8;
+}
+
+.modal-actions {
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.btn-danger {
+    background: #F16564;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #e45857;
+}
 </style>
 
 <!-- Header -->
@@ -845,13 +978,15 @@ function renderInstitutionRow(inst) {
                '<!-- <td>' + (inst.group ? inst.group : '-') + '</td> -->' +
                '<td>' + (inst.state ? inst.state : '-') + '</td>' +
                '<td>' + (inst.total_strength ? inst.total_strength : '-') + '</td>' +
-               '<td>' + 
+               '<td>' +
                    (inst.unit_head ? '<div class="unit-head"><span>' + inst.unit_head + '</span></div>' : '<span class="text-muted">-</span>') +
                '</td>' +
                '<td>' +
-                   '<span class="badge ' + (inst.is_active ? 'active' : 'inactive') + '">' +
-                       (inst.is_active ? 'Active' : 'Inactive') +
-                   '</span>' +
+                   '<label class="switch">' +
+                       '<input type="checkbox" ' + (inst.is_active ? 'checked' : '') +
+                       ' onchange="handleInstitutionStatusChange(' + inst.id + ', this.checked ? \'active\' : \'inactive\', this)">' +
+                       '<span class="slider round"></span>' +
+                   '</label>' +
                '</td>';
     
     // Actions column - only if user has permission
@@ -1041,5 +1176,288 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load initial data
     loadMoreInstitutions();
 });
+
+// Variables to store institution info for the modal
+let pendingInstitutionId = null;
+let pendingInstitutionStatus = null;
+let pendingInstitutionCheckbox = null;
+
+function handleInstitutionStatusChange(institutionId, newStatus, checkboxElement) {
+    if (newStatus === 'inactive') {
+        // Store the pending info and show confirmation modal
+        pendingInstitutionId = institutionId;
+        pendingInstitutionStatus = newStatus;
+        pendingInstitutionCheckbox = checkboxElement;
+
+        // Show the modal
+        const modal = document.getElementById('inactiveInstitutionModal');
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    } else {
+        // If marking as active, no confirmation needed
+        toggleInstitutionStatus(institutionId, newStatus);
+    }
+}
+
+function confirmInactiveInstitution() {
+    // Hide modal
+    document.getElementById('inactiveInstitutionModal').style.display = 'none';
+    document.body.style.overflow = '';
+
+    // Proceed with status change
+    if (pendingInstitutionId && pendingInstitutionStatus) {
+        toggleInstitutionStatus(pendingInstitutionId, pendingInstitutionStatus);
+    }
+
+    // Clear pending data
+    pendingInstitutionId = null;
+    pendingInstitutionStatus = null;
+    pendingInstitutionCheckbox = null;
+}
+
+function cancelInactiveInstitution() {
+    // Hide modal
+    document.getElementById('inactiveInstitutionModal').style.display = 'none';
+    document.body.style.overflow = '';
+
+    // Revert the checkbox
+    if (pendingInstitutionCheckbox) {
+        pendingInstitutionCheckbox.checked = true; // Revert to active (checked)
+    }
+
+    // Clear pending data
+    pendingInstitutionId = null;
+    pendingInstitutionStatus = null;
+    pendingInstitutionCheckbox = null;
+}
+
+function toggleInstitutionStatus(institutionId, status) {
+    fetch(`/onboarding/institutions/${institutionId}/toggle-status/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({ status: status })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.task_id) {
+            // Show progress modal and start polling
+            showProgressModal(data.task_id, data.total_learners, data.total_assessors, data.total_batches);
+        } else {
+            showNotification(data.error || 'Failed to update institution status', 'error');
+            resetAndReload();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Error updating institution status', 'error');
+        resetAndReload();
+    });
+}
+
+function showProgressModal(taskId, totalLearners, totalAssessors, totalBatches) {
+    // Create progress modal
+    const progressModal = document.createElement('div');
+    progressModal.className = 'modal-overlay';
+    progressModal.id = 'progressModal';
+    progressModal.style.display = 'flex';
+    progressModal.innerHTML = `
+        <div style="background: white; padding: 30px; border-radius: 12px; min-width: 500px; max-width: 600px;">
+            <h3 style="margin: 0 0 20px 0; color: #2d3748; font-size: 20px;">
+                Updating Status
+            </h3>
+            <div style="margin-bottom: 20px;">
+                <p style="margin: 0 0 10px 0; color: #4a5568; font-size: 14px;">
+                    <strong>Learners:</strong> <span id="progressLearnersCount">0</span>/<span id="progressLearnerTotal">${totalLearners}</span>
+                </p>
+                <div style="background: #e2e8f0; border-radius: 8px; overflow: hidden; height: 8px;">
+                    <div id="progressBarLearners" style="background: #1AA09A; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                </div>
+            </div>
+            <div style="margin-bottom: 20px;">
+                <p style="margin: 0 0 10px 0; color: #4a5568; font-size: 14px;">
+                    <strong>Assessors:</strong> <span id="progressAssessorsCount">0</span>/<span id="progressAssessorTotal">${totalAssessors}</span>
+                </p>
+                <div style="background: #e2e8f0; border-radius: 8px; overflow: hidden; height: 8px;">
+                    <div id="progressBarAssessors" style="background: #1AA09A; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                </div>
+            </div>
+            <div style="margin-bottom: 20px;">
+                <p style="margin: 0 0 10px 0; color: #4a5568; font-size: 14px;">
+                    <strong>Batches:</strong> <span id="progressBatchesCount">0</span>/<span id="progressBatchTotal">${totalBatches}</span>
+                </p>
+                <div style="background: #e2e8f0; border-radius: 8px; overflow: hidden; height: 8px;">
+                    <div id="progressBarBatches" style="background: #1AA09A; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                </div>
+            </div>
+            <div style="padding: 15px; background: #f7fafc; border-radius: 8px; margin-bottom: 15px;">
+                <p style="margin: 0; color: #718096; font-size: 13px;">
+                    <strong>Current:</strong> <span id="progressCurrentUser">Starting...</span>
+                </p>
+            </div>
+            <p style="margin: 0; color: #a0aec0; font-size: 12px; text-align: center;">
+                Please wait while we update all users and batches...
+            </p>
+        </div>
+    `;
+    document.body.appendChild(progressModal);
+    document.body.style.overflow = 'hidden';
+
+    // Start polling for progress
+    const pollInterval = setInterval(() => {
+        fetch(`/api/status-update/${taskId}/`)
+        .then(response => response.json())
+        .then(progress => {
+            if (progress.error) {
+                clearInterval(pollInterval);
+                removeProgressModal();
+                showNotification('Task not found or expired', 'error');
+                resetAndReload();
+                return;
+            }
+
+            // Update progress display
+            const learnersPercent = progress.total_learners > 0
+                ? (progress.updated_learners / progress.total_learners) * 100
+                : 100;
+            const assessorsPercent = progress.total_assessors > 0
+                ? (progress.updated_assessors / progress.total_assessors) * 100
+                : 100;
+            const batchesPercent = progress.total_batches > 0
+                ? (progress.updated_batches / progress.total_batches) * 100
+                : 100;
+
+            document.getElementById('progressLearnersCount').textContent = progress.updated_learners;
+            document.getElementById('progressAssessorsCount').textContent = progress.updated_assessors;
+            document.getElementById('progressBatchesCount').textContent = progress.updated_batches;
+            document.getElementById('progressBarLearners').style.width = learnersPercent + '%';
+            document.getElementById('progressBarAssessors').style.width = assessorsPercent + '%';
+            document.getElementById('progressBarBatches').style.width = batchesPercent + '%';
+            document.getElementById('progressCurrentUser').textContent = progress.current_user;
+
+            // Check if completed
+            if (progress.status === 'completed') {
+                clearInterval(pollInterval);
+                setTimeout(() => {
+                    removeProgressModal();
+                    showNotification('Institution status updated successfully!', 'success');
+                    resetAndReload();
+                }, 1000);
+            } else if (progress.status === 'error') {
+                clearInterval(pollInterval);
+                removeProgressModal();
+                showNotification('Error updating status: ' + (progress.error || 'Unknown error'), 'error');
+                resetAndReload();
+            }
+        })
+        .catch(error => {
+            console.error('Error polling progress:', error);
+        });
+    }, 3000); // Poll every 3 seconds
+}
+
+function removeProgressModal() {
+    const modal = document.getElementById('progressModal');
+    if (modal) {
+        modal.remove();
+        document.body.style.overflow = '';
+    }
+}
+
+function showAffectedUsersModal(affectedUsers, status) {
+    const action = status === 'active' ? 'enabled' : 'disabled';
+    let usersHtml = '';
+
+    if (affectedUsers.learners && affectedUsers.learners.length > 0) {
+        usersHtml += '<h4 style="margin-top: 16px; margin-bottom: 8px;">Learners (' + affectedUsers.learners.length + '):</h4>';
+        usersHtml += '<ul style="list-style: none; padding-left: 0; max-height: 200px; overflow-y: auto;">';
+        affectedUsers.learners.forEach(user => {
+            usersHtml += '<li style="padding: 4px 0; border-bottom: 1px solid #e2e8f0;">' +
+                         '<strong>' + user.name + '</strong><br>' +
+                         '<small style="color: #666;">' + user.email + '</small></li>';
+        });
+        usersHtml += '</ul>';
+    }
+
+    if (affectedUsers.assessors && affectedUsers.assessors.length > 0) {
+        usersHtml += '<h4 style="margin-top: 16px; margin-bottom: 8px;">Assessors (' + affectedUsers.assessors.length + '):</h4>';
+        usersHtml += '<ul style="list-style: none; padding-left: 0; max-height: 200px; overflow-y: auto;">';
+        affectedUsers.assessors.forEach(user => {
+            usersHtml += '<li style="padding: 4px 0; border-bottom: 1px solid #e2e8f0;">' +
+                         '<strong>' + user.name + '</strong><br>' +
+                         '<small style="color: #666;">' + user.email + '</small></li>';
+        });
+        usersHtml += '</ul>';
+    }
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+        <div class="confirmation-modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-info-circle" style="color: #1AA09A;"></i> Affected Users</h3>
+            </div>
+            <div class="modal-body">
+                <p><strong>${affectedUsers.total_count} user account(s) have been ${action}:</strong></p>
+                ${usersHtml}
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove(); document.body.style.overflow = ''; setTimeout(() => resetAndReload(), 500);">
+                    <i class="fas fa-check"></i> OK
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    document.body.style.overflow = 'hidden';
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
 </script>
+
+<!-- Confirmation Modal for Marking Institution as Inactive -->
+<div class="modal-overlay" id="inactiveInstitutionModal" style="display: none;">
+    <div class="confirmation-modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-exclamation-triangle" style="color: #F16564;"></i> Mark Institution as Inactive</h3>
+        </div>
+        <div class="modal-body">
+            <p><strong>Please note the following:</strong></p>
+            <ul style="list-style: none; padding-left: 0; margin: 16px 0;">
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-eye-slash" style="color: #F16564; margin-right: 8px;"></i>
+                    This institution will <strong>no longer be visible</strong> in relevant dropdowns
+                </li>
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-redo" style="color: #F16564; margin-right: 8px;"></i>
+                    You can mark it as active again later if needed
+                </li>
+            </ul>
+            <p style="margin-top: 16px; color: #666;">Are you sure you want to mark this institution as inactive?</p>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-light" onclick="cancelInactiveInstitution()">Cancel</button>
+            <button class="btn btn-danger" onclick="confirmInactiveInstitution()">
+                <i class="fas fa-check"></i> Yes, Mark as Inactive
+            </button>
+        </div>
+    </div>
+</div>
+
 {% endblock %} 

@@ -34,7 +34,7 @@
         </div>
         <div class="course-header-right">
             {% if "delete_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
-            <button class="btn btn-danger" onclick="deleteBatch()" style="background: #F16564; color: white; border-color: #F16564;">
+            <button class="btn btn-danger" onclick="deleteBatch()" style="background: #F16564; color: white; border-color: #F16564; display: none;">
                 <i class="fas fa-trash"></i>
                 Delete Batch
             </button>
