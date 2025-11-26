@@ -4,7 +4,7 @@ import pandas as pd
 from django.http import JsonResponse, HttpResponse
 from django.conf import settings
 from .forms import ExcelUploadForm
-from firebase_admin import firestore
+from firebase_admin import firestore, auth as firebase_auth
 import uuid
 import logging
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
@@ -399,7 +399,7 @@ def fetch_assessors(request):
     """Fetch assessors from the 'EbekCohort'."""
     try:
         # First query: Get all ebek_admin users
-        users_ref = db.collection('Users').where('role', '==', 'ebek_admin')
+        users_ref = db.collection('Users').where('role', '==', 'ebek_admin').where('is_active', '==', True)
         print(users_ref)
 
         all_assessors = []
@@ -435,7 +435,7 @@ def fetch_assessors(request):
             print(f"Unit name: {unit_name}")
             institution_name = unit_name  # Keep variable name for compatibility
             # Query 1: Users with institution in institutions_list
-            users_in_institutions = db.collection('Users').where('institutions_list', 'array_contains', institution_name).stream()
+            users_in_institutions = db.collection('Users').where('institutions_list', 'array_contains', institution_name).where('is_active', '==', True).stream()
             
             # Process first query
             for doc in users_in_institutions:
@@ -453,7 +453,7 @@ def fetch_assessors(request):
                         })
             
             # Query 2: Users with institution in hospitals_list
-            users_in_hospitals = db.collection('Users').where('hospitals_list', 'array_contains', institution_name).stream()
+            users_in_hospitals = db.collection('Users').where('hospitals_list', 'array_contains', institution_name).where('is_active', '==', True).stream()
             
             # Process second query (avoid duplicates)
             for doc in users_in_hospitals:
@@ -6257,14 +6257,41 @@ def toggle_user_active(request, user_id):
         is_active = payload.get('is_active')
         if is_active is None:
             return JsonResponse({'error': 'Missing is_active flag'}, status=400)
-
+        
+        
         try:
             user = EbekUser.objects.get(id=user_id)
         except EbekUser.DoesNotExist:
             return JsonResponse({'error': 'User not found'}, status=404)
 
+        print("User")
+        print(user.is_active)
+        if user.is_active == False:
+            if user.assigned_institutions.count() == 1 and user.assigned_hospitals.count() == 0:
+                if user.assigned_institutions.all().first().is_active == False:
+                    return JsonResponse({'error': 'Assigned institution is inactive'}, status=400)
+            
+            if user.assigned_institutions.count() == 0 and user.assigned_hospitals.count() == 1:
+                if user.assigned_hospitals.all().first().is_active == False:
+                    return JsonResponse({'error': 'Assigned hospital is inactive'}, status=400)
+
+        
+
         user.is_active = bool(is_active)
         user.save(update_fields=['is_active'])
+
+        # Update Firebase Auth to enable/disable the user
+        try:
+            fb_user = firebase_auth.get_user_by_email(user.email)
+            firebase_auth.update_user(
+                fb_user.uid,
+                disabled=not user.is_active
+            )
+            logger.info(f"Firebase Auth {'disabled' if not user.is_active else 'enabled'} for user: {user.email}")
+        except firebase_auth.UserNotFoundError:
+            logger.warning(f"User not found in Firebase Auth: {user.email}")
+        except Exception as fb_exc:
+            logger.error(f"Error updating Firebase Auth for user {user.email}: {str(fb_exc)}")
 
         return JsonResponse({
             'success': True,

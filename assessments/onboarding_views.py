@@ -414,7 +414,7 @@ def institution_toggle_status(request, pk):
             # Filter assessors who only have this institution
             assessors_to_update = []
             for user in assessor_users:
-                if user.assigned_institutions.count() == 1:
+                if user.assigned_institutions.count() == 1 and user.assigned_hospitals.count() == 0:
                     try:
                         assessor = Assessor.objects.get(assessor_user=user)
                         assessors_to_update.append((user, assessor))
@@ -813,7 +813,7 @@ def hospital_toggle_status(request, pk):
             # Filter assessors who only have this hospital
             assessors_to_update = []
             for user in assessor_users:
-                if user.assigned_hospitals.count() == 1:
+                if user.assigned_hospitals.count() == 1 and user.assigned_institutions.count() == 0:
                     try:
                         assessor = Assessor.objects.get(assessor_user=user)
                         assessors_to_update.append((user, assessor))
@@ -2020,7 +2020,6 @@ def learner_toggle_status(request, pk):
             cascade_delete_learner_data(learner)    
 
         if is_active:
-            
             if learner.college:
                 if learner.college.is_active == False:
                     return JsonResponse({'error': 'The institute assosciated is not active'}, status=400)   

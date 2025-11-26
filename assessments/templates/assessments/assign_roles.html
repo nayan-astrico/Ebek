@@ -27,7 +27,7 @@
                id="userSearchInput"
                oninput="filterUsers(this.value)">
     </div>
-    <button id="bulkDeleteUsersBtn" class="btn btn-primary" style="margin-left: 8px;" onclick="openBulkUserDeleteConfirm()" disabled>
+    <button id="bulkDeleteUsersBtn" class="btn btn-primary" style="margin-left: 8px; display: none;" onclick="openBulkUserDeleteConfirm()" disabled>
         <i class="fas fa-trash"></i> Delete Selected (0)
     </button>
 </div>
@@ -1915,7 +1915,6 @@ function renderUsers() {
             <td>
                 <div class="actions">
                     <button type="button" class="btn-icon" onclick="openEditUser(${user.id})" title="Edit User"><i class="fas fa-edit"></i></button>
-                    <button type="button" class="btn-icon btn-danger" onclick="confirmDeleteUser(${user.id}, '${user.email}');" title="Delete User"><i class="fas fa-trash"></i></button>
                 </div>
             </td>
         `;

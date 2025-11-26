@@ -134,11 +134,11 @@
                      onclick="switchFilter('speciality')">
                     <span>Speciality</span>
                     </div>
-                <div class="filter-type {% if active_filter == 'status' %}active{% endif %}" 
+                <!-- <div class="filter-type {% if active_filter == 'status' %}active{% endif %}" 
                      data-filter="status" 
                      onclick="switchFilter('status')">
                     <span>Status</span>
-                </div>
+                </div> -->
             </div>
 
             <!-- Filter Content (70%) -->
@@ -214,7 +214,7 @@
                             <th>Email</th>
                             <th>Mobile Number</th>
                             <th>Speciality</th>
-                            <th>Status</th>
+                            <!-- <th>Status</th> -->
                             {% if "edit_assessor" in request.user.get_all_permissions or "delete_assessor" in request.user.get_all_permissions or request.user.has_all_permissions %}
                             <th>Actions</th>
                             {% endif %}
@@ -1078,9 +1078,10 @@ function renderAssessorRow(assessor) {
                '<td><div class="institution"><span>' + assessor.full_name + '</span></div></td>' +
                '<td>' + assessor.email + '</td>' +
                '<td>' + assessor.phone_number + '</td>' +
-               '<td>' + (assessor.specialization ? assessor.specialization : '-') + '</td>' +
-               '<td><span class="badge ' + (assessor.is_active ? 'active' : 'inactive') + '">' + 
-                   (assessor.is_active ? 'Active' : 'Inactive') + '</span></td>';
+               '<td>' + (assessor.specialization ? assessor.specialization : '-') + '</td>' 
+            //    +
+            //    '<td><span class="badge ' + (assessor.is_active ? 'active' : 'inactive') + '">' + 
+            //        (assessor.is_active ? 'Active' : 'Inactive') + '</span></td>';
     
     // Actions column - only if user has permission
     if (showActions) {
@@ -1093,15 +1094,15 @@ function renderAssessorRow(assessor) {
                     '</a>';
         }
         
-        if (userPermissions.canDelete) {
-            html += '<button type="button" class="btn-icon btn-danger" ' +
-                    'data-name="' + assessor.full_name + '" ' +
-                    'data-url="' + assessor.delete_url + '" ' +
-                    'onclick="confirmDelete(this)" ' +
-                    'title="Delete">' +
-                    '<i class="fas fa-trash"></i>' +
-                    '</button>';
-        }
+        // if (userPermissions.canDelete) {
+        //     html += '<button type="button" class="btn-icon btn-danger" ' +
+        //             'data-name="' + assessor.full_name + '" ' +
+        //             'data-url="' + assessor.delete_url + '" ' +
+        //             'onclick="confirmDelete(this)" ' +
+        //             'title="Delete">' +
+        //             '<i class="fas fa-trash"></i>' +
+        //             '</button>';
+        // }
         
         html += '</div></td>';
     }
