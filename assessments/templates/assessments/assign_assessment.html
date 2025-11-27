@@ -243,12 +243,13 @@
                     <th>Procedures</th>
                     <th>Assessors</th>
                     <th>Date</th>
+                    <th>Status</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="assessmentsTableBody">
                 {% for test in page_obj %}
-                <tr class="assessment-row" data-type="{{ test.type|default:'B2C' }}" data-mode="{{ test.mode|default:'Skillathon' }}">
+                <tr class="assessment-row" data-type="{{ test.type|default:'B2C' }}" data-mode="{{ test.mode|default:'Skillathon' }}" data-status="{{ test.status|default:'Not Completed' }}">
                     <td>
                         <div class="assessment-name">
                             <span>{{ test.assessment_name }}</span>
@@ -275,6 +276,9 @@
                         <span class="date-text">{{ test.testdate|date:"d M Y"|default:"-" }}</span>
                     </td>
                     <td>
+                        <span class="status-text">{{ test.status|default:"Not Completed" }}</span>
+                    </td>
+                    <td>
                         <div class="actions">
                             <button class="btn-icon" onclick="openEditTestPanel('{{ test.id }}', this)" title="Edit">
                                 <i class="fas fa-edit"></i>
@@ -287,7 +291,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="8" class="empty">
+                    <td colspan="9" class="empty">
                         <div class="empty-state">
                             <i class="fas fa-clipboard-list"></i>
                             <p>No assessments found</p>
@@ -3637,7 +3641,7 @@
                 if (t.skillathon !== undefined && t.skillathon !== null) {
                     $('#editSkillathon').val(String(t.skillathon));
                 }
-                if (t.status !== undefined && t.status !== null) {
+                if (t.status !== undefined && t.status !== null && t.status !== '') {
                     $('#editStatus').val(String(t.status));
                 }
                 if (t.testdate !== undefined && t.testdate !== null) {
@@ -3702,7 +3706,7 @@
                 if (s.exam_type !== undefined && s.exam_type !== null) {
                     $('#editSkillathon').val(String(s.exam_type));
                 }
-                if (s.status !== undefined && s.status !== null) {
+                if (s.status !== undefined && s.status !== null && s.status !== '') {
                     $('#editStatus').val(String(s.status));
                 }
                 if (s.testdate !== undefined && s.testdate !== null) {
