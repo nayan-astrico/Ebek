@@ -121,18 +121,65 @@ class Command(BaseCommand):
         """
         Compute COMPLETE analytics matching the design screenshots
         This includes everything needed for the full report
-        
+
         Args:
             unit_name: Institution or Hospital name (e.g., "DJ Sanghvi College")
             unit_type: "institute" or "hospital"
             year: Academic year (e.g., "2025")
             semester: Semester number (e.g., "1")
         """
-        
+
+        # ============================================
+        # PHASE 0: FETCH UNIT STATE FROM FIRESTORE
+        # ============================================
+
+        # Get state from Institution or Hospital in Firestore
+        unit_state = 'Unknown'
+        try:
+            if unit_type == 'institution':
+                # Query Firestore InstituteNames collection by instituteName field
+                self.stdout.write(f"      Searching for institution '{unit_name}' in InstituteNames...")
+                institutions_query = db.collection('InstituteNames').where('instituteName', '==', unit_name).stream()
+                found = False
+                for inst_doc in institutions_query:
+                    found = True
+                    inst_data = inst_doc.to_dict()
+                    state_value = inst_data.get('state')
+                    self.stdout.write(f"        Found institution document: {inst_doc.id}")
+                    self.stdout.write(f"        State value: {state_value}")
+                    if state_value:
+                        unit_state = state_value
+                        self.stdout.write(f"      ✓ Found state '{unit_state}' for institution '{unit_name}'")
+                        break
+                if not found:
+                    self.stdout.write(f"      ✗ No institution document found for '{unit_name}' in InstituteNames")
+            elif unit_type == 'hospital':
+                # Query Firestore HospitalNames collection by hospitalName field
+                self.stdout.write(f"      Searching for hospital '{unit_name}' in HospitalNames...")
+                hospitals_query = db.collection('HospitalNames').where('hospitalName', '==', unit_name).stream()
+                found = False
+                for hosp_doc in hospitals_query:
+                    found = True
+                    hosp_data = hosp_doc.to_dict()
+                    state_value = hosp_data.get('state')
+                    self.stdout.write(f"        Found hospital document: {hosp_doc.id}")
+                    self.stdout.write(f"        State value: {state_value}")
+                    if state_value:
+                        unit_state = state_value
+                        self.stdout.write(f"      ✓ Found state '{unit_state}' for hospital '{unit_name}'")
+                        break
+                if not found:
+                    self.stdout.write(f"      ✗ No hospital document found for '{unit_name}' in HospitalNames")
+        except Exception as e:
+            self.stdout.write(f"      ✗ Error fetching state for {unit_name}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            unit_state = 'Unknown'
+
         # ============================================
         # PHASE 1: COLLECT ALL RAW DATA
         # ============================================
-        
+
         # First, get all enrolled students from Batches collection
         # This will be our base for total_students_enrolled
         enrolled_student_ids = set()
@@ -206,7 +253,7 @@ class Command(BaseCommand):
             .where('semester', '==', semester)
         
         osce_summaries = list(bas_query.stream())
-        
+
         # Initialize comprehensive tracking
         students_data = {}  # {user_id: {name, scores by type, overall, etc}}
         skills_data = defaultdict(lambda: {
@@ -740,6 +787,20 @@ class Command(BaseCommand):
                     else:
                         procedure_scores_by_type[osce_type][proc_name] = 0
 
+            # Calculate unique OSCEs participated by grouping exam_type + test_date
+            # Multiple procedures on same day with same type = 1 OSCE session
+            unique_osce_sessions = set()
+            for attempt in student_data['exam_attempts']:
+                exam_type = attempt.get('exam_type', '')
+                test_date = attempt.get('test_date', '')
+                if test_date:
+                    # Extract date part only (YYYY-MM-DD)
+                    test_date = test_date.split('T')[0] if 'T' in test_date else test_date
+                # Create unique key: exam_type + test_date
+                session_key = f"{exam_type}_{test_date}"
+                unique_osce_sessions.add(session_key)
+            unique_osces_participated = len(unique_osce_sessions)
+
             student_batch_report.append({
                 'user_id': user_id,
                 'name': student_data['name'],
@@ -752,12 +813,14 @@ class Command(BaseCommand):
                 'final_score': final_avg,
                 'final_grade': self._get_grade(final_avg) if final_avg else '-',
                 'total_osces': student_data['total_osces'],
+                'unique_osces_participated': unique_osces_participated,  # Count of unique BatchAssignmentSummary documents
                 'skills_attempted': len(student_data['skills_attempted']),
                 'skills_passed': len(student_data['skills_passed']),
                 'skills_needing_improvement': skills_below_80,
                 'best_performing_osce': best_osce,
                 'worst_performing_osce': worst_osce,
                 'category_breakdown': category_breakdown,
+                'category_marks': dict(student_data['category_marks']),  # Total Marks Method data
                 'exam_attempts': student_data['exam_attempts'],
                 'total_marks_obtained': student_data['total_marks_obtained'],
                 'total_max_marks': student_data['total_max_marks'],
@@ -1040,6 +1103,7 @@ class Command(BaseCommand):
             osce_type_breakdown[osce_type] = {
                 'total_students': len(type_student_overall_percentages),
                 'students_assessed': len(type_completed_students),
+                'osces_conducted': len(type_osce_timeline),  # Count of OSCEs for this type
                 'avg_score': type_avg_score,
                 'pass_rate': type_pass_rate,
                 'grade_letter': self._get_grade(type_avg_score),
@@ -1060,6 +1124,7 @@ class Command(BaseCommand):
         semester_metrics = {
             'unit_name': unit_name,
             'unit_type': unit_type,  # 'institute' or 'hospital'
+            'state': unit_state,  # State from Institution or Hospital model
             'year': year,
             'semester': semester,
             'total_students': len(enrolled_student_ids),  # Total enrolled from Batches
@@ -1106,6 +1171,53 @@ class Command(BaseCommand):
         - Query Batches for unit/year (no semester filter)
         - Count unique learner IDs
         """
+
+        # ============================================
+        # FETCH UNIT STATE FROM FIRESTORE
+        # ============================================
+
+        # Get state from Institution or Hospital in Firestore
+        unit_state = 'Unknown'
+        try:
+            if unit_type == 'institution':
+                # Query Firestore InstituteNames collection by instituteName field
+                self.stdout.write(f"      Searching for institution '{unit_name}' in InstituteNames...")
+                institutions_query = db.collection('InstituteNames').where('instituteName', '==', unit_name).stream()
+                found = False
+                for inst_doc in institutions_query:
+                    found = True
+                    inst_data = inst_doc.to_dict()
+                    state_value = inst_data.get('state')
+                    self.stdout.write(f"        Found institution document: {inst_doc.id}")
+                    self.stdout.write(f"        State value: {state_value}")
+                    if state_value:
+                        unit_state = state_value
+                        self.stdout.write(f"      ✓ Found state '{unit_state}' for institution '{unit_name}'")
+                        break
+                if not found:
+                    self.stdout.write(f"      ✗ No institution document found for '{unit_name}' in InstituteNames")
+            elif unit_type == 'hospital':
+                # Query Firestore HospitalNames collection by hospitalName field
+                self.stdout.write(f"      Searching for hospital '{unit_name}' in HospitalNames...")
+                hospitals_query = db.collection('HospitalNames').where('hospitalName', '==', unit_name).stream()
+                found = False
+                for hosp_doc in hospitals_query:
+                    found = True
+                    hosp_data = hosp_doc.to_dict()
+                    state_value = hosp_data.get('state')
+                    self.stdout.write(f"        Found hospital document: {hosp_doc.id}")
+                    self.stdout.write(f"        State value: {state_value}")
+                    if state_value:
+                        unit_state = state_value
+                        self.stdout.write(f"      ✓ Found state '{unit_state}' for hospital '{unit_name}'")
+                        break
+                if not found:
+                    self.stdout.write(f"      ✗ No hospital document found for '{unit_name}' in HospitalNames")
+        except Exception as e:
+            self.stdout.write(f"      ✗ Error fetching state for {unit_name}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            unit_state = 'Unknown'
 
         # Get all enrolled students for this unit/year (same logic as SemesterMetrics, but without semester filter)
         enrolled_student_ids = set()
@@ -1210,6 +1322,7 @@ class Command(BaseCommand):
         unit_metrics = {
             'unit_name': unit_name,
             'unit_type': unit_type,  # 'institute' or 'hospital'
+            'state': unit_state,  # State from Institution or Hospital model
             'year': year,
             'total_students': len(enrolled_student_ids),  # Unique learners from Batches (same logic as SemesterMetrics)
             'students_assessed': total_students_assessed,  # Total students who took at least 1 OSCE
