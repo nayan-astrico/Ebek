@@ -634,8 +634,16 @@
             <div class="student-info" style="margin-bottom: 32px;">
                 <div class="info-group">
                     <div class="info-item">
+                        <label>Procedure Name</label>
+                        <div id="procedurename" class="info-value">-</div>
+                    </div>
+                    <div class="info-item">
                         <label>Candidate Name</label>
                         <div id="panelStudentName" class="info-value">-</div>
+                    </div>
+                    <div class="info-item">
+                        <label>Assessed By</label>
+                        <div id="assessed_by" class="info-value">-</div>
                     </div>
                     <div class="info-item">
                         <label>Institute</label>
@@ -3609,62 +3617,6 @@
 
     // Call this to load the first batch (e.g. on filter change)
 
-    // Helper to append student rows (reuse your updateStudentTable logic, but append instead of replace)
-    function appendStudentRows(data) {
-        const tableBody = document.getElementById('performanceTableBody');
-        data.students.forEach(student => {
-            const row = document.createElement('tr');
-            // ... (same as your updateStudentTable logic for each row)
-            // Add student name
-            const nameCell = document.createElement('td');
-            nameCell.className = 'student-col sticky-col';
-            nameCell.textContent = student.name;
-            row.appendChild(nameCell);
-            // Add institute
-            const instituteCell = document.createElement('td');
-            instituteCell.className = 'institute-col sticky-col';
-            instituteCell.textContent = student.institute;
-            row.appendChild(instituteCell);
-            // Add grades for each procedure
-            data.procedures.forEach(procedure => {
-                const cell = document.createElement('td');
-                const grade = student.grades[procedure];
-                const missedSteps = (student.missed_critical_steps && student.missed_critical_steps[procedure]) || [];
-                if (grade) {
-                    cell.textContent = `${grade.grade} (${grade.percentage}%)`;
-                    cell.className = getGradeClass(grade.grade);
-                    if (missedSteps.length > 0) {
-                        const warnIcon = document.createElement('span');
-                        warnIcon.textContent = ' ⚠';
-                        warnIcon.style.color = '#F16564';
-                        warnIcon.style.cursor = 'pointer';
-                        warnIcon.title = `Missed Critical Steps: \n${missedSteps.join('\n')}`;
-                        cell.appendChild(warnIcon);
-                    }
-                    cell.style.cursor = 'pointer';
-                    cell.dataset.student = JSON.stringify({
-                        name: student.name,
-                        institute: student.institute,
-                        procedure: procedure,
-                        grade: grade,
-                        examData: student.exam_data || {}
-                    });
-                    cell.onclick = () => openProcedurePanel(
-                        student.name,
-                        student.institute,
-                        procedure,
-                        grade,
-                        (student.exam_data && student.exam_data[procedure]) ? student.exam_data[procedure] : []
-                    );
-                } else {
-                    cell.textContent = '-';
-                }
-                row.appendChild(cell);
-            });
-            tableBody.appendChild(row);
-        });
-    }
-
     function clearStudentMetrics() {
         const studentMetrics = document.getElementById('studentMetrics');
         const noDataFound = document.getElementById('noDataFound');
@@ -3760,6 +3712,7 @@
             data.procedures.forEach(procedure => {
                 const cell = document.createElement('td');
                 const grade = student.grades[procedure];
+                const assessed_by = student.assessed_by[procedure] || ""
                 const missedSteps = (student.missed_critical_steps && student.missed_critical_steps[procedure]) || [];
                 if (grade) {
                     cell.textContent = `${grade.grade} (${grade.percentage}%)`;
@@ -3780,14 +3733,16 @@
                         institute: student.institute,
                         procedure: procedure,
                         grade: grade,
-                        examData: student.exam_data || {}
+                        examData: student.exam_data || {},
+                        assessed_by: assessed_by
                     });
                     cell.onclick = () => openProcedurePanel(
                         student.name,
                         student.institute,
                         procedure,
                         grade,
-                        (student.exam_data && student.exam_data[procedure]) ? student.exam_data[procedure] : []
+                        (student.exam_data && student.exam_data[procedure]) ? student.exam_data[procedure] : [],
+                        assessed_by
                     );
                 } else {
                     cell.textContent = '-';
@@ -3809,12 +3764,14 @@
         return gradeClasses[grade] || '';
     }
 
-    function openProcedurePanel(studentName, institute, procedure, grade, examData) {
+    function openProcedurePanel(studentName, institute, procedure, grade, examData, assessed_by) {
         // Update panel content
+        document.getElementById('procedurename').textContent = procedure;
         document.getElementById('panelStudentName').textContent = studentName;
+        document.getElementById('assessed_by').textContent = assessed_by
         document.getElementById('panelInstitute').textContent = institute;
         document.getElementById('panelTotalScore').textContent = `${grade.percentage}%`;
-        
+        console.log(procedure)
         // Get procedure steps data
         const steps = examData.steps || [];
         const completedSteps = steps.filter(step => step.completed).length;

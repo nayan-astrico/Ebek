@@ -2441,126 +2441,6 @@ def exam_to_score_info(exam_doc):
     }
 
 @csrf_exempt
-def fetch_student_metrics(request):
-    try:
-        skillathon_name = request.GET.get("skillathon_name")
-        institution_name = request.GET.get("institution_name")  # Now using name, not ID
-
-        if not skillathon_name:
-            return JsonResponse({"error": "skillathon_name is required"}, status=400)
-
-        # Build query
-        base_query = db.collection('ExamAssignment') \
-            .where('status', '==', 'Completed') \
-            .where('skillathon', '==', skillathon_name)
-
-        if institution_name:
-            base_query = base_query.where('institution', '==', institution_name)
-
-        exam_assignments = list(base_query.stream())
-
-        # Group by emailID
-        students = defaultdict(lambda: {
-            'name': None,
-            'institute': None,
-            'grades': {},
-            'missed_critical_steps': {},
-            'exam_data': {}
-        })
-        all_procedures = set()
-
-        for exam in exam_assignments:
-            exam_doc = exam.to_dict()
-            email = exam_doc.get('emailID')
-            if not email:
-                continue
-            procedure_name = exam_doc.get('procedureName', 'Unknown')
-            if procedure_name == "Unknown":
-                procedure_name = exam_doc.get('procedure_name', 'Unknown')
-            all_procedures.add(procedure_name)
-
-            # Student info
-            students[email]['name'] = exam_doc.get('name') or exam_doc.get('username') or email
-            students[email]['institute'] = exam_doc.get('institution', 'Unknown')
-
-            # Grade calculation
-            total_score = exam_doc.get("marks", 0)
-            max_marks = sum(
-                question.get('right_marks_for_question', 0)
-                for section in exam_doc.get('examMetaData', [])
-                for question in section.get("section_questions", [])
-            )
-            percentage = round((total_score / max_marks) * 100, 2) if max_marks else 0
-            grade = get_grade_letter(percentage)
-
-            # Missed critical steps and steps info
-            missed_critical = []
-            steps = []
-            critical_missed = 0
-            for section in exam_doc.get("examMetaData", []):
-                for question in section.get("section_questions", []):
-                    step_info = {
-                        'description': question.get('question', ''),
-                        'completed': question.get('answer_scored', 0) > 0,
-                        'critical': question.get('critical', False)
-                    }
-                    steps.append(step_info)
-                    if question.get("critical") and question.get("answer_scored", 0) == 0:
-                        missed_critical.append(question.get('question'))
-                        critical_missed += 1
-
-            # Store per procedure
-            students[email]['grades'][procedure_name] = {
-                'grade': grade,
-                'percentage': percentage
-            }
-            students[email]['missed_critical_steps'][procedure_name] = missed_critical
-            students[email]['exam_data'][procedure_name] = {
-                'steps': steps,
-                'critical_missed': critical_missed
-            }
-
-        # Prepare students list
-        students_list = list(students.values())
-        all_procedures = list(all_procedures)
-
-        # Highest/lowest scorecards
-        highest_score = -1
-        highest_score_student = "-"
-        highest_score_institute = "-"
-        lowest_score = 101
-        lowest_score_student = "-"
-        lowest_score_institute = "-"
-        for student in students_list:
-            for proc in all_procedures:
-                grade_info = student['grades'].get(proc)
-                if grade_info:
-                    pct = grade_info['percentage']
-                    if pct > highest_score:
-                        highest_score = pct
-                        highest_score_student = student['name']
-                        highest_score_institute = student['institute']
-                    if pct < lowest_score:
-                        lowest_score = pct
-                        lowest_score_student = student['name']
-                        lowest_score_institute = student['institute']
-
-        # Response
-        return JsonResponse({
-            'students': students_list,
-            'procedures': all_procedures,
-            'highest_score': highest_score if highest_score != -1 else 0,
-            'highest_score_student': highest_score_student,
-            'highest_score_institute': highest_score_institute,
-            'lowest_score': lowest_score if lowest_score != 101 else 0,
-            'lowest_score_student': lowest_score_student,
-            'lowest_score_institute': lowest_score_institute
-        })
-    except Exception as e:
-        print(f"Error in fetch_student_metrics: {str(e)}")
-        return JsonResponse({"error": str(e)}, status=500)
-
-@csrf_exempt
 def fetch_particular_student(request):
     try:
         exam_reports = []
@@ -2656,7 +2536,8 @@ def fetch_student_metrics(request):
             'institute': None,
             'grades': {},
             'missed_critical_steps': {},
-            'exam_data': {}
+            'exam_data': {},
+            'assessed_by': {}
         })
         all_procedures = set()
 
@@ -2710,6 +2591,14 @@ def fetch_student_metrics(request):
                 'steps': steps,
                 'critical_missed': critical_missed
             }
+            assessed_by = exam_doc.get('assessed_by', '')
+            print(assessed_by)
+            if assessed_by != "":
+                students[email]['assessed_by'][procedure_name] = EbekUser.objects.get(email=assessed_by.strip()).full_name
+            else:
+                students[email]['assessed_by'][procedure_name] = ""
+            print("Assessed BY")
+            print(assessed_by)
 
         # Prepare students list
         students_list = list(students.values())
