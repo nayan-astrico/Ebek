@@ -2135,9 +2135,12 @@ def fetch_exam_metrics(request):
            }
        }
        skill_wise_metrics = {}
-      
+
        # Track completed procedures per student
        student_completed_procedures = defaultdict(set)
+
+       # Track student-level marks for student-level grade distribution (Total Marks Method)
+       student_marks = {}  # {email: {'obtained': total, 'max': total}}
 
        for exam in exam_assignments:
            exam_doc = exam.to_dict()
@@ -2164,13 +2167,16 @@ def fetch_exam_metrics(request):
                percentage = round((total_score / max_marks) * 100, 2)
            grade = get_grade_letter(percentage)
 
+           # Track student-level marks using Total Marks Method
+           if email not in student_marks:
+               student_marks[email] = {'obtained': 0, 'max': 0}
+           student_marks[email]['obtained'] += total_score
+           student_marks[email]['max'] += max_marks
+
            # Procedure counts
            procedure_counts[procedure_name] += 1
 
-           # Grade distribution
-           grade_distribution[grade] += 1
-
-           # Gender metrics
+           # Gender metrics (keep exam-level breakdown for gender analysis)
            gender_metrics["total"][gender] += 1
            gender_metrics["grade_wise"][grade][gender] += 1
 
@@ -2212,6 +2218,18 @@ def fetch_exam_metrics(request):
            1 for student_procedures in student_completed_procedures.values()
            if student_procedures == all_procedures
        )
+
+       # Calculate STUDENT-LEVEL grade distribution using Total Marks Method
+       # Reset grade_distribution to recalculate at student-level (not exam-level)
+       grade_distribution = {"A": 0, "B": 0, "C": 0, "D": 0, "E": 0}
+
+       for email, marks in student_marks.items():
+           if marks['max'] > 0:
+               # Calculate this student's overall percentage using Total Marks Method
+               student_overall_pct = round((marks['obtained'] / marks['max']) * 100, 2)
+               student_grade = get_grade_letter(student_overall_pct)
+               # Increment grade count for this STUDENT (not exam)
+               grade_distribution[student_grade] += 1
 
        # Finalize all missed critical steps for each procedure
        for proc_name in skill_wise_metrics:

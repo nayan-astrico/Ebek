@@ -59,7 +59,7 @@ class Command(BaseCommand):
         cutoff_time = datetime.now() - timedelta(minutes=300)
         
         queue_ref = db.collection('MetricUpdateQueue')\
-            .where('processed', '==', True)\
+            .where('processed', '==', False)\
             .limit(1000)
         
         queue_items = list(queue_ref.stream())
@@ -251,8 +251,51 @@ class Command(BaseCommand):
             .where('unit_name', '==', unit_name)\
             .where('yearOfBatch', '==', year)\
             .where('semester', '==', semester)
-        
+
         osce_summaries = list(bas_query.stream())
+
+        # ============================================
+        # PHASE 1.5: BUILD EXAM-TO-OSCE MAPPING
+        # ============================================
+        # Pre-build mapping from ExamAssignment IDs to their OSCE context
+        # This allows us to identify which OSCE each exam belongs to
+        exam_assignment_to_osce = {}
+
+        for bas_doc in osce_summaries:
+            bas_data = bas_doc.to_dict()
+            osce_context = {
+                'exam_type': bas_data.get('exam_type', 'N/A'),
+                'test_date': bas_data.get('test_date'),
+                'batch_id': bas_data.get('batch_id', '')
+            }
+
+            # Map each ExamAssignment in this OSCE to its OSCE context
+            procedure_mappings = bas_data.get('procedure_assessor_mappings', [])
+            for mapping in procedure_mappings:
+                if isinstance(mapping, dict):
+                    ba_id = mapping.get('batchassignment_id', '')
+                    if ba_id:
+                        try:
+                            ba_ref = db.collection('BatchAssignment').document(ba_id)
+                            ba_doc_ref = ba_ref.get()
+                            if ba_doc_ref.exists:
+                                ba_data_ref = ba_doc_ref.to_dict()
+
+                                # Map each exam assignment to this OSCE
+                                for exam_ref in ba_data_ref.get('examassignment', []):
+                                    exam_id = exam_ref.id if hasattr(exam_ref, 'id') else str(exam_ref).split('/')[-1]
+                                    exam_assignment_to_osce[exam_id] = osce_context
+                        except:
+                            pass
+
+        self.stdout.write(f"    Built mapping for {len(exam_assignment_to_osce)} exam assignments to their OSCEs")
+
+        # ============================================
+        # PHASE 1.6: BUILD ASSESSOR CACHE (EMAIL → NAME)
+        # ============================================
+        # Cache assessor names to avoid repeated Firestore queries
+        # This significantly speeds up assessor lookups in PHASE 2
+        assessor_cache = {}  # {email: name}
 
         # Initialize comprehensive tracking
         students_data = {}  # {user_id: {name, scores by type, overall, etc}}
@@ -425,17 +468,35 @@ class Command(BaseCommand):
                             # Get notes/comments from exam assignment
                             notes = exam_data.get('notes', '')
 
-                            # Get assessor names from batchassignment assessorlist
+                            # Get assessor name from exam assignment assessed_by field
+                            # assessed_by contains the email ID, so we query Users collection to get the name
                             assessor_names = []
-                            for assessor_ref in ba_data.get('assessorlist', []):
-                                try:
-                                    assessor_doc = assessor_ref.get()
-                                    if assessor_doc.exists:
-                                        assessor_data = assessor_doc.to_dict()
-                                        assessor_name = assessor_data.get('name', 'Unknown')
+                            assessed_by = exam_data.get('assessed_by', '')
+                            if assessed_by:
+                                # Check cache first
+                                if assessed_by in assessor_cache:
+                                    assessor_name = assessor_cache[assessed_by]
+                                    assessor_names.append(assessor_name)
+                                else:
+                                    # Not in cache, query Users collection
+                                    try:
+                                        users_query = db.collection('Users').where('emailID', '==', assessed_by).limit(1)
+                                        user_docs = list(users_query.stream())
+                                        if user_docs:
+                                            user_data = user_docs[0].to_dict()
+                                            assessor_name = user_data.get('name', assessed_by)  # Fallback to email if name not found
+                                        else:
+                                            # User not found, use email as fallback
+                                            assessor_name = assessed_by
+
+                                        # Cache for future lookups
+                                        assessor_cache[assessed_by] = assessor_name
                                         assessor_names.append(assessor_name)
-                                except:
-                                    pass
+                                    except Exception as e:
+                                        # If query fails, use email as fallback
+                                        self.stderr.write(f"      Error fetching assessor name for {assessed_by}: {str(e)}")
+                                        assessor_cache[assessed_by] = assessed_by
+                                        assessor_names.append(assessed_by)
 
                             # Track per-exam breakdown for the student
                             students_data[user_id]['exam_attempts'].append({
