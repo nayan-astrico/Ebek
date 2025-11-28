@@ -38,13 +38,9 @@ urlpatterns = [
     path('metrics-viewer/', views.view_metrics_data, name='view_metrics_data'),
     path('api/semester-metrics/', views.fetch_semester_metrics, name='fetch_semester_metrics'),
     path('api/unit-metrics/', views.fetch_unit_metrics, name='fetch_unit_metrics'),
+    path('api/candidate-report/students/', views.fetch_candidate_students, name='fetch_candidate_students'),
+    path('api/candidate-report/student-data/', views.fetch_candidate_student_data, name='fetch_candidate_student_data'),
     path('admin-report-portal/', views.render_admin_report_portal, name='admin_report_portal'),
-    path('api/admin-report/filter-options/', views.fetch_admin_report_filter_options, name='fetch_admin_report_filter_options'),
-    path('api/admin-report/kpis/', views.fetch_admin_report_kpis, name='fetch_admin_report_kpis'),
-    path('api/admin-report/skills-metrics/', views.fetch_admin_report_skills_metrics, name='fetch_admin_report_skills_metrics'),
-    path('api/admin-report/assessors-performance/', views.fetch_admin_report_assessors_performance, name='fetch_admin_report_assessors_performance'),
-    path('api/admin-report/usage-engagement/', views.fetch_admin_report_usage_engagement, name='fetch_admin_report_usage_engagement'),
-    path('api/admin-report/export-excel/', views.export_admin_report_excel, name='export_admin_report_excel'),
     path('fetch-exam-metrics/', views.fetch_exam_metrics, name='fetch_exam_metrics'),
     path('fetch-student-metrics/', views.fetch_student_metrics, name='fetch_student_metrics'),
     path('fetch-particular-student/', views.fetch_particular_student, name='fetch_particular_student'),
@@ -126,6 +122,7 @@ urlpatterns = [
     path('api/fetch-learners/<str:unit_type>/<str:unit_id>/', views.fetch_learners, name='fetch_learners'),
     path('api/institute-based-skillathon/', views.institute_based_skillathon, name='institute_based_skillathon'),
     path('api/download-student-report/', views.download_student_report, name='download_student_report'),
+    path('api/download-metrics-report/', views.download_metrics_report, name='download_metrics_report'),
 
 
     path('upload-preview/', views.upload_preview, name='upload_preview'),
