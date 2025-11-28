@@ -881,6 +881,14 @@ def create_procedure_assignment_and_test(request):
                     logger.info("Here in else")
                     skillathon_ref = db.collection('Skillathon').document(skillathon_id)
                     skillathon_name = skillathon_ref.get().to_dict()["skillathonName"]
+
+                    # Check if an assignment already exists for this skillathon
+                    existing_tests = db.collection('Test').where('skillathon', '==', skillathon_name).where('status', '!=', 'Completed').limit(1).stream()
+                    if any(existing_tests):
+                        return JsonResponse({
+                            'error': f'An assignment already exists for the skillathon "{skillathon_name}". Please edit the existing assignment instead of creating a new one.'
+                        }, status=400)
+
                     test_data = {
                             'createdBy': None if current_user is None else current_user,  # Supervisor user reference
                             'procedureAssignments': [],
@@ -1653,7 +1661,7 @@ def update_test(request, test_id):
 
             if skillathon_name:
                 try:
-                    learners_query = db.collection('Learners').where('skillathon_event', '==', skillathon_name).stream()
+                    learners_query = db.collection('Users').where('skillathon_event', '==', skillathon_name).stream()
                     for learner_doc in learners_query:
                         learner_refs.append(learner_doc.reference)
                     logger.info(f"[B2C Update] Found {len(learner_refs)} learners for skillathon")
@@ -1740,32 +1748,26 @@ def update_test(request, test_id):
                                 continue
 
                             learner_data = learner_doc.to_dict()
-                            learner_user_ref = learner_data.get('learner_user')
-                            if not learner_user_ref:
-                                continue
 
                             exam_assignment_data = {
-                                'user': learner_user_ref,
+                                'user': learner_ref,  # learner_ref is already a user reference
                                 'examMetaData': procedure_data.get('examMetaData', {}),
                                 'status': 'Pending',
                                 'notes': procedure_data.get('notes', ''),
                                 'procedure_name': procedure_data.get('procedureName', ''),
                             }
 
-                            # Get institution from learner
-                            institution = learner_data.get('college') or learner_data.get('hospital')
-                            if institution:
-                                try:
-                                    inst_doc = institution.get()
-                                    if inst_doc.exists:
-                                        inst_data = inst_doc.to_dict()
-                                        exam_assignment_data['institute'] = inst_data.get('institutionName') or inst_data.get('hospitalName', '')
-                                except Exception:
-                                    pass
+                            # Get institution from learner (user document)
+                            institution = learner_data.get('institute') or learner_data.get('hospital') or learner_data.get('institution')
+                            exam_assignment_data['institute'] = institution
+                            exam_assignment_data['institution'] = institution
 
                             exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
                             exam_assignment_refs.append(exam_assignment_ref)
+                            print("exam assignments refs appended")
+                            print("HEREEEE")
                         except Exception as e:
+                            print(f"Error creating ExamAssignment: {e}")
                             logger.error(f"Error creating ExamAssignment: {e}")
                             continue
 

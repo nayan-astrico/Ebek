@@ -3498,7 +3498,7 @@ document.addEventListener('submit', function(e) {
                 // Handle JSON response (error or success)
                 if (result.data.error) {
                     // Prompt for same mail
-                    showError('Email already exists.');
+                    showError(result.data.error);
                     return;
                 } else {
                     // Success: close panel and reload page

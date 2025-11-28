@@ -40,7 +40,7 @@ from .firebase_sync import (
     on_learner_save, on_learner_delete,
     on_assessor_save, on_assessor_delete,
     on_skillathon_save, on_skillathon_delete,
-    on_group_save, on_group_delete, batch_sync_users_to_firestore_with_progress
+    on_group_save, on_group_delete
 )
 import threading
 from django.db.models import Q
@@ -1185,6 +1185,29 @@ def learner_create(request):
                         return JsonResponse({
                             'error': 'For B2C Working Nurses, Skillathon Event and Hospital are required.'
                         }, status=400)
+
+                # Validate that an active Test exists for the skillathon
+                if skillathon:
+                    try:
+                        skillathon_name = skillathon.name if hasattr(skillathon, 'name') else str(skillathon)
+
+                        # Query for tests with this skillathon where status != "Completed"
+                        tests_query = db.collection('Test').where('skillathon', '==', skillathon_name).stream()
+                        has_active_test = False
+
+                        for test_doc in tests_query:
+                            test_data = test_doc.to_dict()
+                            if test_data.get('status') != 'Completed':
+                                has_active_test = True
+                                break
+
+                        if not has_active_test:
+                            return JsonResponse({
+                                'error': f'Please create an assignment for skillathon "{skillathon_name}" before creating learners.'
+                            }, status=400)
+                    except Exception as e:
+                        print(f"[WARNING] Failed to check Test in Firebase: {e}")
+                        # Continue without blocking if Firebase check fails
             learner_name = form.cleaned_data['learner_name']
             learner_phone = form.cleaned_data['learner_phone']
 
@@ -1285,6 +1308,29 @@ def learner_edit(request, pk):
                         return JsonResponse({
                             'error': 'For B2C Working Nurses, Skillathon Event and Hospital are required.'
                         }, status=400)
+
+                # Validate that an active Test exists for the skillathon
+                if skillathon:
+                    try:
+                        skillathon_name = skillathon.name if hasattr(skillathon, 'name') else str(skillathon)
+
+                        # Query for tests with this skillathon where status != "Completed"
+                        tests_query = db.collection('Test').where('skillathon', '==', skillathon_name).stream()
+                        has_active_test = False
+
+                        for test_doc in tests_query:
+                            test_data = test_doc.to_dict()
+                            if test_data.get('status') != 'Completed':
+                                has_active_test = True
+                                break
+
+                        if not has_active_test:
+                            return JsonResponse({
+                                'error': f'Please create an assignment for skillathon "{skillathon_name}" before creating learners.'
+                            }, status=400)
+                    except Exception as e:
+                        print(f"[WARNING] Failed to check Test in Firebase: {e}")
+                        # Continue without blocking if Firebase check fails
             learner_name = form.cleaned_data['learner_name']
             learner_phone = form.cleaned_data['learner_phone']
             current_user = learner.learner_user
@@ -1501,6 +1547,21 @@ def process_bulk_upload_with_progress(file_path, session_key):
         all_hospitals = set(Hospital.objects.values_list('name', flat=True))
         existing_emails = set(EbekUser.objects.values_list('email', flat=True))
 
+        # Get all active Tests (status != "Completed") from Firebase
+        active_tests_by_skillathon = {}
+        try:
+            tests_ref = db.collection('Test').stream()
+            for test_doc in tests_ref:
+                test_data = test_doc.to_dict()
+                if test_data.get('status') != 'Completed':
+                    skillathon_name = test_data.get('skillathon', '').strip()
+                    if skillathon_name:
+                        active_tests_by_skillathon[skillathon_name] = True
+            print(f"[DEBUG] Found {len(active_tests_by_skillathon)} skillathons with active tests")
+        except Exception as e:
+            print(f"[WARNING] Failed to fetch Tests from Firebase: {e}")
+            # Continue with validation, but we won't be able to check for active tests
+
         # Helper function to safely get string value
         def safe_str(value):
             if value is None:
@@ -1564,8 +1625,12 @@ def process_bulk_upload_with_progress(file_path, session_key):
 
             # Validate Skillathon Event
             skillathon = safe_str(row_data.get('Skillathon Event'))
-            if skillathon and skillathon not in all_skillathons:
-                row_errors.append(f"Skillathon Event '{skillathon}' does not exist. Please create it first before uploading.")
+
+            if skillathon:
+                if skillathon not in all_skillathons:
+                    row_errors.append(f"Skillathon Event '{skillathon}' does not exist. Please create it first before uploading.")
+                elif skillathon not in active_tests_by_skillathon:
+                    row_errors.append(f"Please create an assignment named '{skillathon}' before uploading.")
 
             # Validate College for students
             if learner_type == 'student':
