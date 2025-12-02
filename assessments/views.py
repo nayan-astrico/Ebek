@@ -5043,7 +5043,12 @@ def create_roles(request):
             return JsonResponse({'error': str(e)}, status=500)
     
     # GET request - render the form
-    permissions = Permission.objects.filter(is_active=True).order_by('category', 'name')
+    # Exclude delete permissions as they are not available in the backend
+    permissions = Permission.objects.filter(
+        is_active=True
+    ).exclude(
+        code__startswith='delete_'
+    ).order_by('category', 'name')
     return render(request, 'assessments/create_roles.html', {
         'permissions': permissions
     })
