@@ -5782,10 +5782,10 @@ def upload_preview(request):
                 except ValueError:
                     errors.append({'row': row_number, 'message': 'Marks must be an integer'})
 
-            # Critical must be boolean
+            # Critical must be True or False only (case-insensitive, no numbers)
             critical = str(row.get('Critical')).strip().lower()
-            if critical not in ['true', 'false', '1', '0']:
-                errors.append({'row': row_number, 'message': 'Critical must be boolean (True/False)'})
+            if critical not in ['true', 'false']:
+                errors.append({'row': row_number, 'message': 'Critical must be True or False only (no numbers or other values)'})
 
         return JsonResponse({
             'status': 'success',
@@ -5907,9 +5907,41 @@ def upload_excel(request):
         if missing_cols:
             return JsonResponse({'status': 'error', 'message': f'Missing columns: {", ".join(missing_cols)}'})
 
-        # Convert Marks and Critical
+        # Validate Critical column - must be True/False only (case-insensitive, no numbers)
+        critical_errors = []
+        for idx, row in df.iterrows():
+            row_number = idx + 2  # Excel row number (idx is 0-based, Excel is 1-based, +1 for header)
+            critical_value = row.get('Critical')
+            
+            # Skip completely empty rows (often present at the bottom of the sheet)
+            row_is_completely_empty = all(
+                (pd.isna(row.get(col)) or str(row.get(col)).strip() == '')
+                for col in ['Section', 'Parameters', 'Indicators', 'Marks', 'Critical']
+            )
+            if row_is_completely_empty:
+                continue
+
+            # Treat empty / NaN Critical as invalid for non-empty rows – must be explicitly True/False
+            if pd.isna(critical_value) or str(critical_value).strip() == '':
+                critical_errors.append(f'Row {row_number}: Critical is required and must be True or False')
+                continue
+
+            # Convert to string and check if it's exactly "true" or "false" (case-insensitive)
+            critical_str = str(critical_value).strip().lower()
+            # Only allow: true or false (case-insensitive), nothing else
+            if critical_str not in ['true', 'false']:
+                critical_errors.append(f'Row {row_number}: Critical must be True or False only (found: "{critical_value}")')
+        
+        # If there are critical column errors, prevent upload
+        if critical_errors:
+            error_message = 'Invalid Critical column values. Only True/False are allowed:\n' + '\n'.join(critical_errors[:10])  # Show first 10 errors
+            if len(critical_errors) > 10:
+                error_message += f'\n... and {len(critical_errors) - 10} more errors'
+            return JsonResponse({'status': 'error', 'message': error_message})
+
+        # Convert Marks and Critical (now safe to convert since we validated - only true/false allowed)
         df['Marks'] = pd.to_numeric(df['Marks'], errors='coerce').fillna(0).astype(int)
-        df['Critical'] = df['Critical'].astype(str).str.lower().map({'true': True, 'false': False, '1': True, '0': False}).fillna(False)
+        df['Critical'] = df['Critical'].astype(str).str.lower().map({'true': True, 'false': False}).fillna(False)
 
         # Fill missing strings
         df[['Section', 'Parameters', 'Indicators', 'Category (i.e C for Communication, K for Knowledge and D for Documentation)']] = \
