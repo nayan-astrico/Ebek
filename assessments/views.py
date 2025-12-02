@@ -4300,6 +4300,13 @@ def create_roles(request):
             if not role_name:
                 return JsonResponse({'error': 'Role name is required'}, status=400)
             
+            # Ensure at least one permission is selected
+            if not permission_codes:
+                return JsonResponse(
+                    {'error': 'At least one permission must be selected for a role'},
+                    status=400
+                )
+            
             # Get permission objects
             permissions = Permission.objects.filter(code__in=permission_codes, is_active=True)
 
@@ -4337,7 +4344,10 @@ def create_roles(request):
             return JsonResponse({'error': str(e)}, status=500)
     
     # GET request - render the form
-    permissions = Permission.objects.filter(is_active=True).order_by('category', 'name')
+    # Exclude all delete permissions
+    permissions = Permission.objects.filter(is_active=True).exclude(
+        code__startswith='delete_'
+    ).order_by('category', 'name')
     return render(request, 'assessments/create_roles.html', {
         'permissions': permissions
     })
@@ -4388,6 +4398,13 @@ def edit_role(request, role_id):
             
             if not role_name:
                 return JsonResponse({'error': 'Role name is required'}, status=400)
+
+            # Ensure at least one permission is selected
+            if not permission_codes:
+                return JsonResponse(
+                    {'error': 'At least one permission must be selected for a role'},
+                    status=400
+                )
             
             try:
                 role = CustomRole.objects.get(id=role_id)
@@ -4925,3 +4942,2238 @@ def update_test_status(request, test_id, status):
 
         if not status:
             return JsonResponse({'error': 'Status is required'}, status=400)
+
+
+
+
+@csrf_exempt
+def fetch_assessments(request):
+    """API endpoint to fetch all assessments (procedures) with pagination, search, status, and category filters."""
+    try:
+        # --- Query Parameters ---
+        offset = int(request.GET.get('offset', 0))
+        limit = int(request.GET.get('limit', 10))
+        search = request.GET.get('search', '').strip().lower()
+        status_filters = request.GET.getlist('status')
+        status_filters = [s.lower() for s in status_filters if s]
+        category_filters = request.GET.getlist('category')  # <-- Add this line
+        category_filters = [c.lower() for c in category_filters if c]
+
+        # --- Fetch Data from Firestore ---
+        procedures_ref = db.collection('ProcedureTable')
+        all_docs = list(procedures_ref.stream())
+
+        filtered_docs = []
+
+        for doc in all_docs:
+            data = doc.to_dict()
+            name = data.get('procedureName', 'N/A')
+            examMetaData = data.get("examMetaData", [])
+            active = data.get("active", True)
+            status = 'active' if active else 'inactive'
+
+            # Extract Category
+            category = 'N/A'
+            if examMetaData:
+                section = examMetaData[0]
+                section_questions = section.get("section_questions", [])
+                if section_questions:
+                    category = section_questions[0].get("category", "N/A")
+
+            # --- Apply Filters ---
+            if search and search not in name.lower():
+                continue
+            if status_filters and status not in status_filters:
+                continue
+            if category_filters and category.lower() not in category_filters:
+                continue
+
+            # --- Count Questions ---
+            question_count = sum(len(section.get("section_questions", []))
+                                 for section in examMetaData if isinstance(section, dict))
+
+            filtered_docs.append({
+                'id': doc.id,
+                'name': name,
+                'questions': question_count,
+                'active': active,
+                'category': category,
+                'status': status
+            })
+
+        # --- Pagination ---
+        total_items = len(filtered_docs)
+        paginated = filtered_docs[offset:offset + limit]
+        all_loaded = offset + limit >= total_items
+
+        return JsonResponse({
+            'assessments': paginated,
+            'all_loaded': all_loaded,
+            'total_count': total_items
+        }, status=200)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+import pandas as pd
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+
+
+@csrf_exempt
+@require_POST
+def upload_preview(request):
+    file = request.FILES.get('file')
+    if not file:
+        return JsonResponse({'status': 'error', 'message': 'No file uploaded'})
+
+    try:
+        # Read Excel, header assumed at row 1 (0-indexed)
+        df = pd.read_excel(file, header=0)
+
+        # Clean column names (strip spaces)
+        df.columns = df.columns.str.strip()
+
+        # Replace NaN with empty string for preview
+        preview_data = df.head(10).fillna('').to_dict(orient='records')
+
+        # Required headers
+        required_columns = [
+            'Section', 'Parameters', 'Indicators',
+            'Category (i.e C for Communication, K for Knowledge and D for Documentation)',
+            'Marks', 'Critical'
+        ]
+        missing_cols = [col for col in required_columns if col not in df.columns]
+
+        errors = []
+        if missing_cols:
+            errors.append({'row': '-', 'message': f'Missing columns: {", ".join(missing_cols)}'})
+
+        parameters_seen = set()
+
+        for idx, row in df.iterrows():
+            row_number = idx + 2  # Excel row number
+
+            # Section required
+            if str(row.get('Section')).strip() == '':
+                errors.append({'row': row_number, 'message': 'Section is required'})
+
+            # Parameters required + uniqueness
+            param = str(row.get('Parameters')).strip()
+            if param == '':
+                errors.append({'row': row_number, 'message': 'Parameters is required'})
+            elif param in parameters_seen:
+                errors.append({'row': row_number, 'message': f'Duplicate Parameters: {param}'})
+            else:
+                parameters_seen.add(param)
+
+            # Marks must be int
+            marks = row.get('Marks')
+            if marks == '' or pd.isna(marks):
+                errors.append({'row': row_number, 'message': 'Marks is required'})
+            else:
+                try:
+                    int(marks)
+                except ValueError:
+                    errors.append({'row': row_number, 'message': 'Marks must be an integer'})
+
+            # Critical must be strictly "True" or "False" (case-insensitive)
+            critical = str(row.get('Critical')).strip().lower()
+            if critical not in ['true', 'false']:
+                errors.append({
+                    'row': row_number,
+                    'message': 'Critical must be either True or False (no other values allowed)'
+                })
+
+        return JsonResponse({
+            'status': 'success',
+            'preview': preview_data,
+            'validation': errors,
+            'total_rows': len(df)
+        })
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)})
+
+@csrf_exempt
+@login_required
+def get_procedure_for_edit(request, procedure_id):
+    """API endpoint to fetch procedure data for editing"""
+    try:
+        procedure_ref = db.collection('ProcedureTable').document(procedure_id)
+        procedure_doc = procedure_ref.get()
+        
+        if not procedure_doc.exists:
+            return JsonResponse({'status': 'error', 'message': 'Procedure not found'}, status=404)
+        
+        procedure_data = procedure_doc.to_dict()
+        
+        return JsonResponse({
+            'status': 'success',
+            'procedure': {
+                'id': procedure_id,
+                'procedureName': procedure_data.get('procedureName', ''),
+                'category': procedure_data.get('category', ''),
+                'examMetaData': procedure_data.get('examMetaData', []),
+                'notes': procedure_data.get('notes', ''),
+                'active': procedure_data.get('active', True)
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+@csrf_exempt
+@login_required
+@require_POST
+def update_procedure(request):
+    """API endpoint to update procedure data"""
+    try:
+        import json
+        data = json.loads(request.body)
+        
+        procedure_id = data.get('procedure_id')
+        procedure_name = data.get('procedure_name', '').strip()
+        category = data.get('category', '').strip()
+        exam_meta_data = data.get('exam_meta_data', [])
+        
+        if not procedure_id:
+            return JsonResponse({'status': 'error', 'message': 'Procedure ID is required'}, status=400)
+        
+        if not procedure_name:
+            return JsonResponse({'status': 'error', 'message': 'Procedure name is required'}, status=400)
+        
+        if not category:
+            return JsonResponse({'status': 'error', 'message': 'Category is required'}, status=400)
+        
+        # Get existing procedure
+        procedure_ref = db.collection('ProcedureTable').document(procedure_id)
+        procedure_doc = procedure_ref.get()
+
+        if not procedure_doc.exists:
+            return JsonResponse({'status': 'error', 'message': 'Procedure not found'}, status=404)
+
+        # Check if another procedure with the same name exists (excluding current procedure)
+        existing_procedure_data = procedure_doc.to_dict()
+        current_name = existing_procedure_data.get('procedureName', '')
+
+        # Only check for duplicates if the name is being changed
+        if procedure_name != current_name:
+            duplicate_procedures = db.collection('ProcedureTable').where('procedureName', '==', procedure_name).limit(1).stream()
+            duplicate_list = list(duplicate_procedures)
+
+            if duplicate_list:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'A procedure with the name "{procedure_name}" already exists. Please use a different name.'
+                }, status=400)
+
+        print(exam_meta_data)
+        # Check for duplicate steps in exam_meta_data
+        if exam_meta_data:
+            step_texts = []
+            for step in exam_meta_data[0]["section_questions"]:
+                step_text = step.get('question', '').strip().lower()
+                print(step_text)
+                if step_text:
+                    if step_text in step_texts:
+                        return JsonResponse({
+                            'status': 'error',
+                            'message': f'Duplicate step found: "{step.get("question", "").strip()}". Each step must have unique wording.'
+                        }, status=400)
+                    step_texts.append(step_text)
+
+        # Update procedure
+        update_data = {
+            'procedureName': procedure_name,
+            'category': category,
+            'examMetaData': exam_meta_data
+        }
+
+        procedure_ref.update(update_data)
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Procedure updated successfully'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        print(f"Error updating procedure: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+@csrf_exempt
+@require_POST
+def upload_excel(request):
+    file = request.FILES.get('file')
+    procedure_name = request.POST.get('procedure_name')
+    category = request.POST.get('category')
+
+    if not file:
+        return JsonResponse({'status': 'error', 'message': 'No file uploaded'})
+
+    try:
+        # Save the file to MEDIA_ROOT/uploaded_excels/
+        file_name = f"{uuid.uuid4()}_{file.name}".replace(" ", "_")
+        file_path = os.path.join(settings.MEDIA_ROOT, 'uploaded_excels', file_name)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+        with open(file_path, 'wb+') as f:
+            for chunk in file.chunks():
+                f.write(chunk)
+
+        # Now read it via pandas
+        df = pd.read_excel(file_path)
+
+        # --- Processing & validation logic ---
+        df.columns = df.columns.str.strip()
+        required_columns = [
+            'Section', 'Parameters',
+            'Marks', 'Critical'
+        ]
+        missing_cols = [col for col in required_columns if col not in df.columns]
+        if missing_cols:
+            return JsonResponse({'status': 'error', 'message': f'Missing columns: {", ".join(missing_cols)}'})
+
+        # Validate & convert Critical: only "True"/"False" (case-insensitive) allowed
+        critical_series = df['Critical'].astype(str).str.strip().str.lower()
+        invalid_mask = ~critical_series.isin(['true', 'false'])
+        if invalid_mask.any():
+            bad_rows = (critical_series[invalid_mask].index + 2).tolist()  # Excel row numbers
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Critical column must contain only True or False. Invalid values at rows: {", ".join(map(str, bad_rows))}'
+            })
+        df['Critical'] = critical_series.map({'true': True, 'false': False})
+
+        # Convert Marks
+        df['Marks'] = pd.to_numeric(df['Marks'], errors='coerce').fillna(0).astype(int)
+
+        # Fill missing strings
+        df[['Section', 'Parameters', 'Indicators', 'Category (i.e C for Communication, K for Knowledge and D for Documentation)']] = \
+            df[['Section', 'Parameters', 'Indicators', 'Category (i.e C for Communication, K for Knowledge and D for Documentation)']].fillna('')
+
+
+        # Validate unique Parameters
+        if df['Parameters'].duplicated().any():
+            duplicates = df[df['Parameters'].duplicated(keep=False)]['Parameters'].tolist()
+            return JsonResponse({'status': 'error', 'message': f'Duplicate Parameters found: {", ".join(duplicates)}'})
+
+        success = len(df)
+        updated = 0
+        errors = 0
+
+        # Parse and upload to Firebase
+        parsed_json = parse_excel_to_json(df, procedure_name, category)
+
+        # Check if procedure with same name already exists
+        existing_procedures = db.collection('ProcedureTable').where('procedureName', '==', parsed_json['procedure_name']).limit(1).stream()
+        existing_procedure_list = list(existing_procedures)
+
+        if existing_procedure_list:
+            # Ask user if they want to update existing procedure
+            return JsonResponse({
+                'status': 'error',
+                'message': f'A procedure with the name "{parsed_json["procedure_name"]}" already exists. Please use a different name or delete the existing procedure first.'
+            })
+
+        # Upload to Firebase
+        procedure_ref = db.collection('ProcedureTable').document()
+        procedure_ref.set({
+            "procedureName": parsed_json['procedure_name'],
+            "category": category,  # Store category at procedure level
+            "examMetaData": parsed_json['exammetadata'],
+            "notes": parsed_json['notes'],
+            "active": True
+        })
+        print(f"File uploaded successfully - {procedure_ref.id}")
+
+        # logger.info(f"File uploaded successfully - {procedure_ref.id}")
+
+        return JsonResponse({
+            'status': 'success',
+            'file_path': file_path,  
+            'total_rows': len(df),
+            'success': success,
+            'updated': updated,
+            'errors': errors
+        })
+
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)})
+
+# ==================== ADMIN REPORT PORTAL ====================
+
+@login_required
+def render_admin_report_portal(request):
+    """Render the admin report portal page"""
+    if not request.user.check_icon_navigation_permissions('reports'):
+        return HttpResponse('You are not authorized to access this page')
+    return render(request, 'assessments/admin_report_portal.html')
+
+
+@csrf_exempt
+@login_required
+def fetch_institutions_hospitals_for_report(request):
+    """Fetch institutions and hospitals based on user permissions for OSCE report"""
+    try:
+        from assessments.models import Institution, Hospital
+        
+        institutions = []
+        hospitals = []
+        
+        # Check if user has all permissions
+        if request.user.has_all_permissions() or request.user.access_all_institutions:
+            django_institutions = Institution.objects.filter(is_active=True, onboarding_type="b2b")
+        else:
+            django_institutions = request.user.assigned_institutions.filter(is_active=True, onboarding_type="b2b")
+
+        if request.user.has_all_permissions() or request.user.access_all_hospitals:
+            django_hospitals = Hospital.objects.filter(is_active=True, onboarding_type="b2b")
+        else:
+            django_hospitals = request.user.assigned_hospitals.filter(is_active=True, onboarding_type="b2b")
+        
+        # Add institutions
+        for inst in django_institutions:
+            institutions.append({
+                'id': inst.id,
+                'name': inst.name,
+                'type': 'institution'
+            })
+        
+        # Add hospitals
+        for hosp in django_hospitals:
+            hospitals.append({
+                'id': hosp.id,
+                'name': hosp.name,
+                'type': 'hospital'
+            })
+
+        # Note: Firebase InstituteNames backward compatibility removed
+        # This endpoint is specifically for B2B units only, fetched from Django models
+
+        return JsonResponse({
+            'success': True,
+            'institutions': institutions,
+            'hospitals': hospitals
+        })
+    except Exception as e:
+        print(f"Error fetching institutions/hospitals: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@csrf_exempt
+@login_required
+def fetch_osce_report(request):
+    """
+    ⚠️ DEPRECATED - This function has been replaced by fetch_osce_report_optimized
+    
+    This old implementation computed everything on-demand (5-10 seconds).
+    The new system pre-computes all analytics (0.5 seconds response time).
+    
+    Kept for reference only - NOT USED IN PRODUCTION
+    """
+    try:
+        # Get filter parameters
+        academic_year = request.GET.get('academic_year', '').strip()
+        institution_id = request.GET.get('institution_id', '').strip()
+        institution_type = request.GET.get('institution_type', '').strip()  # 'institution' or 'hospital'
+        semester = request.GET.get('semester', '').strip()
+        osce_level = request.GET.get('osce_level', '').strip()  # All/Classroom/Mock/Final
+        skill = request.GET.get('skill', '').strip()
+        student_search = request.GET.get('student_search', '').strip()
+        
+        # Validate mandatory fields
+        if not academic_year:
+            return JsonResponse({'success': False, 'error': 'Academic year is required'}, status=400)
+        if not institution_id or not institution_type:
+            return JsonResponse({'success': False, 'error': 'Institution/Hospital selection is required'}, status=400)
+        
+        # Get institution/hospital name from Django models
+        institution_name = None
+        if institution_type == 'institution':
+            from assessments.models import Institution
+            try:
+                inst = Institution.objects.get(id=institution_id)
+                institution_name = inst.name
+            except Institution.DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Institution not found'}, status=404)
+        elif institution_type == 'hospital':
+            from assessments.models import Hospital
+            try:
+                hosp = Hospital.objects.get(id=institution_id)
+                institution_name = hosp.name
+            except Hospital.DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Hospital not found'}, status=404)
+        
+        # Query BatchAssignment with yearOfBatch filter
+        batch_assignments_query = db.collection('BatchAssignment').where('yearOfBatch', '==', academic_year).where('unit_name', '==', institution_name)
+        batch_assignments = batch_assignments_query.stream()
+        print(f"Batch Assignments: {batch_assignments}")
+
+        #print all batch assignnment ids
+
+        # Collections to track data
+        all_user_ids = set()  # All unique user IDs from examassignments (for enrolled)
+        completed_user_ids = set()  # Unique user IDs from completed examassignments (for assessed)
+        unique_procedures = set()  # Unique procedure IDs
+        filtered_batch_assignments_count = 0
+        
+        # For calculating average score and pass rate
+        completed_exam_scores = []  # List of percentages for completed exams
+        
+        # For semester-wise performance
+        semester_data = {}  # {semester: {students: set(), osces: [], scores: [], dates: [], types: []}}
+        
+        # For category-wise performance - track by procedure category
+        category_scores = {
+            'Core Skills': [],
+            'Infection Control': [],
+            'Communication': [],
+            'Documentation': [],
+            'Pre-Procedure': [],
+            'Critical Thinking': []
+        }
+        
+        # For semester dashboard (only when semester filter is applied)
+        semester_filter_applied = semester and semester != 'All'
+        assessors_set = set()  # Unique assessors for the semester
+        osce_activity_timeline = []  # List of OSCE activities with details
+        student_performance_data = {}  # {user_id: {name, overall_avg, classroom: score, mock: score, final: score}}
+        
+        # Process each BatchAssignment
+        for ba_doc in batch_assignments:
+            ba_data = ba_doc.to_dict()
+            print(f"Batch Assignment: {ba_data}")
+            
+            # Filter by semester
+            if semester and semester != 'All':
+                ba_semester = ba_data.get('semester', '')
+                if ba_semester != semester:
+                    continue
+            
+            # Filter by OSCE level (examType)
+            if osce_level and osce_level != 'All':
+                print(f"OSCE Level: {osce_level}")
+                exam_type = ba_data.get('examType', '')
+                if exam_type != osce_level:
+                    continue
+            
+            # Filter by skill/procedure if applied (procedure ID)
+            if skill:
+                procedure_ref = ba_data.get('procedure')
+                if procedure_ref:
+                    # Compare procedure reference ID with selected procedure ID
+                    if procedure_ref.id != skill:
+                        continue
+                else:
+                    continue  # Skip if no procedure reference
+            
+            # Count this BatchAssignment
+            filtered_batch_assignments_count += 1
+            
+            # Collect procedure ID and get procedure category
+            procedure_ref = ba_data.get('procedure')
+            procedure_category = None
+            if procedure_ref:
+                unique_procedures.add(procedure_ref.id)
+                # Get category from procedure document
+                try:
+                    procedure_doc = procedure_ref.get()
+                    if procedure_doc.exists:
+                        procedure_data = procedure_doc.to_dict()
+                        procedure_category = procedure_data.get('category', '')
+                except Exception as e:
+                    print(f"Error fetching procedure category: {str(e)}")
+            
+            # Get semester and exam type for semester-wise tracking
+            ba_semester = ba_data.get('semester', '')
+            exam_type = ba_data.get('examType', '')
+            test_date = ba_data.get('testDate')
+            created_at = ba_data.get('createdAt')
+            
+            # Track assessors for semester dashboard (only when semester filter is applied)
+            # Get unique assessors from BatchAssignment.assessorlist field
+            if semester_filter_applied:
+                assessors = ba_data.get('assessorlist', [])
+                if assessors:
+                    for assessor_ref in assessors:
+                        if assessor_ref:
+                            # Add assessor ID to set (handles both reference objects and IDs)
+                            if hasattr(assessor_ref, 'id'):
+                                assessors_set.add(assessor_ref.id)
+                            elif isinstance(assessor_ref, str):
+                                assessors_set.add(assessor_ref)
+            
+            # Initialize semester data if not exists
+            if ba_semester and ba_semester not in semester_data:
+                semester_data[ba_semester] = {
+                    'students': set(),
+                    'osces': [],
+                    'scores': [],
+                    'dates': [],
+                    'types': []
+                }
+            
+            # Track OSCE activity for timeline - MOVED to BatchAssignmentSummary section below
+            # No longer tracking per BatchAssignment, will use BatchAssignmentSummary instead
+            
+            # Get examassignments from batchassignment
+            exam_assignments = ba_data.get('examassignment', [])
+            for exam_ref in exam_assignments:
+                if exam_ref:
+                    try:
+                        exam_doc = exam_ref.get()
+                        if exam_doc.exists:
+                            exam_data = exam_doc.to_dict()
+                            user_ref = exam_data.get('user')
+                            if user_ref:
+                                user_id = user_ref.id
+                                # Add to all user IDs (for enrolled)
+                                all_user_ids.add(user_id)
+                                
+                                # Track semester data (for all students, not just completed)
+                                if ba_semester:
+                                    semester_data[ba_semester]['students'].add(user_id)
+                                    # Track OSCE for semester (only once per BatchAssignment)
+                                    ba_id = ba_doc.id
+                                    if ba_id not in semester_data[ba_semester]['osces']:
+                                        semester_data[ba_semester]['osces'].append(ba_id)
+                                        if test_date:
+                                            semester_data[ba_semester]['dates'].append(test_date)
+                                        if exam_type:
+                                            semester_data[ba_semester]['types'].append(exam_type)
+                                
+                                # Process completed exams for score calculation
+                                if str(exam_data.get('status', '')).lower() == 'completed':
+                                    completed_user_ids.add(user_id)
+                                    
+                                    # Calculate percentage for completed exams
+                                    total_score = exam_data.get("marks", 0)
+                                    exam_metadata = exam_data.get('examMetaData', [])
+                                    max_marks = sum(
+                                        question.get('right_marks_for_question', 0)
+                                        for section in exam_metadata
+                                        for question in section.get("section_questions", [])
+                                    )
+                                    if max_marks > 0:
+                                        percentage = round((total_score / max_marks) * 100, 2)
+                                        completed_exam_scores.append(percentage)
+                                        
+                                        # Track semester scores
+                                        if ba_semester:
+                                            semester_data[ba_semester]['scores'].append(percentage)
+                                        
+                                        # Track category-wise scores based on procedure category
+                                        if procedure_category and procedure_category in category_scores:
+                                            category_scores[procedure_category].append(percentage)
+                                        
+                                        # Track student performance data (only when semester filter is applied)
+                                        if semester_filter_applied:
+                                            if user_id not in student_performance_data:
+                                                # Get user name from Firestore
+                                                user_name = 'Unknown'
+                                                try:
+                                                    user_doc = user_ref.get()
+                                                    if user_doc.exists:
+                                                        user_data = user_doc.to_dict()
+                                                        user_name = user_data.get('name', user_data.get('firstName', 'Unknown'))
+                                                except:
+                                                    pass
+                                                
+                                                student_performance_data[user_id] = {
+                                                    'name': user_name,
+                                                    'scores': [],
+                                                    'classroom': None,
+                                                    'mock': None,
+                                                    'final': None
+                                                }
+                                            
+                                            # Store score by OSCE level
+                                            if exam_type == 'Classroom':
+                                                student_performance_data[user_id]['classroom'] = percentage
+                                            elif exam_type == 'Mock':
+                                                student_performance_data[user_id]['mock'] = percentage
+                                            elif exam_type == 'Final':
+                                                student_performance_data[user_id]['final'] = percentage
+                                            
+                                            # Track all scores for overall average
+                                            student_performance_data[user_id]['scores'].append(percentage)
+                    except Exception as e:
+                        print(f"Error processing exam assignment: {str(e)}")
+                        continue
+        
+        # Calculate total_students_enrolled from Batches
+        # Get institution/hospital reference from Firestore using the name
+        institution_ref = None
+        if institution_type == 'institution':
+            print(f"Institution Name: {institution_name}")
+            # Query InstituteNames collection by name to get the reference
+            inst_docs = db.collection('InstituteNames').where('instituteName', '==', institution_name).limit(1).stream()
+            for doc in inst_docs:
+                institution_ref = doc.reference
+                break
+        elif institution_type == 'hospital':
+            # Query Hospitals collection by name (adjust collection name if different)
+            hosp_docs = db.collection('Hospitals').where('hospitalName', '==', institution_name).limit(1).stream()
+            for doc in hosp_docs:
+                institution_ref = doc.reference
+                break
+        
+        # Collect all enrolled students from batches
+        enrolled_user_ids = set()
+        if institution_ref:
+            print(f"Institution Reference: {institution_ref}")
+            # Query batches by unit reference and year
+            batches_query = db.collection('Batches').where('unit', '==', institution_ref).where('yearOfBatch', '==', academic_year)
+            print(f"Batches Query: {batches_query}")
+            # If semester filter is applied, also filter by semester
+            if semester and semester != 'All':
+                batches_query = batches_query.where('semester', '==', semester)
+            
+            batches = batches_query.stream()
+            
+            # Collect all learners from matching batches
+            for batch_doc in batches:
+                batch_data = batch_doc.to_dict()
+                learners = batch_data.get('learners', [])
+                for learner_ref in learners:
+                    if learner_ref:
+                        # Extract user ID from reference
+                        if hasattr(learner_ref, 'id'):
+                            enrolled_user_ids.add(learner_ref.id)
+                        elif isinstance(learner_ref, str):
+                            # Handle string path like "/Users/2219"
+                            if '/Users/' in learner_ref:
+                                user_id = learner_ref.split('/Users/')[-1]
+                                enrolled_user_ids.add(user_id)
+                            else:
+                                enrolled_user_ids.add(learner_ref)
+        
+        total_students_enrolled = len(enrolled_user_ids)
+        students_assessed = len(completed_user_ids)
+        print(f"Students Assessed: {students_assessed}")
+        print(f"Total Students Enrolled: {total_students_enrolled}")
+        
+        # Calculate total_osce_conducted from BatchAssignmentSummary
+        # Each BatchAssignmentSummary document represents one OSCE
+        bas_query = db.collection('BatchAssignmentSummary').where('yearOfBatch', '==', academic_year).where('unit_name', '==', institution_name)
+        
+        # Filter by semester if applied
+        if semester and semester != 'All':
+            bas_query = bas_query.where('semester', '==', semester)
+        
+        # Filter by exam_type (OSCE level) if applied
+        if osce_level and osce_level != 'All':
+            bas_query = bas_query.where('exam_type', '==', osce_level)
+        
+        # Convert stream to list so we can iterate multiple times if needed
+        batch_assignment_summaries = list(bas_query.stream())
+        total_osce_conducted = 0
+        
+        # If skill/procedure filter is applied, check if procedure exists in procedure_assessor_mappings
+        if skill:
+            for bas_doc in batch_assignment_summaries:
+                bas_data = bas_doc.to_dict()
+                procedure_mappings = bas_data.get('procedure_assessor_mappings', [])
+                
+                # Check if the selected procedure exists in any mapping
+                procedure_found = False
+                for mapping in procedure_mappings:
+                    if isinstance(mapping, dict):
+                        procedure_id = mapping.get('procedure_id', '')
+                        if procedure_id == skill:
+                            procedure_found = True
+                            break
+                
+                if procedure_found:
+                    total_osce_conducted += 1
+        else:
+            # No skill filter, count all matching BatchAssignmentSummary documents
+            total_osce_conducted = len(batch_assignment_summaries)
+        
+        assessment_rate = round((students_assessed / total_students_enrolled * 100) if total_students_enrolled > 0 else 0, 2)
+        skills_evaluated = len(unique_procedures)
+        
+        # Calculate Average Institution Score
+        average_institution_score = 0
+        if completed_exam_scores:
+            average_institution_score = round(sum(completed_exam_scores) / len(completed_exam_scores), 2)
+        
+        # Calculate Pass Rate (≥80%)
+        pass_count = sum(1 for score in completed_exam_scores if score >= 80)
+        pass_rate = round((pass_count / len(completed_exam_scores) * 100) if completed_exam_scores else 0, 2)
+        
+        # Get grade letter for average score
+        def get_grade_letter(percentage):
+            if percentage >= 90:
+                return 'A'
+            elif percentage >= 80:
+                return 'B'
+            elif percentage >= 70:
+                return 'C'
+            elif percentage >= 60:
+                return 'D'
+            else:
+                return 'E'
+        
+        grade_letter = get_grade_letter(average_institution_score) if average_institution_score > 0 else '-'
+        
+        # Process semester-wise data (always process - data is already filtered by applied filters)
+        semester_wise_performance = []
+        for sem in sorted(semester_data.keys(), key=lambda x: int(x) if x.isdigit() else 0):
+            sem_data = semester_data[sem]
+            num_students = len(sem_data['students'])
+            
+            # Calculate num_osces from BatchAssignmentSummary for this semester
+            # Each BatchAssignmentSummary document represents one OSCE
+            bas_query_sem = db.collection('BatchAssignmentSummary').where('yearOfBatch', '==', academic_year).where('unit_name', '==', institution_name).where('semester', '==', sem)
+            
+            # Filter by exam_type (OSCE level) if applied
+            if osce_level and osce_level != 'All':
+                bas_query_sem = bas_query_sem.where('exam_type', '==', osce_level)
+            
+            batch_assignment_summaries_sem = list(bas_query_sem.stream())
+            
+            # If skill/procedure filter is applied, check if procedure exists in procedure_assessor_mappings
+            if skill:
+                num_osces = 0
+                for bas_doc in batch_assignment_summaries_sem:
+                    bas_data = bas_doc.to_dict()
+                    procedure_mappings = bas_data.get('procedure_assessor_mappings', [])
+                    
+                    # Check if the selected procedure exists in any mapping
+                    procedure_found = False
+                    for mapping in procedure_mappings:
+                        if isinstance(mapping, dict):
+                            procedure_id = mapping.get('procedure_id', '')
+                            if procedure_id == skill:
+                                procedure_found = True
+                                break
+                    
+                    if procedure_found:
+                        num_osces += 1
+            else:
+                # No skill filter, count all matching BatchAssignmentSummary documents for this semester
+                num_osces = len(batch_assignment_summaries_sem)
+            
+            avg_score = round(sum(sem_data['scores']) / len(sem_data['scores']), 2) if sem_data['scores'] else 0
+            pass_count_sem = sum(1 for s in sem_data['scores'] if s >= 80)
+            pass_pct = round((pass_count_sem / len(sem_data['scores']) * 100) if sem_data['scores'] else 0, 2)
+            
+            # Get most recent date and corresponding OSCE type
+            most_recent_date = None
+            osce_type = '-------'
+            
+            if sem_data['dates']:
+                try:
+                    # Convert Firestore timestamps to datetime and track indices
+                    date_type_pairs = []
+                    for i, d in enumerate(sem_data['dates']):
+                        if d:
+                            parsed_date = None
+                            if hasattr(d, 'timestamp'):
+                                # Firestore Timestamp
+                                parsed_date = datetime.fromtimestamp(d.timestamp())
+                            elif hasattr(d, 'seconds'):
+                                # Firestore Timestamp with seconds attribute
+                                parsed_date = datetime.fromtimestamp(d.seconds)
+                            elif isinstance(d, datetime):
+                                parsed_date = d
+                            elif isinstance(d, str):
+                                # Try parsing string date
+                                try:
+                                    parsed_date = datetime.strptime(d, '%Y-%m-%d')
+                                except:
+                                    pass
+                            
+                            if parsed_date and i < len(sem_data['types']):
+                                date_type_pairs.append((parsed_date, sem_data['types'][i]))
+                    
+                    if date_type_pairs:
+                        # Sort by exam type priority (Final, Mock, Classroom) and then by date
+                        exam_type_priority = {'Final': 2, 'Mock': 1, 'Classroom': 0}
+                        date_type_pairs.sort(
+                            key=lambda x: (
+                                exam_type_priority.get(x[1], -1),  # Sort by exam type first
+                                x[0]  # Then by date
+                            ),
+                            reverse=True
+                        )
+                        most_recent_date = date_type_pairs[0][0].strftime('%Y-%m-%d')
+                        osce_type = date_type_pairs[0][1]  # Get the type of the most recent/highest priority exam
+                    else:
+                        most_recent_date = 'N/A'
+                except Exception as e:
+                    print(f"Error processing dates: {str(e)}")
+                    most_recent_date = 'N/A'
+            
+            semester_wise_performance.append({
+                'semester': sem,
+                'num_students': num_students,
+                'num_osces': num_osces,
+                'average_score': avg_score,
+                'pass_percentage': pass_pct,
+                'most_recent_date': most_recent_date or 'N/A',
+                'osce_type': osce_type
+            })
+        
+        # Update overall pass rate and average score based on semester_wise_performance
+        print(f"DEBUG: semester value = '{semester}', type = {type(semester)}")
+        print(f"DEBUG: semester_wise_performance = {semester_wise_performance}")
+        print(f"DEBUG: Current pass_rate before override = {pass_rate}")
+        
+        if semester_wise_performance:
+            if semester and semester != 'All':
+                # If specific semester is selected, use that semester's values
+                print(f"DEBUG: Looking for semester '{semester}' in semester_wise_performance")
+                for sem_perf in semester_wise_performance:
+                    print(f"DEBUG: Checking sem_perf['semester'] = '{sem_perf['semester']}', type = {type(sem_perf['semester'])}")
+                    if sem_perf['semester'] == semester:
+                        print(f"DEBUG: MATCH FOUND! Updating pass_rate from {pass_rate} to {sem_perf['pass_percentage']}")
+                        pass_rate = sem_perf['pass_percentage']
+                        average_institution_score = sem_perf['average_score']
+                        grade_letter = get_grade_letter(average_institution_score) if average_institution_score > 0 else '-'
+                        break
+                else:
+                    print(f"DEBUG: NO MATCH FOUND for semester '{semester}'")
+            else:
+                # If no semester filter (All semesters), calculate average pass rate across all semesters
+                semester_pass_rates = [sem_perf['pass_percentage'] for sem_perf in semester_wise_performance if sem_perf['pass_percentage'] is not None]
+                semester_avg_scores = [sem_perf['average_score'] for sem_perf in semester_wise_performance if sem_perf['average_score'] is not None]
+                
+                if semester_pass_rates:
+                    pass_rate = round(sum(semester_pass_rates) / len(semester_pass_rates), 2)
+                if semester_avg_scores:
+                    average_institution_score = round(sum(semester_avg_scores) / len(semester_avg_scores), 2)
+                    grade_letter = get_grade_letter(average_institution_score) if average_institution_score > 0 else '-'
+        
+        # Process category-wise performance (always process - data is already filtered by applied filters)
+        category_wise_performance = []
+        for category in ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Pre-Procedure', 'Critical Thinking']:
+            scores = category_scores.get(category, [])
+            avg_percentage = round(sum(scores) / len(scores), 2) if scores else None
+            category_wise_performance.append({
+                'category': category,
+                'percentage': avg_percentage
+            })
+        
+        # Process semester dashboard data (only when semester filter is applied)
+        semester_dashboard_data = None
+        if semester_filter_applied:
+            # Populate OSCE Activity Timeline from BatchAssignmentSummary
+            # Each BatchAssignmentSummary represents one complete OSCE
+            bas_query_timeline = db.collection('BatchAssignmentSummary').where('yearOfBatch', '==', academic_year).where('unit_name', '==', institution_name).where('semester', '==', semester)
+            
+            # Filter by exam_type (OSCE level) if applied
+            if osce_level and osce_level != 'All':
+                bas_query_timeline = bas_query_timeline.where('exam_type', '==', osce_level)
+            
+            batch_assignment_summaries_timeline = list(bas_query_timeline.stream())
+            
+            # Process each BatchAssignmentSummary to create timeline entries
+            for bas_doc in batch_assignment_summaries_timeline:
+                bas_data = bas_doc.to_dict()
+                
+                # If skill/procedure filter is applied, check if procedure exists in procedure_assessor_mappings
+                if skill:
+                    procedure_mappings = bas_data.get('procedure_assessor_mappings', [])
+                    procedure_found = False
+                    for mapping in procedure_mappings:
+                        if isinstance(mapping, dict):
+                            procedure_id = mapping.get('procedure_id', '')
+                            if procedure_id == skill:
+                                procedure_found = True
+                                break
+                    
+                    # Skip this OSCE if the filtered procedure is not found
+                    if not procedure_found:
+                        continue
+                
+                # Get OSCE details
+                osce_level_value = bas_data.get('exam_type', 'N/A')
+                test_date = bas_data.get('test_date')
+                
+                # Format date
+                date_str = 'N/A'
+                if test_date:
+                    try:
+                        if hasattr(test_date, 'timestamp'):
+                            date_str = datetime.fromtimestamp(test_date.timestamp()).strftime('%d %b %Y')
+                        elif hasattr(test_date, 'seconds'):
+                            date_str = datetime.fromtimestamp(test_date.seconds).strftime('%d %b %Y')
+                        elif isinstance(test_date, datetime):
+                            date_str = test_date.strftime('%d %b %Y')
+                        elif isinstance(test_date, str):
+                            try:
+                                date_obj = datetime.strptime(test_date, '%Y-%m-%d')
+                                date_str = date_obj.strftime('%d %b %Y')
+                            except:
+                                date_str = test_date
+                    except:
+                        date_str = 'N/A'
+                
+                # Get all batch assignments for this summary to calculate stats
+                procedure_mappings = bas_data.get('procedure_assessor_mappings', [])
+                osce_students = set()
+                osce_scores = []
+                osce_pass_count = 0
+                
+                # Iterate through each procedure mapping to get batch assignments
+                for mapping in procedure_mappings:
+                    if isinstance(mapping, dict):
+                        batchassignment_id = mapping.get('batchassignment_id', '')
+                        if batchassignment_id:
+                            try:
+                                # Get the batch assignment
+                                ba_ref = db.collection('BatchAssignment').document(batchassignment_id)
+                                ba_doc_timeline = ba_ref.get()
+                                if ba_doc_timeline.exists:
+                                    ba_data_timeline = ba_doc_timeline.to_dict()
+                                    
+                                    # Get exam assignments
+                                    exam_assignments_timeline = ba_data_timeline.get('examassignment', [])
+                                    for exam_ref in exam_assignments_timeline:
+                                        if exam_ref:
+                                            try:
+                                                exam_doc_timeline = exam_ref.get()
+                                                if exam_doc_timeline.exists:
+                                                    exam_data_timeline = exam_doc_timeline.to_dict()
+                                                    user_ref = exam_data_timeline.get('user')
+                                                    
+                                                    if user_ref:
+                                                        user_id = user_ref.id
+                                                        osce_students.add(user_id)
+                                                        
+                                                        # Process completed exams for score calculation
+                                                        if str(exam_data_timeline.get('status', '')).lower() == 'completed':
+                                                            total_score = exam_data_timeline.get("marks", 0)
+                                                            exam_metadata = exam_data_timeline.get('examMetaData', [])
+                                                            max_marks = sum(
+                                                                question.get('right_marks_for_question', 0)
+                                                                for section in exam_metadata
+                                                                for question in section.get("section_questions", [])
+                                                            )
+                                                            if max_marks > 0:
+                                                                percentage = round((total_score / max_marks) * 100, 2)
+                                                                osce_scores.append(percentage)
+                                                                if percentage >= 80:
+                                                                    osce_pass_count += 1
+                                            except Exception as e:
+                                                print(f"Error processing exam assignment in timeline: {str(e)}")
+                                                continue
+                            except Exception as e:
+                                print(f"Error getting batch assignment for timeline: {str(e)}")
+                                continue
+                
+                # Calculate average score and pass rate for this timeline entry
+                avg_score = round(sum(osce_scores) / len(osce_scores), 2) if osce_scores else 0
+                timeline_pass_rate = round((osce_pass_count / len(osce_scores) * 100) if osce_scores else 0, 2)
+                
+                # Add to timeline
+                osce_activity_timeline.append({
+                    'osce_level': osce_level_value,
+                    'date_conducted': date_str,
+                    'num_students': len(osce_students),
+                    'avg_score': avg_score,
+                    'pass_percentage': timeline_pass_rate
+                })
+            
+            # Sort OSCE activity timeline by exam type priority (Final, Mock, Classroom) and then by date
+            # Higher priority numbers come first with reverse=True, so Final=2, Mock=1, Classroom=0
+            exam_type_priority = {'Final': 2, 'Mock': 1, 'Classroom': 0}
+            osce_activity_timeline.sort(
+                key=lambda x: (
+                    exam_type_priority.get(x.get('osce_level', ''), -1),  # Sort by exam type first (Final, Mock, Classroom)
+                    x.get('date_conducted', '') if x.get('date_conducted') != 'N/A' else '0000-00-00'  # Then by date (most recent first)
+                ),
+                reverse=True
+            )
+            
+            # Get latest OSCE
+            latest_osce = 'N/A'
+            if osce_activity_timeline:
+                latest = osce_activity_timeline[0]
+                latest_osce = f"{latest['osce_level']} OSCE - {latest['date_conducted']}"
+            
+            # Use the exact same values from semester_wise_performance table
+            # This ensures the dashboard shows identical metrics as the semester-wise table
+            semester_avg_score = 0
+            semester_pass_rate = 0
+            
+            # Find the matching semester in semester_wise_performance
+            for sem_perf in semester_wise_performance:
+                if sem_perf['semester'] == semester:
+                    semester_avg_score = sem_perf['average_score']
+                    semester_pass_rate = sem_perf['pass_percentage']
+                    break
+            
+            # Get grade letter for semester average
+            semester_grade_letter = get_grade_letter(semester_avg_score) if semester_avg_score > 0 else '-'
+            
+            # Process student performance data
+            student_batch_report = []
+            for user_id, student_data in student_performance_data.items():
+                # Calculate overall average
+                overall_avg = round(sum(student_data['scores']) / len(student_data['scores']), 2) if student_data['scores'] else 0
+                overall_grade = get_grade_letter(overall_avg)
+                
+                # Convert scores to grade letters
+                def score_to_grade(score):
+                    if score is None:
+                        return '-'
+                    return get_grade_letter(score)
+                
+                student_batch_report.append({
+                    'user_id': user_id,
+                    'name': student_data['name'],
+                    'overall_avg': overall_avg,
+                    'overall_grade': overall_grade,
+                    'classroom': score_to_grade(student_data['classroom']),
+                    'mock': score_to_grade(student_data['mock']),
+                    'final': score_to_grade(student_data['final'])
+                })
+            
+            # Sort students by name
+            student_batch_report.sort(key=lambda x: x['name'])
+            
+            semester_dashboard_data = {
+                'total_students': total_students_enrolled,
+                'num_assessors': len(assessors_set),
+                'osces_conducted': total_osce_conducted,
+                'latest_osce': latest_osce,
+                'average_score': semester_avg_score,
+                'grade_letter': semester_grade_letter,
+                'pass_rate': semester_pass_rate,
+                'semester_name': f"Semester {semester}",
+                'academic_year': academic_year,
+                'osce_activity_timeline': osce_activity_timeline,
+                'student_batch_report': student_batch_report
+            }
+        
+        # Build response - always include semester, category, and grade distribution data
+        # Data is automatically filtered by applied filters (semester, osce_level, skill)
+        # If no filters are applied, shows overall/institutional data
+        print(f"DEBUG: Final pass_rate being sent in response = {pass_rate}")
+        print(f"DEBUG: Final average_institution_score being sent in response = {average_institution_score}")
+        
+        response_data = {
+            'success': True,
+            'total_students_enrolled': total_students_enrolled,
+            'students_assessed': students_assessed,
+            'total_osce_conducted': total_osce_conducted,
+            'assessment_rate': assessment_rate,
+            'skills_evaluated': skills_evaluated,
+            'average_institution_score': average_institution_score,
+            'grade_letter': grade_letter,
+            'pass_rate': pass_rate,
+            'filter_year': academic_year,
+            'semester_wise_performance': semester_wise_performance,
+            'category_wise_performance': category_wise_performance,
+            'completed_exam_scores': completed_exam_scores  # For grade distribution chart
+        }
+        
+        # Add semester dashboard data when semester filter is applied
+        if semester_filter_applied and semester_dashboard_data:
+            response_data['semester_dashboard'] = semester_dashboard_data
+        
+        return JsonResponse(response_data)
+        
+    except Exception as e:
+        print(f"Error fetching OSCE report: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@login_required
+def fetch_skills_for_category(request):
+    """Fetch skills data for a selected category"""
+    try:
+        # Get filter parameters
+        category = request.GET.get('category', '').strip()
+        academic_year = request.GET.get('academic_year', '').strip()
+        institution_id = request.GET.get('institution_id', '').strip()
+        institution_type = request.GET.get('institution_type', '').strip()
+        semester = request.GET.get('semester', '').strip()
+        osce_level = request.GET.get('osce_level', '').strip()
+        
+        # Validate mandatory fields
+        if not category:
+            return JsonResponse({'success': False, 'error': 'Category is required'}, status=400)
+        if not academic_year:
+            return JsonResponse({'success': False, 'error': 'Academic year is required'}, status=400)
+        if not institution_id or not institution_type:
+            return JsonResponse({'success': False, 'error': 'Institution/Hospital selection is required'}, status=400)
+        
+        # Get institution/hospital name from Django models
+        institution_name = None
+        if institution_type == 'institution':
+            from assessments.models import Institution
+            try:
+                inst = Institution.objects.get(id=institution_id)
+                institution_name = inst.name
+            except Institution.DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Institution not found'}, status=404)
+        elif institution_type == 'hospital':
+            from assessments.models import Hospital
+            try:
+                hosp = Hospital.objects.get(id=institution_id)
+                institution_name = hosp.name
+            except Hospital.DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Hospital not found'}, status=404)
+        
+        # Query BatchAssignment with filters
+        batch_assignments_query = db.collection('BatchAssignment').where('yearOfBatch', '==', academic_year).where('unit_name', '==', institution_name)
+        batch_assignments = batch_assignments_query.stream()
+        
+        # Track skills data: {procedure_id: {name, category, osce_levels: set(), students: set(), scores: []}}
+        skills_data = {}
+        
+        # Process each BatchAssignment
+        for ba_doc in batch_assignments:
+            ba_data = ba_doc.to_dict()
+            
+            # Filter by semester
+            if semester and semester != 'All':
+                ba_semester = ba_data.get('semester', '')
+                if ba_semester != semester:
+                    continue
+            
+            # Filter by OSCE level
+            if osce_level and osce_level != 'All':
+                exam_type = ba_data.get('examType', '')
+                if exam_type != osce_level:
+                    continue
+            
+            # Get procedure reference
+            procedure_ref = ba_data.get('procedure')
+            if not procedure_ref:
+                continue
+            
+            # Get procedure data
+            try:
+                procedure_doc = procedure_ref.get()
+                if not procedure_doc.exists:
+                    continue
+                
+                procedure_data = procedure_doc.to_dict()
+                procedure_category = procedure_data.get('category', '')
+                
+                # Only process if category matches
+                if procedure_category != category:
+                    continue
+                
+                procedure_id = procedure_ref.id
+                procedure_name = procedure_data.get('procedureName', 'Unknown Skill')
+                exam_type = ba_data.get('examType', '')
+                
+                # Initialize skill data if not exists
+                if procedure_id not in skills_data:
+                    skills_data[procedure_id] = {
+                        'name': procedure_name,
+                        'category': procedure_category,
+                        'osce_levels': set(),
+                        'students': set(),
+                        'scores': []
+                    }
+                
+                # Add OSCE level
+                if exam_type:
+                    skills_data[procedure_id]['osce_levels'].add(exam_type)
+                
+                # Process exam assignments
+                exam_assignments = ba_data.get('examassignment', [])
+                for exam_ref in exam_assignments:
+                    if exam_ref:
+                        try:
+                            exam_doc = exam_ref.get()
+                            if exam_doc.exists:
+                                exam_data = exam_doc.to_dict()
+                                user_ref = exam_data.get('user')
+                                
+                                if user_ref:
+                                    user_id = user_ref.id
+                                    skills_data[procedure_id]['students'].add(user_id)
+                                    
+                                    # Process completed exams
+                                    if str(exam_data.get('status', '')).lower() == 'completed':
+                                        total_score = exam_data.get("marks", 0)
+                                        exam_metadata = exam_data.get('examMetaData', [])
+                                        max_marks = sum(
+                                            question.get('right_marks_for_question', 0)
+                                            for section in exam_metadata
+                                            for question in section.get("section_questions", [])
+                                        )
+                                        if max_marks > 0:
+                                            percentage = round((total_score / max_marks) * 100, 2)
+                                            skills_data[procedure_id]['scores'].append(percentage)
+                        except Exception as e:
+                            print(f"Error processing exam assignment: {str(e)}")
+                            continue
+            except Exception as e:
+                print(f"Error fetching procedure data: {str(e)}")
+                continue
+        
+        # Process skills data for response
+        skills_list = []
+        for procedure_id, skill_data in skills_data.items():
+            avg_score = round(sum(skill_data['scores']) / len(skill_data['scores']), 2) if skill_data['scores'] else 0
+            
+            # Get grade letter
+            def get_grade_letter(percentage):
+                if percentage >= 90:
+                    return 'A'
+                elif percentage >= 80:
+                    return 'B'
+                elif percentage >= 70:
+                    return 'C'
+                elif percentage >= 60:
+                    return 'D'
+                else:
+                    return 'E'
+            
+            grade = get_grade_letter(avg_score) if avg_score > 0 else '-'
+            
+            # Sort OSCE levels
+            osce_levels_list = sorted(list(skill_data['osce_levels']))
+            osce_levels_str = ', '.join(osce_levels_list) if osce_levels_list else 'N/A'
+            
+            skills_list.append({
+                'procedure_id': procedure_id,
+                'name': skill_data['name'],
+                'category': skill_data['category'],
+                'osce_levels': osce_levels_str,
+                'students_attempted': len(skill_data['students']),
+                'average_score': avg_score,
+                'grade': grade
+            })
+        
+        # Calculate summary KPIs
+        total_skills = len(skills_list)
+        highest_skill = None
+        lowest_skill = None
+        
+        if skills_list:
+            # Sort by average score to find highest and lowest
+            sorted_by_score = sorted(skills_list, key=lambda x: x['average_score'], reverse=True)
+            highest_skill = sorted_by_score[0]
+            lowest_skill = sorted_by_score[-1]
+        
+        # Calculate skills distribution for pie chart
+        distribution = {
+            'above_90': 0,
+            'between_80_90': 0,
+            'between_70_80': 0,
+            'between_60_70': 0,
+            'below_60': 0
+        }
+        
+        for skill in skills_list:
+            score = skill['average_score']
+            if score >= 90:
+                distribution['above_90'] += 1
+            elif score >= 80:
+                distribution['between_80_90'] += 1
+            elif score >= 70:
+                distribution['between_70_80'] += 1
+            elif score >= 60:
+                distribution['between_60_70'] += 1
+            else:
+                distribution['below_60'] += 1
+        
+        return JsonResponse({
+            'success': True,
+            'total_skills': total_skills,
+            'highest_skill': highest_skill,
+            'lowest_skill': lowest_skill,
+            'skills': skills_list,
+            'distribution': distribution
+        })
+        
+    except Exception as e:
+        print(f"Error fetching skills for category: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@csrf_exempt
+def fetch_osce_report_optimized(request):
+    """
+    OPTIMIZED OSCE Report - Reads from pre-computed metrics
+    
+    Works for BOTH institutions and hospitals
+    
+    This endpoint is 20x faster because it reads from pre-computed
+    SemesterMetrics and UnitMetrics collections instead of computing
+    everything on-demand.
+    
+    Usage:
+        GET /api/osce-report/?unit_name=DJ%20Sanghvi%20College&academic_year=2025&semester=1
+        GET /api/osce-report/?unit_name=City%20Hospital&academic_year=2025&semester=1
+    
+    Pre-requisites:
+        - Run: python manage.py process_metric_queue every 5 minutes via cron
+        - Frontend must queue updates via MetricUpdateQueue collection
+    """
+    try:
+        # Get filter parameters
+        # Support multiple parameter formats:
+        # 1. unit_name (direct) - preferred
+        # 2. institution_name (backward compatibility)
+        # 3. institution_id + institution_type (from frontend) - convert to unit_name
+        unit_name = request.GET.get('unit_name') or request.GET.get('institution_name')
+        institution_id = request.GET.get('institution_id')
+        institution_type = request.GET.get('institution_type')
+        academic_year = request.GET.get('academic_year')
+        semester = request.GET.get('semester', 'All')
+        osce_level = request.GET.get('osce_level', 'All')
+        skill = request.GET.get('skill', '')
+        
+        # Convert institution_id + institution_type to unit_name if needed
+        if not unit_name and institution_id and institution_type:
+            if institution_type == 'institution':
+                from assessments.models import Institution
+                try:
+                    inst = Institution.objects.get(id=institution_id)
+                    unit_name = inst.name
+                except Institution.DoesNotExist:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Institution not found'
+                    }, status=404)
+            elif institution_type == 'hospital':
+                from assessments.models import Hospital
+                try:
+                    hosp = Hospital.objects.get(id=institution_id)
+                    unit_name = hosp.name
+                except Hospital.DoesNotExist:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Hospital not found'
+                    }, status=404)
+        
+        if not unit_name or not academic_year:
+            return JsonResponse({
+                'success': False,
+                'error': 'unit_name (or institution_name or institution_id+institution_type) and academic_year are required'
+            }, status=400)
+        
+        # Check if metrics are available
+        doc_id = f"{unit_name}_{academic_year}"
+        unit_doc = db.collection('UnitMetrics').document(doc_id).get()
+        
+        if not unit_doc.exists:
+            return JsonResponse({
+                'success': False,
+                'error': 'No pre-computed metrics found. Please wait for metrics to be computed.',
+                'hint': 'Run: python manage.py process_metric_queue'
+            }, status=404)
+        
+        unit_data = unit_doc.to_dict()
+        
+        # ==========================================
+        # SCENARIO 1: ALL SEMESTERS (No filters)
+        # ==========================================
+        if semester == 'All' and osce_level == 'All' and not skill:
+            semester_breakdown = unit_data.get('semester_breakdown', {})
+            
+            # Convert to semester_wise_performance format
+            semester_wise_performance = []
+            for sem_num, sem_data in sorted(semester_breakdown.items(), key=lambda x: int(x[0]) if x[0].isdigit() else 0):
+                semester_wise_performance.append({
+                    'semester': str(sem_num),
+                    'num_students': sem_data.get('total_students', 0),
+                    'num_osces': sem_data.get('osces_conducted', 0),
+                    'average_score': sem_data.get('avg_score', 0),
+                    'pass_percentage': sem_data.get('pass_rate', 0),
+                    'most_recent_date': 'N/A',  # TODO: Add to pre-computed data
+                    'osce_type': 'Mixed'  # TODO: Add to pre-computed data
+                })
+            
+            # Convert category_performance to category_wise_performance format
+            category_wise_performance = []
+            for category in ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Pre-Procedure', 'Critical Thinking']:
+                category_wise_performance.append({
+                    'category': category,
+                    'percentage': unit_data.get('category_performance', {}).get(category)
+                })
+            
+            total_students = unit_data.get('total_students', 0)
+            students_assessed = unit_data.get('students_assessed', 0)
+            total_osces = unit_data.get('total_osces', 0)
+            skills_evaluated = unit_data.get('skills_evaluated', 0)
+            assessment_rate = round((students_assessed / total_students * 100), 2) if total_students else 0
+            
+            return JsonResponse({
+                'success': True,
+                'display_mode': 'overall',  # Indicates overall institutional view
+                'total_students_enrolled': total_students,
+                'students_assessed': students_assessed,
+                'total_osce_conducted': total_osces,
+                'assessment_rate': assessment_rate,
+                'skills_evaluated': skills_evaluated,
+                'average_institution_score': unit_data.get('avg_score', 0),
+                'grade_letter': _get_grade_letter(unit_data.get('avg_score', 0)),
+                'pass_rate': unit_data.get('pass_rate', 0),
+                'filter_year': academic_year,
+                'semester_wise_performance': semester_wise_performance,
+                'category_wise_performance': category_wise_performance,
+                'completed_exam_scores': [],  # Not needed for overall view
+                'data_source': 'pre_computed',
+                'unit_type': unit_data.get('unit_type', 'institute'),  # Include unit type
+                'last_updated': unit_data.get('last_updated')
+            })
+        
+        # ==========================================
+        # SCENARIO 2: SPECIFIC SEMESTER (FULL ANALYTICS)
+        # ==========================================
+        if semester != 'All':
+            sem_doc_id = f"{unit_name}_{academic_year}_{semester}"
+            sem_doc = db.collection('SemesterMetrics').document(sem_doc_id).get()
+            
+            if not sem_doc.exists:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'No metrics found for semester {semester}'
+                }, status=404)
+            
+            sem_data = sem_doc.to_dict()
+            
+            # Convert category_performance
+            category_wise_performance = []
+            for category in ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Pre-Procedure', 'Critical Thinking']:
+                category_wise_performance.append({
+                    'category': category,
+                    'percentage': sem_data.get('category_performance', {}).get(category)
+                })
+            
+            # Get latest OSCE details
+            latest_osce_data = sem_data.get('latest_osce', {})
+            latest_osce_str = 'N/A'
+            if latest_osce_data:
+                latest_osce_str = f"{latest_osce_data.get('osce_level', 'N/A')} OSCE - {latest_osce_data.get('date_conducted', 'N/A')}"
+            
+            # Build semester_wise_performance
+            osce_timeline = sem_data.get('osce_activity_timeline', [])
+            most_recent_date = 'N/A'
+            osce_type = 'Mixed'
+            
+            if osce_timeline:
+                # Get the highest priority OSCE
+                most_recent_date = osce_timeline[0].get('date_conducted', 'N/A')
+                osce_type = osce_timeline[0].get('osce_level', 'Mixed')
+            
+            semester_wise_performance = [{
+                'semester': semester,
+                'num_students': sem_data.get('total_students', 0),
+                'num_osces': sem_data.get('osces_conducted', 0),
+                'average_score': sem_data.get('avg_score', 0),
+                'pass_percentage': sem_data.get('pass_rate', 0),
+                'most_recent_date': most_recent_date,
+                'osce_type': osce_type
+            }]
+            
+            # Build COMPLETE semester dashboard with ALL data
+            semester_dashboard = {
+                'total_students': sem_data.get('total_students', 0),
+                'num_assessors': sem_data.get('num_assessors', 0),
+                'osces_conducted': sem_data.get('osces_conducted', 0),
+                'latest_osce': latest_osce_str,
+                'average_score': sem_data.get('avg_score', 0),
+                'grade_letter': sem_data.get('grade_letter', 'D'),
+                'pass_rate': sem_data.get('pass_rate', 0),
+                'semester_name': f"Semester {semester}",
+                'academic_year': academic_year,
+                'osce_activity_timeline': sem_data.get('osce_activity_timeline', []),
+                'student_batch_report': sem_data.get('student_batch_report', [])
+            }
+            
+            # Build skills list (for category-wise drill-down)
+            skills_performance = sem_data.get('skills_performance', {})
+            skills_by_category = defaultdict(list)
+            
+            for skill_id, skill_data in skills_performance.items():
+                category = skill_data.get('category', 'Unknown')
+                skills_by_category[category].append({
+                    'skill_id': skill_id,
+                    'skill_name': skill_data.get('skill_name', 'Unknown'),
+                    'category': category,  # Include category in skill data
+                    'attempts': skill_data.get('attempts', 0),
+                    'students_attempted': skill_data.get('students_attempted', 0),
+                    'avg_score': skill_data.get('avg_score', 0),
+                    'pass_rate': skill_data.get('pass_rate', 0),
+                    'highest_score': skill_data.get('highest_score', 0),
+                    'lowest_score': skill_data.get('lowest_score', 0),
+                    'osce_types': skill_data.get('osce_types', []),
+                    'station_breakdown': skill_data.get('station_breakdown', {})
+                })
+            
+            return JsonResponse({
+                'success': True,
+                'display_mode': 'semester',  # Indicates semester-specific view
+                'total_students_enrolled': sem_data.get('total_students', 0),
+                'students_assessed': sem_data.get('students_assessed', 0),
+                'total_osce_conducted': sem_data.get('osces_conducted', 0),
+                'assessment_rate': round((sem_data.get('students_assessed', 0) / sem_data.get('total_students', 1) * 100), 2),
+                'skills_evaluated': sem_data.get('skills_evaluated', 0),
+                'average_institution_score': sem_data.get('avg_score', 0),
+                'grade_letter': sem_data.get('grade_letter', 'D'),
+                'pass_rate': sem_data.get('pass_rate', 0),
+                'filter_year': academic_year,
+                'semester_wise_performance': semester_wise_performance,
+                'category_wise_performance': category_wise_performance,
+                'completed_exam_scores': sem_data.get('raw_scores', []),
+                'grade_distribution': sem_data.get('grade_distribution', {}),
+                'semester_dashboard': semester_dashboard,
+                'skills_by_category': dict(skills_by_category),
+                'data_source': 'pre_computed',
+                'unit_type': sem_data.get('unit_type', 'institute'),  # Include unit type
+                'last_updated': sem_data.get('last_updated')
+            })
+        
+        # ==========================================
+        # SCENARIO 3: WITH FILTERS (OSCE Level or Procedure)
+        # ==========================================
+        # Filter pre-computed semester data based on OSCE level or procedure
+        
+        if (osce_level and osce_level != 'All') or skill:
+            # Must have semester selected for filtered views
+            if semester == 'All':
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Please select a specific semester to apply OSCE Level or Procedure filters'
+                }, status=400)
+            
+            # Get semester metrics
+            sem_doc_id = f"{unit_name}_{academic_year}_{semester}"
+            sem_doc = db.collection('SemesterMetrics').document(sem_doc_id).get()
+            
+            if not sem_doc.exists:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'No metrics found for semester {semester}'
+                }, status=404)
+            
+            sem_data = sem_doc.to_dict()
+            
+            # Filter data based on OSCE level or procedure
+            filtered_skills = {}
+            filtered_timeline = []
+            filtered_students = {}
+            filtered_scores = []
+            
+            # Filter skills_performance
+            skills_performance = sem_data.get('skills_performance', {})
+            for skill_id, skill_data in skills_performance.items():
+                osce_types = skill_data.get('osce_types', [])
+                
+                # Apply OSCE level filter
+                if osce_level and osce_level != 'All':
+                    if osce_level not in osce_types:
+                        continue
+                
+                # Apply procedure filter
+                if skill:
+                    if skill_id != skill:
+                        continue
+                
+                filtered_skills[skill_id] = skill_data
+            
+            # Filter OSCE activity timeline
+            osce_timeline = sem_data.get('osce_activity_timeline', [])
+            for osce in osce_timeline:
+                osce_type = osce.get('osce_level', '')
+                
+                # Apply OSCE level filter
+                if osce_level and osce_level != 'All':
+                    if osce_type != osce_level:
+                        continue
+                
+                # Apply procedure filter (check if procedure is in this OSCE)
+                if skill:
+                    # This requires checking if the skill was assessed in this OSCE
+                    # For now, we'll include all OSCEs (can be refined later)
+                    pass
+                
+                filtered_timeline.append(osce)
+            
+            # Filter student batch report (recalculate based on filtered data)
+            # This is complex, so for now we'll return full student list
+            # but indicate that scores are filtered
+            student_batch_report = sem_data.get('student_batch_report', [])
+            
+            # Recalculate aggregate metrics from filtered data
+            if filtered_skills:
+                all_skill_scores = []
+                for skill_data in filtered_skills.values():
+                    # We don't have individual scores, use avg_score * attempts as approximation
+                    avg = skill_data.get('avg_score', 0)
+                    attempts = skill_data.get('attempts', 0)
+                    # This is approximate
+                    all_skill_scores.extend([avg] * attempts)
+                
+                filtered_avg_score = round(sum(all_skill_scores) / len(all_skill_scores), 2) if all_skill_scores else 0
+                filtered_pass_rate = round(sum(1 for s in all_skill_scores if s >= 80) / len(all_skill_scores) * 100, 2) if all_skill_scores else 0
+            else:
+                filtered_avg_score = 0
+                filtered_pass_rate = 0
+            
+            # Calculate category performance from filtered skills
+            category_scores = defaultdict(list)
+            for skill_data in filtered_skills.values():
+                category = skill_data.get('category', 'Unknown')
+                avg_score = skill_data.get('avg_score', 0)
+                if avg_score > 0:
+                    category_scores[category].append(avg_score)
+            
+            category_wise_performance = []
+            for category in ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Pre-Procedure', 'Critical Thinking']:
+                if category in category_scores:
+                    avg = round(sum(category_scores[category]) / len(category_scores[category]), 2)
+                    category_wise_performance.append({
+                        'category': category,
+                        'percentage': avg
+                    })
+                else:
+                    category_wise_performance.append({
+                        'category': category,
+                        'percentage': None
+                    })
+            
+            # Build skills_by_category for filtered skills
+            skills_by_category = defaultdict(list)
+            for skill_id, skill_data in filtered_skills.items():
+                category = skill_data.get('category', 'Unknown')
+                skills_by_category[category].append({
+                    'skill_id': skill_id,
+                    'skill_name': skill_data.get('skill_name', 'Unknown'),
+                    'category': category,
+                    'attempts': skill_data.get('attempts', 0),
+                    'students_attempted': skill_data.get('students_attempted', 0),
+                    'avg_score': skill_data.get('avg_score', 0),
+                    'pass_rate': skill_data.get('pass_rate', 0),
+                    'highest_score': skill_data.get('highest_score', 0),
+                    'lowest_score': skill_data.get('lowest_score', 0),
+                    'osce_types': skill_data.get('osce_types', []),
+                    'station_breakdown': skill_data.get('station_breakdown', {})
+                })
+            
+            # Build semester_wise_performance (single row for filtered data)
+            semester_wise_performance = [{
+                'semester': semester,
+                'num_students': sem_data.get('total_students', 0),  # Keep total students
+                'num_osces': len(filtered_timeline),  # Filtered OSCEs count
+                'average_score': filtered_avg_score,
+                'pass_percentage': filtered_pass_rate,
+                'most_recent_date': filtered_timeline[0].get('date_conducted', 'N/A') if filtered_timeline else 'N/A',
+                'osce_type': filtered_timeline[0].get('osce_level', 'N/A') if filtered_timeline else 'N/A'
+            }]
+            
+            # Build semester dashboard
+            semester_dashboard = {
+                'total_students': sem_data.get('total_students', 0),
+                'num_assessors': sem_data.get('num_assessors', 0),
+                'osces_conducted': len(filtered_timeline),
+                'latest_osce': f"{filtered_timeline[0].get('osce_level', 'N/A')} OSCE - {filtered_timeline[0].get('date_conducted', 'N/A')}" if filtered_timeline else 'N/A',
+                'average_score': filtered_avg_score,
+                'grade_letter': _get_grade_letter(filtered_avg_score),
+                'pass_rate': filtered_pass_rate,
+                'semester_name': f"Semester {semester}",
+                'academic_year': academic_year,
+                'osce_activity_timeline': filtered_timeline,
+                'student_batch_report': student_batch_report  # Full list for now
+            }
+            
+            return JsonResponse({
+                'success': True,
+                'display_mode': 'filtered',  # Indicates filtered view (OSCE level or procedure)
+                'total_students_enrolled': sem_data.get('total_students', 0),
+                'students_assessed': sem_data.get('students_assessed', 0),
+                'total_osce_conducted': len(filtered_timeline),
+                'assessment_rate': round((sem_data.get('students_assessed', 0) / sem_data.get('total_students', 1) * 100), 2),
+                'skills_evaluated': len(filtered_skills),
+                'average_institution_score': filtered_avg_score,
+                'grade_letter': _get_grade_letter(filtered_avg_score),
+                'pass_rate': filtered_pass_rate,
+                'filter_year': academic_year,
+                'semester_wise_performance': semester_wise_performance,
+                'category_wise_performance': category_wise_performance,
+                'completed_exam_scores': [],  # Not available in filtered view
+                'grade_distribution': {},  # Not available in filtered view
+                'semester_dashboard': semester_dashboard,
+                'skills_by_category': dict(skills_by_category),
+                'data_source': 'pre_computed_filtered',
+                'unit_type': sem_data.get('unit_type', 'institute'),
+                'last_updated': sem_data.get('last_updated'),
+                'filter_applied': {
+                    'osce_level': osce_level if osce_level != 'All' else None,
+                    'procedure': skill if skill else None
+                }
+            })
+        
+        # If we reach here, no special filtering needed, return error
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid filter combination'
+        }, status=400)
+        
+    except Exception as e:
+        print(f"Error in optimized report: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+def _get_grade_letter(percentage):
+    """Helper function to convert percentage to grade letter"""
+    if percentage >= 90:
+        return 'A'
+    elif percentage >= 80:
+        return 'B'
+    elif percentage >= 70:
+        return 'C'
+    elif percentage >= 60:
+        return 'D'
+    else:
+        return 'E'
+
+
+@csrf_exempt
+def view_metrics_data(request):
+    """
+    Frontend page to view SemesterMetrics and UnitMetrics data
+    """
+    return render(request, 'assessments/metrics_viewer.html')
+
+
+@csrf_exempt
+def fetch_semester_metrics(request):
+    """
+    API endpoint to fetch all SemesterMetrics documents with optional OSCE level filtering
+
+    Query Parameters:
+        - unit_name: Filter by unit name (optional)
+        - year: Filter by year (optional)
+        - semester: Filter by semester (optional)
+        - osce_level: Filter by OSCE level - 'Classroom', 'Mock', 'Final', or 'All' (optional, default: 'All')
+    """
+    try:
+        import os
+        from dotenv import load_dotenv
+        from firebase_admin import firestore
+
+        load_dotenv()
+        firebase_database = os.getenv('FIREBASE_DATABASE')
+        db = firestore.client(database_id=firebase_database) if firebase_database else firestore.client()
+
+        # Build query
+        query = db.collection('SemesterMetrics')
+
+        # Apply filters
+        unit_name = request.GET.get('unit_name')
+        year = request.GET.get('year')
+        semester = request.GET.get('semester')
+        osce_level = request.GET.get('osce_level', 'All')
+
+        if unit_name:
+            query = query.where('unit_name', '==', unit_name)
+        if year:
+            query = query.where('year', '==', year)
+        if semester:
+            query = query.where('semester', '==', semester)
+
+        # Fetch documents
+        docs = list(query.stream())
+
+        # Convert to JSON-serializable format
+        results = []
+        for doc in docs:
+            data = doc.to_dict()
+
+            # Handle OSCE level filtering
+            if osce_level and osce_level != 'All':
+                # Extract data from osce_type_breakdown if available
+                osce_type_breakdown = data.get('osce_type_breakdown', {})
+                if osce_level in osce_type_breakdown:
+                    # Replace top-level metrics with OSCE-type-specific metrics
+                    type_data = osce_type_breakdown[osce_level]
+
+                    # Update key metrics with OSCE-type-specific values
+                    data['raw_scores'] = type_data.get('raw_scores', [])
+                    data['osces_conducted'] = type_data.get('osces_conducted', 0)
+                    data['total_students'] = type_data.get('total_students', 0)
+                    data['assessed_student_ids'] = type_data.get('assessed_student_ids', [])
+                    data['avg_score'] = type_data.get('avg_score', 0)
+                    data['pass_rate'] = type_data.get('pass_rate', 0)
+                    data['student_batch_report'] = type_data.get('student_batch_report', [])
+
+                    # Update skills_performance if available in type breakdown
+                    if 'skills_performance' in type_data:
+                        data['skills_performance'] = type_data['skills_performance']
+                else:
+                    # OSCE level not found, skip this document or return empty data
+                    continue
+
+            # Convert Firestore timestamps to ISO strings
+            if 'last_updated' in data and data['last_updated']:
+                try:
+                    data['last_updated'] = data['last_updated'].isoformat()
+                except:
+                    data['last_updated'] = str(data['last_updated'])
+
+            # Convert sets to lists for JSON serialization
+            if 'assessed_student_ids' in data and isinstance(data['assessed_student_ids'], set):
+                data['assessed_student_ids'] = list(data['assessed_student_ids'])
+
+            results.append({
+                'doc_id': doc.id,
+                'data': data
+            })
+
+        return JsonResponse({
+            'success': True,
+            'count': len(results),
+            'documents': results
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def fetch_unit_metrics(request):
+    """
+    API endpoint to fetch all UnitMetrics documents
+
+    Query Parameters:
+        - unit_name: Filter by unit name (optional)
+        - year: Filter by year (optional)
+    """
+    try:
+        import os
+        from dotenv import load_dotenv
+        from firebase_admin import firestore
+
+        load_dotenv()
+        firebase_database = os.getenv('FIREBASE_DATABASE')
+        db = firestore.client(database_id=firebase_database) if firebase_database else firestore.client()
+
+        # Build query
+        query = db.collection('UnitMetrics')
+
+        # Apply filters
+        unit_name = request.GET.get('unit_name')
+        year = request.GET.get('year')
+
+        if unit_name:
+            query = query.where('unit_name', '==', unit_name)
+        if year:
+            query = query.where('year', '==', year)
+
+        # Fetch documents
+        docs = list(query.stream())
+
+        # Convert to JSON-serializable format
+        results = []
+        for doc in docs:
+            data = doc.to_dict()
+
+            # Convert Firestore timestamps to ISO strings
+            if 'last_updated' in data and data['last_updated']:
+                try:
+                    data['last_updated'] = data['last_updated'].isoformat()
+                except:
+                    data['last_updated'] = str(data['last_updated'])
+
+            results.append({
+                'doc_id': doc.id,
+                'data': data
+            })
+
+        return JsonResponse({
+            'success': True,
+            'count': len(results),
+            'documents': results
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def fetch_candidate_students(request):
+    """
+    API endpoint to fetch students for Candidate Report
+    Fetches all enrolled students from Batch collection, not just those who completed OSCEs
+
+    Query Parameters:
+        - unit_name: Filter by unit name (required)
+        - academic_year: Filter by academic year (required)
+        - semester: Filter by semester (required)
+    """
+    try:
+        import os
+        from dotenv import load_dotenv
+        from firebase_admin import firestore
+        import logging
+
+        logger = logging.getLogger('assessments')
+
+        load_dotenv()
+        firebase_database = os.getenv('FIREBASE_DATABASE')
+        db = firestore.client(database_id=firebase_database) if firebase_database else firestore.client()
+
+        # Get query parameters
+        unit_name = request.GET.get('unit_name')
+        academic_year = request.GET.get('academic_year')
+        semester = request.GET.get('semester')
+
+        logger.info(f"🔍 Fetch candidate students - Params: unit_name={unit_name}, year={academic_year}, semester={semester}")
+
+        # Validate required parameters
+        if not unit_name or not academic_year or not semester:
+            logger.warning(f"⚠️ Missing parameters - unit_name={unit_name}, year={academic_year}, semester={semester}")
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing required parameters: unit_name, academic_year, semester'
+            }, status=400)
+
+        # Fetch students from Batches collection (all enrolled students)
+        # First, get the institution/hospital reference from InstituteNames or HospitalNames
+        institution_type = None
+        institution_ref = None
+
+        logger.info(f"🔍 Searching for unit: '{unit_name}'")
+
+        # Try to find in InstituteNames collection (field: instituteName)
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        institutions = db.collection('InstituteNames').where(
+            filter=FieldFilter('instituteName', '==', unit_name)
+        ).limit(1).stream()
+        for inst in institutions:
+            institution_ref = inst.reference
+            institution_type = 'institution'
+            logger.info(f"  ✅ Found in InstituteNames collection (ref: {institution_ref.path})")
+            break
+
+        # If not found, try HospitalNames collection (field: hospitalName)
+        if not institution_ref:
+            hospitals = db.collection('HospitalNames').where(
+                filter=FieldFilter('hospitalName', '==', unit_name)
+            ).limit(1).stream()
+            for hosp in hospitals:
+                institution_ref = hosp.reference
+                institution_type = 'hospital'
+                logger.info(f"  ✅ Found in HospitalNames collection (ref: {institution_ref.path})")
+                break
+
+        if not institution_ref:
+            logger.warning(f"⚠️ Institution/Hospital '{unit_name}' not found in Firestore")
+            return JsonResponse({
+                'success': True,
+                'students': []
+            })
+
+        logger.info(f"📍 Using {institution_type} reference: {institution_ref.path}")
+
+        # Query batches by unit reference and year
+        query = db.collection('Batches') \
+            .where(filter=FieldFilter('unit', '==', institution_ref)) \
+            .where(filter=FieldFilter('yearOfBatch', '==', academic_year))
+
+        # Filter by semester if provided
+        if semester:
+            query = query.where(filter=FieldFilter('semester', '==', semester))
+
+        batches = list(query.stream())
+
+        logger.info(f"📊 Found {len(batches)} Batches documents for {unit_name}, year={academic_year}, semester={semester}")
+
+        # Extract unique students from all matching batches
+        students = []
+        seen_student_ids = set()
+
+        for batch in batches:
+            batch_data = batch.to_dict()
+
+            # Log batch details for debugging
+            learners = batch_data.get('learners', [])
+            logger.info(f"  📚 Batch {batch.id}: learners={len(learners)}")
+
+            # Check if learners is a list of references or a list of dictionaries
+            for idx, learner in enumerate(learners):
+                # If learner is a DocumentReference, fetch the document
+                if hasattr(learner, 'get') and hasattr(learner, 'path'):
+                    # It's a Firestore DocumentReference
+                    learner_doc = learner.get()
+                    if learner_doc.exists:
+                        learner_data = learner_doc.to_dict()
+                        learner_id = learner_doc.id
+                        learner_name = learner_data.get('name', '')
+
+                        if learner_id and learner_id not in seen_student_ids:
+                            students.append({
+                                'id': learner_id,
+                                'name': learner_name
+                            })
+                            seen_student_ids.add(learner_id)
+                            logger.info(f"    👤 Added student: {learner_name} ({learner_id})")
+                else:
+                    # It's a dictionary
+                    learner_id = learner.get('learner_id', '') if isinstance(learner, dict) else ''
+                    learner_name = learner.get('name', '') if isinstance(learner, dict) else ''
+
+                    if learner_id and learner_id not in seen_student_ids:
+                        students.append({
+                            'id': learner_id,
+                            'name': learner_name
+                        })
+                        seen_student_ids.add(learner_id)
+                        logger.info(f"    👤 Added student: {learner_name} ({learner_id})")
+
+        # Sort students by name
+        students.sort(key=lambda x: x['name'])
+
+        logger.info(f"✅ Returning {len(students)} unique students from {unit_name}")
+
+        return JsonResponse({
+            'success': True,
+            'students': students
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        logger.error(f"❌ Error fetching students: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def fetch_candidate_student_data(request):
+    """
+    API endpoint to fetch individual student performance data for Candidate Report
+    Returns pre-computed metrics from SemesterMetrics.student_batch_report
+
+    Query Parameters:
+        - unit_name: Filter by unit name (required)
+        - academic_year: Filter by academic year (required)
+        - semester: Filter by semester (required)
+        - student_id: Student ID (required)
+    """
+    try:
+        import os
+        from dotenv import load_dotenv
+        from firebase_admin import firestore
+        import logging
+
+        logger = logging.getLogger('assessments')
+
+        load_dotenv()
+        firebase_database = os.getenv('FIREBASE_DATABASE')
+        db = firestore.client(database_id=firebase_database) if firebase_database else firestore.client()
+
+        # Get query parameters
+        unit_name = request.GET.get('unit_name')
+        academic_year = request.GET.get('academic_year')
+        semester = request.GET.get('semester')
+        student_id = request.GET.get('student_id')
+
+        logger.info(f"🔍 Fetch candidate student data - unit={unit_name}, year={academic_year}, sem={semester}, student={student_id}")
+
+        # Validate required parameters
+        if not all([unit_name, academic_year, semester, student_id]):
+            logger.warning(f"⚠️ Missing parameters")
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing required parameters: unit_name, academic_year, semester, student_id'
+            }, status=400)
+
+        # Query SemesterMetrics to get student_batch_report
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        query = db.collection('SemesterMetrics') \
+            .where(filter=FieldFilter('unit_name', '==', unit_name)) \
+            .where(filter=FieldFilter('year', '==', academic_year)) \
+            .where(filter=FieldFilter('semester', '==', semester))
+
+        docs = list(query.stream())
+
+        if not docs:
+            logger.warning(f"⚠️ No SemesterMetrics found")
+            return JsonResponse({
+                'success': False,
+                'error': 'No data found for this semester'
+            }, status=404)
+
+        # Get student_batch_report from the first matching document
+        data = docs[0].to_dict()
+        student_batch_report = data.get('student_batch_report', [])
+
+        # Find the specific student
+        student_data = None
+        for student in student_batch_report:
+            # Match by name, user_id, student_name, or learner_id
+            if (student.get('name') == student_id or
+                student.get('user_id') == student_id or
+                str(student.get('user_id')) == str(student_id) or
+                student.get('student_name') == student_id or
+                student.get('learner_id') == student_id or
+                str(student.get('learner_id')) == str(student_id)):
+                student_data = student
+                logger.info(f"✅ Matched student by user_id: {student.get('user_id')}, name: {student.get('name')}")
+                break
+
+        if not student_data:
+            # Debug: log what students are available
+            logger.warning(f"⚠️ Student '{student_id}' not found in batch report")
+            logger.info(f"  Available students in batch_report: {len(student_batch_report)}")
+            if student_batch_report and len(student_batch_report) > 0:
+                logger.info(f"  Sample student user_ids: {[s.get('user_id') for s in student_batch_report[:3]]}")
+                logger.info(f"  Sample student names: {[s.get('name') for s in student_batch_report[:3]]}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Student {student_id} not found in this semester'
+            }, status=404)
+
+        logger.info(f"✅ Found student data for {student_id}")
+
+        # Extract metrics (all pre-computed)
+        response_data = {
+            'success': True,
+            'student_name': student_data.get('student_name', ''),
+            'overall_avg': student_data.get('overall_avg', 0),
+            'overall_grade': student_data.get('overall_grade', ''),
+            'classroom_avg': student_data.get('classroom_avg', 0),
+            'mock_avg': student_data.get('mock_avg', 0),
+            'final_avg': student_data.get('final_avg', 0),
+            'exam_attempts': student_data.get('exam_attempts', []),
+            'category_breakdown': student_data.get('category_breakdown', {}),
+            'procedure_breakdown': student_data.get('procedure_breakdown', {})
+        }
+
+        return JsonResponse(response_data)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        logger.error(f"❌ Error fetching student data: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)

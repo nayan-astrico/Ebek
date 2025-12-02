@@ -128,13 +128,7 @@
                                 </div>
                             </div>
 
-                            <div class="form-group">
-                                <div class="custom-control custom-switch">
-                                    <input type="checkbox" class="custom-control-input" id="is_active" name="is_active" 
-                                           {% if form.instance.is_active %}checked{% endif %}>
-                                    <label class="custom-control-label" for="is_active">Active</label>
-                                </div>
-                            </div>
+                            {# Status toggle is intentionally omitted here; status is controlled only from the table view #}
 
                             <div class="form-group text-right mb-0">
                                 <a href="{% url 'institution_list' %}" class="btn btn-light">Cancel</a>
