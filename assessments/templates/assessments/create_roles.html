@@ -775,6 +775,12 @@ function createRole() {
     const selectedPermissions = Array.from(document.querySelectorAll('.permission-checkbox:checked'))
         .map(checkbox => checkbox.value);
     
+    // Validate that at least one permission is selected
+    if (selectedPermissions.length === 0) {
+        showError("Can't create role with 0 permissions");
+        return;
+    }
+    
     const data = {
         name: formData.get('name'),
         description: formData.get('description'),
