@@ -915,6 +915,10 @@ const limit = 10;
 let loading = false;
 let allLoaded = false;
 let searchQuery = '';
+// Tracks latest search context so stale async responses are ignored
+let currentSearchToken = 0;
+// Debounce timer for search input
+let searchDebounceTimer = null;
 
 // Helper function to safely get elements
 function getElement(id) {
@@ -946,7 +950,6 @@ function buildInstitutionQueryParams() {
     
     if (searchQuery && searchQuery.trim() !== '') {
         params.append('search', searchQuery.trim());
-        console.log('DEBUG: Adding search parameter:', searchQuery.trim());
     }
     
     // Add filter parameters
@@ -1022,6 +1025,10 @@ function renderInstitutionRow(inst) {
 function loadMoreInstitutions() {
     if (loading || allLoaded) return Promise.resolve();
     
+    // Capture the search context for this specific request
+    const requestSearchToken = currentSearchToken;
+    const requestSearchQuery = searchQuery;
+
     loading = true;
     setElementText('showMoreBtn', 'Loading...');
     setElementStyle('showMoreBtn', 'disabled', 'true');
@@ -1031,6 +1038,12 @@ function loadMoreInstitutions() {
     return fetch(apiUrl)
         .then(response => response.json())
         .then(data => {
+            // If the search has changed since this request was made, ignore this response
+            if (requestSearchToken !== currentSearchToken || requestSearchQuery !== searchQuery) {
+                console.log('DEBUG: Ignoring stale search response for:', requestSearchQuery);
+                return;
+            }
+
             console.log('DEBUG: API response:', data);
             
             const institutions = data.institutions || [];
@@ -1085,12 +1098,42 @@ function loadMoreInstitutions() {
         });
 }
 
-// Real-time search function (like courses)
+// Real-time search function - filters by Institution Name starting with search text
+// Uses debouncing to avoid excessive API calls while typing
 function filterInstitutions(searchText) {
-    searchQuery = searchText || '';
-    console.log('DEBUG: Real-time search triggered with:', searchQuery);
-    resetInstitutionList();
-    loadMoreInstitutions();
+    // Clear any existing debounce timer
+    if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+    }
+    
+    // Update search query immediately for UI responsiveness
+    const trimmedSearch = (searchText || '').trim();
+    
+    // If search is cleared, execute immediately (no debounce for clearing)
+    if (trimmedSearch === '' && searchQuery !== '') {
+        searchQuery = '';
+        currentSearchToken++;
+        resetInstitutionList();
+        loadMoreInstitutions();
+        return;
+    }
+    
+    // Debounce the API call - wait 300ms after user stops typing
+    searchDebounceTimer = setTimeout(function() {
+        // Trim the search text and update global searchQuery
+        searchQuery = trimmedSearch;
+        console.log('DEBUG: Debounced search triggered with:', searchQuery);
+        
+        // Increment search token so older async responses can be ignored
+        currentSearchToken++;
+        
+        // Reset list and reload with new search query
+        resetInstitutionList();
+        loadMoreInstitutions();
+        
+        // Clear the timer reference
+        searchDebounceTimer = null;
+    }, 300);
 }
 
 // Apply search with reset functionality (for button click)
@@ -1112,6 +1155,13 @@ function applySearch() {
 function resetInstitutionList() {
     offset = 0;
     allLoaded = false;
+    loading = false;  // Reset loading flag so new requests can be made
+    
+    // Clear any pending search debounce timer
+    if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = null;
+    }
     
     // Clear existing table content
     const tbody = getElement('institutionTableBody');

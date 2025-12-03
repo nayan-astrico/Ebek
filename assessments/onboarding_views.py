@@ -594,15 +594,10 @@ def institution_list_api(request):
     
     institutions = Institution.objects.all().order_by('-created_at') if request.user.has_all_permissions() else request.user.assigned_institutions.all().order_by('-created_at')
     
-    # Apply search filter if search query exists
+    # Apply search filter if search query exists - only search by Institution Name (starts with)
     if search_query:
         print(f"DEBUG: Applying institution search filter for: '{search_query}'")
-        institutions = institutions.filter(
-            Q(name__icontains=search_query) |
-            Q(address__icontains=search_query) |
-            Q(district__icontains=search_query) |
-            Q(state__icontains=search_query)
-        )
+        institutions = institutions.filter(name__istartswith=search_query)
     print(request.GET)
     
     # Apply other filters
@@ -2868,9 +2863,14 @@ def sync_strength_counts(request):
         # Count nurses from Firebase for hospitals
         for hospital in hospitals:
             try:
-                # Query Firebase for nurses in this hospital
-                nurses = db.collection('Users').where('role', '==', 'nurse').where('hospital_id', '==', str(hospital.id)).stream()
-                nurse_count = len(list(nurses))
+                # Query Firebase for nurses in this hospital.
+                nurses_query = db.collection('Users') \
+                    .where('role', '==', 'nurse') \
+                    .where('hospital', '==', hospital.name)
+
+                nurses = list(nurses_query.stream())
+                nurse_count = len(nurses)
+                print(f"DEBUG: Nurse count for {hospital.name}: {nurse_count}")
                 
                 # Update hospital nurse_strength
                 if hospital.nurse_strength != nurse_count:

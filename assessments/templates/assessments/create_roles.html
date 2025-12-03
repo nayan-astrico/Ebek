@@ -774,6 +774,16 @@ function createRole() {
     
     const selectedPermissions = Array.from(document.querySelectorAll('.permission-checkbox:checked'))
         .map(checkbox => checkbox.value);
+
+    // Ensure at least one permission is selected
+    if (selectedPermissions.length === 0) {
+        if (typeof showError === 'function') {
+            showError('Please select at least one permission for the role');
+        } else {
+            alert('Please select at least one permission for the role');
+        }
+        return;
+    }
     
     const data = {
         name: formData.get('name'),

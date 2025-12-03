@@ -5928,6 +5928,13 @@ def edit_role(request, role_id):
             
             if not role_name:
                 return JsonResponse({'error': 'Role name is required'}, status=400)
+
+            # Ensure at least one permission is selected
+            if not permission_codes:
+                return JsonResponse(
+                    {'error': 'At least one permission must be selected for a role'},
+                    status=400
+                )
             
             try:
                 role = CustomRole.objects.get(id=role_id)
