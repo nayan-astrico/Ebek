@@ -103,20 +103,16 @@
     </div>
 </div>
 
-<!-- Search and Filter Bar -->
+<!-- Search Bar -->
 <div class="search-filter-bar">
     <div class="search-box">
-        <input type="text" 
-               placeholder="Search assessors..." 
+        <i class="fas fa-search"></i>
+        <input type="text"
+               placeholder="Search assessors..."
                value="{{ search_query }}"
                id="assessorSearchInput"
                oninput="filterAssessors(this.value)">
     </div>
-    <button class="btn-filter" onclick="toggleFilterPanel()" id="filterBtn">
-        <i class="fas fa-filter"></i>
-        <span>Filters</span>
-        <span class="filter-badge" id="filterBadge" style="display: none;">0</span>
-    </button>
 </div>
 
 <!-- Filter Side Panel -->
@@ -213,7 +209,6 @@
                             <th>Full Name</th>
                             <th>Email</th>
                             <th>Mobile Number</th>
-                            <th>Speciality</th>
                             <!-- <th>Status</th> -->
                             {% if "edit_assessor" in request.user.get_all_permissions or "delete_assessor" in request.user.get_all_permissions or request.user.has_all_permissions %}
                             <th>Actions</th>
@@ -1077,8 +1072,7 @@ function renderAssessorRow(assessor) {
     var html = '<tr>' +
                '<td><div class="institution"><span>' + assessor.full_name + '</span></div></td>' +
                '<td>' + assessor.email + '</td>' +
-               '<td>' + assessor.phone_number + '</td>' +
-               '<td>' + (assessor.specialization ? assessor.specialization : '-') + '</td>' 
+               '<td>' + assessor.phone_number + '</td>' 
             //    +
             //    '<td><span class="badge ' + (assessor.is_active ? 'active' : 'inactive') + '">' + 
             //        (assessor.is_active ? 'Active' : 'Inactive') + '</span></td>';

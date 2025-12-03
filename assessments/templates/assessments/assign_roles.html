@@ -22,8 +22,9 @@
 <!-- Search Bar -->
 <div class="search-filter-bar">
     <div class="search-box">
-        <input type="text" 
-               placeholder="Search users..." 
+        <i class="fas fa-search"></i>
+        <input type="text"
+               placeholder="Search users..."
                id="userSearchInput"
                oninput="filterUsers(this.value)">
     </div>
@@ -35,7 +36,7 @@
 <!-- Create User Side Panel -->
 <div id="createUserPanel" class="side-panel">
     <div class="side-panel-header">
-        <h3 id="createUserTitle">Create New User</h3>
+        <h3 id="createUserTitle">Create User</h3>
         <button type="button" class="close" onclick="closeCreateUserPanel()">&times;</button>
     </div>
     <div class="side-panel-body">
@@ -72,7 +73,7 @@
                             <label for="takeSkillathon" class="access-label">
                                 <div class="access-info">
                                     <div class="access-name">Take Skillathons</div>
-                                    <div class="access-description">Allow user to participate in skillathon events</div>
+                                    <div class="access-description">Allow user to assess skillathon events</div>
                                 </div>
                             </label>
                         </div>
@@ -82,7 +83,7 @@
                             <label for="takeOSCE" class="access-label">
                                 <div class="access-info">
                                     <div class="access-name">Take OSCE</div>
-                                    <div class="access-description">Allow user to participate in OSCE exams</div>
+                                    <div class="access-description">Allow user to assess OSCE</div>
                                 </div>
                             </label>
                         </div>
@@ -186,7 +187,6 @@
     <table class="table" id="usersTable">
         <thead>
             <tr>
-                <th style="width:36px;"><input type="checkbox" id="selectAllUsers"></th>
                 <th>User</th>
                 <th>Email</th>
                 <th>Status</th>
@@ -712,8 +712,9 @@
     padding-top: 16px;
     border-top: 1px solid #e2e8f0;
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
+    gap: 12px;
 }
 
 /* Custom multiselect (chips + search) */
@@ -1888,7 +1889,6 @@ function renderUsers() {
     filteredUsers.forEach(user => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td><input type="checkbox" class="user-row-select" data-id="${user.id}"></td>
             <td>
                 <div class="user-info">
                     <div class="user-icon">${user.full_name.charAt(0).toUpperCase()}</div>

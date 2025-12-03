@@ -238,8 +238,9 @@ input:checked + .slider:before {
 <!-- Search and Filter Bar -->
 <div class="search-filter-bar">
     <div class="search-box">
-        <input type="text" 
-               placeholder="Search institutions..." 
+        <i class="fas fa-search"></i>
+        <input type="text"
+               placeholder="Search institutions..."
                value="{{ search_query }}"
                id="institutionSearchInput"
                oninput="filterInstitutions(this.value)">
@@ -390,7 +391,6 @@ input:checked + .slider:before {
                 <!-- <th>Group</th> -->
                 <th>State</th>
                 <th>Learners</th>
-                <th>Unit Head</th>
                 <th>Status</th>
                 {% if "edit_institute" in request.user.get_all_permissions or "delete_institute" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <th>Actions</th>
@@ -748,29 +748,43 @@ function initializeInstitutionForm() {
     // Function to toggle skillathon field based on onboarding type
     function toggleSkillathonField(onboardingType) {
         const skillathonFields = document.getElementById('skillathon-fields');
+        const skillathonLabel = document.getElementById('skillathon-label');
+        const skillathonSelect = document.querySelector('select[name="skillathon"]');
         console.log('Toggling skillathon field for onboarding type:', onboardingType);
         console.log('Skillathon fields element:', skillathonFields);
-        
+
         if (onboardingType === 'b2c') {
             skillathonFields.style.display = 'block';
+            if (skillathonSelect) {
+                skillathonSelect.required = true;
+            }
+            if (skillathonLabel) {
+                skillathonLabel.innerHTML = 'Skillathon Event <span style="color: #dc3545;">*</span>';
+            }
             console.log('Showing skillathon fields');
         } else {
             skillathonFields.style.display = 'none';
+            if (skillathonSelect) {
+                skillathonSelect.required = false;
+            }
+            if (skillathonLabel) {
+                skillathonLabel.innerHTML = 'Skillathon Event';
+            }
             console.log('Hiding skillathon fields');
         }
     }
-    
+
     // Find the onboarding type select element
     const onboardingTypeSelect = document.querySelector('select[name="onboarding_type"]');
     console.log('Onboarding type select element:', onboardingTypeSelect);
-    
+
     // Add event listener
     if (onboardingTypeSelect) {
         onboardingTypeSelect.addEventListener('change', function() {
             console.log('Onboarding type changed to:', this.value);
             toggleSkillathonField(this.value);
         });
-        
+
         // Set initial state
         console.log('Setting initial state for onboarding type:', onboardingTypeSelect.value);
         toggleSkillathonField(onboardingTypeSelect.value);
@@ -845,6 +859,8 @@ document.addEventListener('submit', function(e) {
             if (html.includes('form-group')) {
                 // Form has errors, re-render it
                 document.getElementById('institutionFormContainer').innerHTML = html;
+                // Re-initialize the form after re-rendering
+                initializeInstitutionForm();
             } else {
                 // Success: close panel and show success message
                 closeInstitutionFormPanel();
@@ -981,9 +997,6 @@ function renderInstitutionRow(inst) {
                '<!-- <td>' + (inst.group ? inst.group : '-') + '</td> -->' +
                '<td>' + (inst.state ? inst.state : '-') + '</td>' +
                '<td>' + (inst.total_strength ? inst.total_strength : '-') + '</td>' +
-               '<td>' +
-                   (inst.unit_head ? '<div class="unit-head"><span>' + inst.unit_head + '</span></div>' : '<span class="text-muted">-</span>') +
-               '</td>' +
                '<td>' +
                    '<label class="switch">' +
                        '<input type="checkbox" ' + (inst.is_active ? 'checked' : '') +

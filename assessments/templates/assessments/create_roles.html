@@ -22,8 +22,9 @@
 <!-- Search Bar -->
 <div class="search-filter-bar">
     <div class="search-box">
-        <input type="text" 
-               placeholder="Search roles..." 
+        <i class="fas fa-search"></i>
+        <input type="text"
+               placeholder="Search roles..."
                id="roleSearchInput"
                oninput="filterRoles(this.value)">
     </div>
@@ -52,20 +53,30 @@
                 <label>Permissions</label>
                 <div class="permissions-container">
                     <div class="permissions-header">
-                        <div class="permissions-controls">
-                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllPermissions()">
-                                <i class="fas fa-check-double"></i> Select All
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllPermissions()">
-                                <i class="fas fa-times"></i> Deselect All
-                            </button>
-                        </div>
-                        <div class="permissions-search">
-                            <input type="text" 
-                                   id="permissionSearch" 
-                                   placeholder="Search permissions..." 
-                                   class="form-control form-control-sm"
-                                   oninput="filterPermissions(this.value)">
+                        <div class="permissions-header-top">
+                            <div class="permissions-controls">
+                                <div class="permission-control-group">
+                                    <button type="button" class="btn-permission-control select-all-btn"
+                                            onclick="selectAllPermissions()"
+                                            title="Select all permissions">
+                                        <i class="fas fa-check-circle"></i>
+                                        <span>Select All</span>
+                                    </button>
+                                    <button type="button" class="btn-permission-control deselect-all-btn"
+                                            onclick="deselectAllPermissions()"
+                                            title="Deselect all permissions">
+                                        <i class="fas fa-times-circle"></i>
+                                        <span>Clear All</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="permissions-search">
+                                <input type="text"
+                                       id="permissionSearch"
+                                       placeholder="Search permissions..."
+                                       class="form-control form-control-sm"
+                                       oninput="filterPermissions(this.value)">
+                            </div>
                         </div>
                     </div>
                     
@@ -193,16 +204,74 @@
 
 .permissions-header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    gap: 16px;
     margin-bottom: 20px;
     padding-bottom: 16px;
     border-bottom: 2px solid #e2e8f0;
 }
 
+.permissions-header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
 .permissions-controls {
     display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+}
+
+.permission-control-group {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-permission-control {
+    display: flex;
+    align-items: center;
     gap: 8px;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: white;
+    border: 1.5px solid #e5e7eb;
+    color: #374151;
+}
+
+.btn-permission-control i {
+    font-size: 16px;
+}
+
+.select-all-btn:hover {
+    border-color: #10b981;
+    background: #f0fdf4;
+    color: #059669;
+}
+
+.select-all-btn:active {
+    transform: scale(0.98);
+    background: #e8f5e9;
+    border-color: #059669;
+}
+
+.deselect-all-btn:hover {
+    border-color: #ef4444;
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+.deselect-all-btn:active {
+    transform: scale(0.98);
+    background: #fee2e2;
+    border-color: #dc2626;
 }
 
 .permissions-search {
@@ -410,7 +479,8 @@
 }
 
 .permission-item .form-check-input:focus {
-    box-shadow: 0 0 0 3px rgba(241, 101, 100, 0.1);
+    outline: none;
+    box-shadow: none;
 }
 
 /* Scrollbar styling */
@@ -538,14 +608,30 @@
 @media (max-width: 768px) {
     .permissions-header {
         flex-direction: column;
+        gap: 16px;
+        align-items: stretch;
+    }
+
+    .permissions-header-top {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .permissions-controls {
+        flex-direction: column;
         gap: 12px;
         align-items: stretch;
     }
-    
-    .permissions-controls {
+
+    .permission-control-group {
+        width: 100%;
+    }
+
+    .btn-permission-control {
+        flex: 1;
         justify-content: center;
     }
-    
+
     .permissions-search {
         width: 100%;
     }
@@ -591,12 +677,48 @@
     .permissions-container {
         padding: 16px;
     }
-    
+
+    .permissions-header-top {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .permissions-controls {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .permission-control-group {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        gap: 8px;
+    }
+
+    .btn-permission-control {
+        padding: 10px 12px;
+        font-size: 12px;
+        width: 100%;
+    }
+
+    .btn-permission-control i {
+        font-size: 14px;
+    }
+
+    .permissions-search {
+        width: 100%;
+    }
+
+    .permissions-search input {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
     .category-actions {
         flex-direction: column;
         gap: 2px;
     }
-    
+
     .category-actions .btn {
         padding: 6px 8px;
         font-size: 10px;
@@ -699,25 +821,25 @@ function deselectCategoryPermissions(categoryName, event) {
 // Update category selection states and counts
 function updateCategoryStates() {
     const categories = document.querySelectorAll('.permission-category');
-    
+
     categories.forEach(category => {
         const categoryName = category.getAttribute('data-category');
         const checkboxes = category.querySelectorAll('.permission-checkbox');
         const checkedBoxes = category.querySelectorAll('.permission-checkbox:checked');
         const categoryHeader = category.querySelector('.category-header');
         const countElement = document.getElementById(`count-${categoryName}`);
-        
+
         const totalCount = checkboxes.length;
         const selectedCount = checkedBoxes.length;
-        
+
         // Update count display
         if (countElement) {
             countElement.textContent = `(${selectedCount}/${totalCount})`;
         }
-        
+
         // Update category header state
         categoryHeader.classList.remove('all-selected', 'partially-selected');
-        
+
         if (selectedCount === 0) {
             // No selection
         } else if (selectedCount === totalCount) {

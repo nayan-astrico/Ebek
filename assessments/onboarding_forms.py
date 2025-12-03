@@ -29,7 +29,7 @@ class GroupForm(forms.ModelForm):
         return name
 
 class InstitutionForm(forms.ModelForm):
-    
+
     class Meta:
         model = Institution
         fields = ['name', 'address', 'state', 'district', 'pin_code', 'onboarding_type', 'skillathon', 'allowed_to_take_classroom_test']
@@ -43,15 +43,25 @@ class InstitutionForm(forms.ModelForm):
             'skillathon': forms.Select(attrs={'class': 'form-control'}),
             'allowed_to_take_classroom_test': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Filter group queryset to show only institution type groups
         # Set skillathon queryset to show all available skillathons
         self.fields['skillathon'].queryset = SkillathonEvent.objects.all()
 
+    def clean(self):
+        cleaned_data = super().clean()
+        onboarding_type = cleaned_data.get("onboarding_type")
+        skillathon = cleaned_data.get("skillathon")
+
+        if onboarding_type == "b2c" and not skillathon:
+            self.add_error("skillathon", "This field is required for B2C onboarding.")
+
+        return cleaned_data
+
 class HospitalForm(forms.ModelForm):
-    
+
     class Meta:
         model = Hospital
         fields = ['name', 'address', 'state', 'district', 'pin_code', 'nurse_strength', 'number_of_beds', 'onboarding_type', 'skillathon', 'allowed_to_take_classroom_test']
@@ -66,12 +76,22 @@ class HospitalForm(forms.ModelForm):
             'skillathon': forms.Select(attrs={'class': 'form-control'}),
             'allowed_to_take_classroom_test': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Filter group queryset to show only hospital type groups
         # Set skillathon queryset to show all available skillathons
         self.fields['skillathon'].queryset = SkillathonEvent.objects.all()
+
+    def clean(self):
+        cleaned_data = super().clean()
+        onboarding_type = cleaned_data.get("onboarding_type")
+        skillathon = cleaned_data.get("skillathon")
+
+        if onboarding_type == "b2c" and not skillathon:
+            self.add_error("skillathon", "This field is required for B2C onboarding.")
+
+        return cleaned_data
 
 class LearnerForm(forms.ModelForm):
     learner_name = forms.CharField(label='Learner Name', max_length=255, required=True, widget=forms.TextInput(attrs={'class': 'form-control'}))
