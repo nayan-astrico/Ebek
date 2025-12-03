@@ -7,170 +7,212 @@
 <div class="page-container">
     <div class="container-fluid">
         <div class="row justify-content-center">
-            <div class="col-md-12">
+            <div>
                 <div class="card bg-white border-0">
                     <div class="card-body pt-4">
                         {% if action == 'Create' %}
-                        <form method="post" action="{% url 'hospital_create' %}" novalidate>
+                        <form method="post" action="{% url 'hospital_create' %}" novalidate id="hospitalForm">
                         {% else %}
-                        <form method="post" action="{% url 'hospital_edit' form.instance.pk %}" novalidate>
+                        <form method="post" action="{% url 'hospital_edit' form.instance.pk %}" novalidate id="hospitalForm">
                         {% endif %}
-                        {% csrf_token %}
-                        
-                        {% if form.non_field_errors %}
-                        <div class="alert alert-danger">
-                            {% for error in form.non_field_errors %}
-                            {{ error }}
-                            {% endfor %}
-                        </div>
-                        {% endif %}
-
-                        <div class="form-group">
-                            <label for="{{ form.name.id_for_label }}">Hospital Name</label>
-                            {{ form.name }}
-                            {% if form.name.errors %}
-                            <div class="invalid-feedback d-block">
-                                {% for error in form.name.errors %}
+                            {% csrf_token %}
+                            {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {% for error in form.non_field_errors %}
                                 {{ error }}
                                 {% endfor %}
                             </div>
                             {% endif %}
-                        </div>
 
-                        <div class="form-group">
-                            <label for="{{ form.onboarding_type.id_for_label }}">Onboarding Type</label>
-                            {{ form.onboarding_type }}
-                            {% if form.onboarding_type.errors %}
-                            <div class="invalid-feedback d-block">
-                                {% for error in form.onboarding_type.errors %}
-                                {{ error }}
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </div>
-
-                        <div class="form-group" id="skillathon-fields" style="display: none;">
-                            <label for="{{ form.skillathon.id_for_label }}">Skillathon Event</label>
-                            {{ form.skillathon }}
-                            {% if form.skillathon.errors %}
-                            <div class="invalid-feedback d-block">
-                                {% for error in form.skillathon.errors %}
-                                {{ error }}
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </div>
-
-                        <!-- <div class="form-group">
-                            <label for="{{ form.group.id_for_label }}">Group</label>
-                            {{ form.group }}
-                            {% if form.group.errors %}
-                            <div class="invalid-feedback d-block">
-                                {% for error in form.group.errors %}
-                                {{ error }}
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </div> -->
-
-                        <div class="form-group">
-                            <label for="{{ form.address.id_for_label }}">Address</label>
-                            {{ form.address }}
-                            {% if form.address.errors %}
-                            <div class="invalid-feedback d-block">
-                                {% for error in form.address.errors %}
-                                {{ error }}
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label for="{{ form.state.id_for_label }}">State</label>
-                                    {{ form.state }}
-                                    {% if form.state.errors %}
-                                    <div class="invalid-feedback d-block">
-                                        {% for error in form.state.errors %}
-                                        {{ error }}
-                                        {% endfor %}
-                                    </div>
-                                    {% endif %}
+                            <div class="form-group">
+                                <label for="{{ form.name.id_for_label }}" class="form-label required">Hospital Name</label>
+                                {{ form.name }}
+                                {% if form.name.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.name.errors %}
+                                    {{ error }}
+                                    {% endfor %}
                                 </div>
+                                {% endif %}
                             </div>
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label for="{{ form.district.id_for_label }}">District</label>
-                                    {{ form.district }}
-                                    {% if form.district.errors %}
-                                    <div class="invalid-feedback d-block">
-                                        {% for error in form.district.errors %}
-                                        {{ error }}
-                                        {% endfor %}
-                                    </div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label for="{{ form.pin_code.id_for_label }}">PIN Code</label>
-                                    {{ form.pin_code }}
-                                    {% if form.pin_code.errors %}
-                                    <div class="invalid-feedback d-block">
-                                        {% for error in form.pin_code.errors %}
-                                        {{ error }}
-                                        {% endfor %}
-                                    </div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
 
-                        
-                                <div class="form-group">
-                                    <label for="{{ form.number_of_beds.id_for_label }}">Number of Beds</label>
-                                    {{ form.number_of_beds }}
-                                    {% if form.number_of_beds.errors %}
-                                    <div class="invalid-feedback d-block">
-                                        {% for error in form.number_of_beds.errors %}
-                                        {{ error }}
-                                        {% endfor %}
-                                    </div>
-                                    {% endif %}
+                            <div class="form-group">
+                                <label for="{{ form.onboarding_type.id_for_label }}" class="form-label required">Onboarding Type</label>
+                                {{ form.onboarding_type }}
+                                {% if form.onboarding_type.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.onboarding_type.errors %}
+                                    {{ error }}
+                                    {% endfor %}
                                 </div>
-                                <div class="form-group">
-                                    <div class="custom-control custom-switch">
-                                        <input type="checkbox" class="custom-control-input" id="is_active" name="is_active" 
-                                               {% if form.instance.is_active %}checked{% endif %}>
-                                        <label class="custom-control-label" for="is_active">Active</label>
+                                {% endif %}
+                            </div>
+
+                            <div class="form-group" id="skillathon-fields" style="display: none;">
+                                <label for="{{ form.skillathon.id_for_label }}" class="form-label" id="skillathon-label">Skillathon Event</label>
+                                {{ form.skillathon }}
+                                {% if form.skillathon.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.skillathon.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- <div class="form-group">
+                                <label for="{{ form.group.id_for_label }}" class="form-label">Group</label>
+                                {{ form.group }}
+                                {% if form.group.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.group.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div> -->
+
+                            <div class="form-group">
+                                <label for="{{ form.address.id_for_label }}" class="form-label">Address</label>
+                                {{ form.address }}
+                                {% if form.address.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.address.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="form-group">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="form-group mb-md-0">
+                                            <label for="{{ form.state.id_for_label }}" class="form-label">State</label>
+                                            {{ form.state }}
+                                            {% if form.state.errors %}
+                                            <div class="invalid-feedback d-block">
+                                                {% for error in form.state.errors %}
+                                                {{ error }}
+                                                {% endfor %}
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-group mb-md-0">
+                                            <label for="{{ form.district.id_for_label }}" class="form-label">District</label>
+                                            {{ form.district }}
+                                            {% if form.district.errors %}
+                                            <div class="invalid-feedback d-block">
+                                                {% for error in form.district.errors %}
+                                                {{ error }}
+                                                {% endfor %}
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-group mb-md-0">
+                                            <label for="{{ form.pin_code.id_for_label }}" class="form-label">PIN Code</label>
+                                            {{ form.pin_code }}
+                                            {% if form.pin_code.errors %}
+                                            <div class="invalid-feedback d-block">
+                                                {% for error in form.pin_code.errors %}
+                                                {{ error }}
+                                                {% endfor %}
+                                            </div>
+                                            {% endif %}
+                                        </div>
                                     </div>
                                 </div>
+                            </div>
 
-                                <div class="form-group" style="display: none;">
-                                    <div class="custom-control custom-switch">
-                                        <input type="checkbox" class="custom-control-input" id="{{ form.allowed_to_take_classroom_test.id_for_label }}" name="allowed_to_take_classroom_test" 
-                                               {% if form.instance.allowed_to_take_classroom_test %}checked{% endif %}>
-                                        <label class="custom-control-label" for="{{ form.allowed_to_take_classroom_test.id_for_label }}">Allowed to Take Classroom Test</label>
-                                    </div>
+                            <div class="form-group">
+                                <label for="{{ form.number_of_beds.id_for_label }}" class="form-label">Number of Beds</label>
+                                {{ form.number_of_beds }}
+                                {% if form.number_of_beds.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.number_of_beds.errors %}
+                                    {{ error }}
+                                    {% endfor %}
                                 </div>
-        
-                                <div class="form-group text-right mb-0">
-                                    <a href="{% url 'hospital_list' %}" class="btn btn-light">Cancel</a>
-                                    <button type="submit" class="btn btn-primary ml-2" id="saveButton">
-                                        <span class="loader"></span>
-                                        <span class="btn-text" id="save-button">Save</span>
-                                    </button>
-                                </div>
-                        </div>
+                                {% endif %}
+                            </div>
 
-                        
-                    </form>
+                            <div class="form-group">
+                                <div class="custom-control custom-switch">
+                                    <input type="checkbox" class="custom-control-input" id="is_active" name="is_active"
+                                           {% if form.instance.is_active %}checked{% endif %}>
+                                    <label class="custom-control-label" for="is_active">Active</label>
+                                </div>
+                            </div>
+
+                            <div class="form-group" style="display: none;">
+                                <div class="custom-control custom-switch">
+                                    <input type="checkbox" class="custom-control-input" id="{{ form.allowed_to_take_classroom_test.id_for_label }}" name="allowed_to_take_classroom_test"
+                                           {% if form.instance.allowed_to_take_classroom_test %}checked{% endif %}>
+                                    <label class="custom-control-label" for="{{ form.allowed_to_take_classroom_test.id_for_label }}">Allowed to Take Classroom Test</label>
+                                </div>
+                            </div>
+
+                            <div class="form-group text-right mb-0">
+                                <a href="{% url 'hospital_list' %}" class="btn btn-light">Cancel</a>
+                                <button type="submit" class="btn btn-primary ml-2" id="saveButton">
+                                    <span class="loader"></span>
+                                    <span class="btn-text" id="save-button">Save</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
+<script>
+function initializeHospitalFormValidation() {
+    const onboardingTypeSelect = document.querySelector('select[name="onboarding_type"]');
+    const skillathonFields = document.getElementById('skillathon-fields');
+    const skillathonLabel = document.getElementById('skillathon-label');
+    const skillathonSelect = document.querySelector('select[name="skillathon"]');
+
+    function updateSkillathonRequired() {
+        const selectedType = onboardingTypeSelect.value.toLowerCase();
+        if (selectedType === 'b2c') {
+            skillathonFields.style.display = 'block';
+            skillathonSelect.required = true;
+            if (skillathonLabel) {
+                skillathonLabel.innerHTML = 'Skillathon Event <span style="color: #dc3545;">*</span>';
+            }
+        } else {
+            skillathonFields.style.display = 'none';
+            skillathonSelect.required = false;
+            if (skillathonLabel) {
+                skillathonLabel.innerHTML = 'Skillathon Event';
+            }
+        }
+    }
+
+    if (onboardingTypeSelect) {
+        onboardingTypeSelect.addEventListener('change', updateSkillathonRequired);
+        updateSkillathonRequired();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', initializeHospitalFormValidation);
+
+// Re-initialize when form is dynamically loaded
+const observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+        if (mutation.type === 'childList' && document.getElementById('hospitalFormContainer')?.innerHTML.includes('onboarding_type')) {
+            initializeHospitalFormValidation();
+        }
+    });
+});
+
+observer.observe(document.body, { childList: true, subtree: true });
+</script>
 
 {% endblock %} 

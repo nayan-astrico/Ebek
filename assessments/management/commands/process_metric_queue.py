@@ -59,7 +59,7 @@ class Command(BaseCommand):
         cutoff_time = datetime.now() - timedelta(minutes=300)
         
         queue_ref = db.collection('MetricUpdateQueue')\
-            .where('processed', '==', False)\
+            .where('processed', '==', True)\
             .limit(1000)
         
         queue_items = list(queue_ref.stream())
@@ -905,6 +905,11 @@ class Command(BaseCommand):
         # ============================================
         # Calculate separate metrics for each OSCE type (Classroom, Mock, Final)
         # This allows the API to return filtered metrics without recalculating
+        # IMPORTANT: enrolled_student_ids from PHASE 1 represents total students in batches
+        # This value should be preserved across all OSCE type breakdowns
+
+        # Store the total enrolled count before the loop
+        total_enrolled_students = len(enrolled_student_ids)
 
         osce_type_breakdown = {}
         for osce_type in ['Classroom', 'Mock', 'Final']:
@@ -1162,9 +1167,11 @@ class Command(BaseCommand):
 
             # Store OSCE type breakdown
             osce_type_breakdown[osce_type] = {
-                'total_students': len(type_student_overall_percentages),
+                'total_students': total_enrolled_students,  # ALWAYS use semester-level total enrolled (from Batches)
                 'students_assessed': len(type_completed_students),
+                'assessed_student_ids': list(type_completed_students),  # NEW: For deduplication in admin report
                 'osces_conducted': len(type_osce_timeline),  # Count of OSCEs for this type
+                'skills_evaluated': len(type_skills_perf),  # Count of unique skills for this OSCE type
                 'avg_score': type_avg_score,
                 'pass_rate': type_pass_rate,
                 'grade_letter': self._get_grade(type_avg_score),
@@ -1325,7 +1332,7 @@ class Command(BaseCommand):
         total_osces = 0
         assessed_student_ids = set()
         all_skills_evaluated = set()
-        all_category_scores = defaultdict(list)
+        all_category_student_percentages = defaultdict(list)  # Student-level percentages per category
         semester_breakdown = {}
         total_grade_dist = Counter()
 
@@ -1338,17 +1345,21 @@ class Command(BaseCommand):
             for student in sem_data.get('student_batch_report', []):
                 student_overall_percentages.append(student.get('overall_avg', 0))
 
+                # Collect student-level category breakdown
+                # Each student contributes their category averages
+                category_breakdown = student.get('category_breakdown', {})
+                for category, cat_data in category_breakdown.items():
+                    if cat_data and isinstance(cat_data, dict):
+                        avg_score = cat_data.get('avg_score')
+                        if avg_score is not None:
+                            all_category_student_percentages[category].append(avg_score)
+
             total_osces += sem_data.get('osces_conducted', 0)
 
             # Track students assessed and skills evaluated from each semester
             # Note: We track unique skills across all semesters
             all_skills_evaluated.update(sem_data.get('skills_performance', {}).keys())
             assessed_student_ids.update(sem_data.get('assessed_student_ids', []))
-
-            # Aggregate categories - collect scores and average later
-            for category, score in sem_data.get('category_performance', {}).items():
-                if score is not None:
-                    all_category_scores[category].append(score)
 
             # Aggregate grade distribution
             for grade, count in sem_data.get('grade_distribution', {}).items():
@@ -1365,10 +1376,13 @@ class Command(BaseCommand):
             }
 
         # Compute unit-level aggregations using STUDENT-LEVEL AVERAGING
-        # Average category scores across all students in all semesters
+        # Average category scores across all students in all semesters (Student-Average Method)
         category_performance = {}
-        for category, scores in all_category_scores.items():
-            category_performance[category] = round(sum(scores) / len(scores), 2) if scores else None
+        for category, student_scores in all_category_student_percentages.items():
+            if student_scores:
+                category_performance[category] = round(sum(student_scores) / len(student_scores), 2)
+            else:
+                category_performance[category] = None
 
         # Calculate average score from student percentages (TOTAL MARKS METHOD per METRICS_CALCULATION_GUIDE.md)
         avg_score = round(sum(student_overall_percentages) / len(student_overall_percentages), 2) if student_overall_percentages else 0

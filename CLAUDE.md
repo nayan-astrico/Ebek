@@ -200,33 +200,174 @@ GET /api/unit-metrics/?unit_name=DJ%20Sanghvi%20College&year=2025
 ### Admin Reports
 
 ```bash
-GET /api/admin-report/filter-options/
-GET /api/admin-report/kpis/
-GET /api/admin-report/skills-metrics/
-GET /api/admin-report/assessors-performance/
-GET /api/admin-report/usage-engagement/
-POST /api/admin-report/export-excel/
+# Admin report portal
+GET /admin-report-portal/ - Admin report dashboard UI
+
+# Admin report APIs
+GET /api/admin-report/filter-options/ - Get filter options (institutions, academic years, etc.)
+GET /api/admin-report/kpis/ - Get key performance indicators
+GET /api/admin-report/skills-metrics/ - Get skills-wise metrics
+GET /api/admin-report/assessors-performance/ - Get assessor performance data
+GET /api/admin-report/usage-engagement/ - Get usage and engagement metrics
+POST /api/admin-report/export-excel/ - Export report to Excel
+```
+
+### Skillathon Reports (Optimized)
+
+```bash
+# Skillathon metrics (pre-computed for performance)
+GET /fetch-exam-metrics/?skillathon_name=X&institution_name=Y - Pre-computed skillathon analytics
+GET /api/osce-report/?institution_name=X&academic_year=Y&semester=Z - OSCE report (pre-computed)
+
+# Helper endpoints
+GET /fetch-skillathons/ - Get list of skillathons
+POST /api/institute-based-skillathon/ - Get institutes for skillathon
+GET /exam-reports/ - Exam reports UI
+GET /metrics-viewer/ - Metrics viewer UI
 ```
 
 ### Exam Management
 
 ```bash
-GET /api/tests/<test_id>/
-POST /api/tests/<test_id>/update/
-DELETE /api/tests/<test_id>/delete/
-DELETE /api/batch-assignments/<ba_id>/delete/
-POST /update-test-status/<test_id>/<status>/
+GET /api/tests/<test_id>/ - Get exam details
+POST /api/tests/<test_id>/update/ - Update exam
+DELETE /api/tests/<test_id>/delete/ - Delete exam
+DELETE /api/batch-assignments/<ba_id>/delete/ - Delete batch assignment
+POST /update-test-status/<test_id>/<status>/ - Update exam status
+
+# Course & batch management
+GET /courses/ - List courses
+POST /courses/create/ - Create course
+POST /courses/<course_id>/toggle-status/ - Toggle course active/inactive
+POST /api/batches/<batch_id>/toggle-status/ - Toggle batch active/inactive
 ```
 
 ### Onboarding
 
-Most onboarding entities follow CRUD pattern:
+Most onboarding entities follow CRUD pattern with NEW status toggles:
 - List: `/onboarding/<entity>/`
 - Create: `/onboarding/<entity>/create/`
 - Edit: `/onboarding/<entity>/<pk>/edit/`
 - Delete: `/onboarding/<entity>/<pk>/delete/`
+- **NEW** Toggle Status: `/onboarding/<entity>/<pk>/toggle-status/`
 
 Entities: `groups`, `institutions`, `hospitals`, `learners`, `assessors`, `skillathon`
+
+**Bulk Operations (NEW):**
+```bash
+POST /onboarding/learners/bulk-upload/ - Upload learners in bulk
+POST /onboarding/learners/bulk-delete/ - Delete multiple learners
+GET /onboarding/learners/active-uploads/ - Get active upload sessions
+GET /onboarding/learners/upload-details/<session_key>/ - Get upload session details
+POST /onboarding/sync-strength-counts/ - Sync strength counts to Firestore
+
+# Helper endpoints
+GET /onboarding/learners/get-institutions-by-skillathon/ - Get institutions for skillathon
+GET /onboarding/learners/get-hospitals-by-skillathon/ - Get hospitals for skillathon
+```
+
+## Recent Changes (November 2024 - Present)
+
+### Admin Report Portal
+**Commit:** dd02696 (Nov 27 2025)
+- NEW FEATURE: Comprehensive admin reporting dashboard
+- Location: `/admin-report-portal/` endpoint
+- Includes: KPIs, skills metrics, assessor performance tracking, usage engagement
+- Export functionality to Excel reports
+- Template: `assessments/templates/assessments/admin_report_portal.html` (2596 lines)
+
+### Gender Metrics Fix (Critical)
+**Commit:** 24b99a9 (Nov 28 2025)
+- FIXED: `fetch_exam_metrics()` now uses **student-level gender calculations** (not exam-level)
+- Uses **Total Marks Method**: Aggregates all exam marks per student first, then calculates grade
+- Gender metrics now count each student **once** (not once per exam attempt)
+- Location: `assessments/views.py:2224-2260`
+- Ensures gender distribution reflects unique students, not exam volume
+
+### Status Management Features
+**Batch/Course Active/Inactive Toggles** (Nov 25-26 2025)
+- NEW ENDPOINTS:
+  - `courses/<course_id>/toggle-status/` - Toggle course active/inactive
+  - `batches/<batch_id>/toggle-status/` - Toggle batch active/inactive
+- When course marked inactive, automatically removed from all batches
+- When batch marked inactive, checks parent institution/hospital status
+- Prevents activating batch if parent unit is inactive
+
+**Institution/Hospital/Learner Status Toggles** (Nov 26 2025)
+- NEW ENDPOINTS:
+  - `/onboarding/institutions/<pk>/toggle-status/` - Toggle institution status
+  - `/onboarding/hospitals/<pk>/toggle-status/` - Toggle hospital status
+  - `/onboarding/learners/<pk>/toggle-status/` - Toggle learner status
+- Cascading effects: Inactive parent units affect child batches
+
+### Bulk Learner Upload Enhancements (Nov 2024)
+- Improved bulk upload UI with upload session tracking
+- NEW ENDPOINTS:
+  - `/onboarding/learners/bulk-upload/` - Upload learners
+  - `/onboarding/learners/active-uploads/` - Track active sessions
+  - `/onboarding/learners/upload-details/<session_key>/` - Get upload details
+  - `/onboarding/learners/bulk-delete/` - Delete multiple learners
+- Better error handling and progress tracking
+
+### Process Metric Queue Optimizations (Nov 27-28 2025)
+- **Assessor Name Lookup Caching**: Reduced Firestore queries via caching
+- **Exam-to-OSCE Mapping**: Phase 1.5 pre-computes exam assignment to OSCE context
+- **Queue Filter Bug Fix**: Changed from `processed == True` to `processed == False`
+  - Was incorrectly processing already-processed items
+  - Now correctly processes unprocessed items only
+
+### New Helper Endpoints
+- `onboarding/learners/get-institutions-by-skillathon/` - Get institutions for skillathon
+- `onboarding/learners/get-hospitals-by-skillathon/` - Get hospitals for skillathon
+- `onboarding/sync-strength-counts/` - Sync strength counts to Firestore
+
+---
+
+## Middleware
+
+### CheckInactiveUserMiddleware
+**File:** `assessments/middleware.py` (lines 6-62)
+**Purpose:** Automatically logs out inactive users on every request
+**Behavior:**
+- Checks if authenticated user's `is_active` status is still True
+- Refreshes user object from database on each request to detect status changes
+- Logs out user if marked inactive
+- Prevents inactive users from accessing the system
+- Excluded pages: login/logout routes
+**Configuration:** Registered in `INSTALLED_APPS` as middleware
+
+---
+
+## Testing Infrastructure
+
+**Current State:** NO automated test coverage
+- Empty `assessments/tests.py` (boilerplate only)
+- No test files, fixtures, or test infrastructure
+- All testing is currently manual
+
+**Future Testing Setup:**
+```bash
+# Install testing dependencies
+pip install pytest pytest-django pytest-cov factory-boy faker
+
+# Create test structure
+mkdir -p assessments/tests
+touch assessments/tests/__init__.py
+touch assessments/tests/conftest.py
+
+# Run tests
+pytest assessments/
+```
+
+**Test Coverage Priority:**
+1. Authentication & Permissions (critical - 240 test cases planned)
+2. OSCE Exam Flow (high - 40-50 test cases)
+3. Analytics & Reports (high - 30-40 test cases)
+4. Onboarding (medium - 25-35 test cases)
+5. Firebase Sync (medium - 15-20 test cases)
+6. API Endpoints (medium - 20-30 test cases)
+
+---
 
 ## Important Notes
 

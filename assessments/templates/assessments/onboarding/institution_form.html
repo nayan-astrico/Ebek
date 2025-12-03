@@ -49,7 +49,7 @@
                             </div>
 
                             <div class="form-group" id="skillathon-fields" style="display: none;">
-                                <label for="{{ form.skillathon.id_for_label }}" class="form-label">Skillathon Event</label>
+                                <label for="{{ form.skillathon.id_for_label }}" class="form-label" id="skillathon-label">Skillathon Event</label>
                                 {{ form.skillathon }}
                                 {% if form.skillathon.errors %}
                                 <div class="invalid-feedback d-block">
@@ -159,5 +159,48 @@
     </div>
 </div>
 
+<script>
+function initializeInstitutionFormValidation() {
+    const onboardingTypeSelect = document.querySelector('select[name="onboarding_type"]');
+    const skillathonFields = document.getElementById('skillathon-fields');
+    const skillathonLabel = document.getElementById('skillathon-label');
+    const skillathonSelect = document.querySelector('select[name="skillathon"]');
+
+    function updateSkillathonRequired() {
+        const selectedType = onboardingTypeSelect.value.toLowerCase();
+        if (selectedType === 'b2c') {
+            skillathonFields.style.display = 'block';
+            skillathonSelect.required = true;
+            if (skillathonLabel) {
+                skillathonLabel.innerHTML = 'Skillathon Event <span style="color: #dc3545;">*</span>';
+            }
+        } else {
+            skillathonFields.style.display = 'none';
+            skillathonSelect.required = false;
+            if (skillathonLabel) {
+                skillathonLabel.innerHTML = 'Skillathon Event';
+            }
+        }
+    }
+
+    if (onboardingTypeSelect) {
+        onboardingTypeSelect.addEventListener('change', updateSkillathonRequired);
+        updateSkillathonRequired();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', initializeInstitutionFormValidation);
+
+// Re-initialize when form is dynamically loaded
+const observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+        if (mutation.type === 'childList' && document.getElementById('institutionFormContainer')?.innerHTML.includes('onboarding_type')) {
+            initializeInstitutionFormValidation();
+        }
+    });
+});
+
+observer.observe(document.body, { childList: true, subtree: true });
+</script>
 
 {% endblock %} 

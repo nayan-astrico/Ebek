@@ -136,8 +136,8 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Year of Batch</label>
-                    <select class="form-control" id="yearOfBatch" name="yearOfBatch">
+                    <label>Year of Batch <span class="text-danger">*</span></label>
+                    <select class="form-control" id="yearOfBatch" name="yearOfBatch" required>
                         <option value="">Select Year</option>
                     </select>
                     <div class="error-message" id="yearOfBatchError"></div>
@@ -154,8 +154,8 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Semester</label>
-                    <select class="form-control" id="semester" name="semester">
+                    <label>Semester <span class="text-danger">*</span></label>
+                    <select class="form-control" id="semester" name="semester" required>
                         <option value="">Select Semester</option>
                         <option value="1">Semester 1</option>
                         <option value="2">Semester 2</option>
@@ -245,6 +245,15 @@
                         <div class="filter-type active" data-filter="unit" onclick="switchFilter('unit')">
                             <span>Unit Type</span>
                         </div>
+                        <div class="filter-type" data-filter="year" onclick="switchFilter('year')">
+                            <span>Year</span>
+                        </div>
+                        <div class="filter-type" data-filter="semester" onclick="switchFilter('semester')">
+                            <span>Semester</span>
+                        </div>
+                        <div class="filter-type" data-filter="status" onclick="switchFilter('status')">
+                            <span>Status</span>
+                        </div>
                     </div>
 
                     <!-- Filter Content (70%) -->
@@ -271,6 +280,109 @@
                                            onchange="updateSelectionCount('unit')"
                                            class="unit-checkbox">
                                     <span>Institution</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Year Content -->
+                        <div class="filter-content" id="year-content">
+                            <div class="filter-search">
+                                <input type="text" placeholder="Search years" onkeyup="filterOptions('year')">
+                                <div class="selection-count" id="yearSelectionCount">0 Year selected</div>
+                            </div>
+                            <div class="options-list" id="year-options">
+                                <label class="option-item select-all-item">
+                                    <input type="checkbox" id="selectAllYears" onchange="toggleSelectAll('year', this)">
+                                    <span><strong>Select All</strong></span>
+                                </label>
+                                <!-- Years will be populated dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Semester Content -->
+                        <div class="filter-content" id="semester-content">
+                            <div class="filter-search">
+                                <input type="text" placeholder="Search semesters" onkeyup="filterOptions('semester')">
+                                <div class="selection-count" id="semesterSelectionCount">0 Semester selected</div>
+                            </div>
+                            <div class="options-list" id="semester-options">
+                                <label class="option-item select-all-item">
+                                    <input type="checkbox" id="selectAllSemesters" onchange="toggleSelectAll('semester', this)">
+                                    <span><strong>Select All</strong></span>
+                                </label>
+                                <label class="option-item">
+                                    <input type="checkbox" name="semester" value="1"
+                                           onchange="updateSelectionCount('semester')"
+                                           class="semester-checkbox">
+                                    <span>Semester 1</span>
+                                </label>
+                                <label class="option-item">
+                                    <input type="checkbox" name="semester" value="2"
+                                           onchange="updateSelectionCount('semester')"
+                                           class="semester-checkbox">
+                                    <span>Semester 2</span>
+                                </label>
+                                <label class="option-item">
+                                    <input type="checkbox" name="semester" value="3"
+                                           onchange="updateSelectionCount('semester')"
+                                           class="semester-checkbox">
+                                    <span>Semester 3</span>
+                                </label>
+                                <label class="option-item">
+                                    <input type="checkbox" name="semester" value="4"
+                                           onchange="updateSelectionCount('semester')"
+                                           class="semester-checkbox">
+                                    <span>Semester 4</span>
+                                </label>
+                                <label class="option-item">
+                                    <input type="checkbox" name="semester" value="5"
+                                           onchange="updateSelectionCount('semester')"
+                                           class="semester-checkbox">
+                                    <span>Semester 5</span>
+                                </label>
+                                <label class="option-item">
+                                    <input type="checkbox" name="semester" value="6"
+                                           onchange="updateSelectionCount('semester')"
+                                           class="semester-checkbox">
+                                    <span>Semester 6</span>
+                                </label>
+                                <label class="option-item">
+                                    <input type="checkbox" name="semester" value="7"
+                                           onchange="updateSelectionCount('semester')"
+                                           class="semester-checkbox">
+                                    <span>Semester 7</span>
+                                </label>
+                                <label class="option-item">
+                                    <input type="checkbox" name="semester" value="8"
+                                           onchange="updateSelectionCount('semester')"
+                                           class="semester-checkbox">
+                                    <span>Semester 8</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Status Content -->
+                        <div class="filter-content" id="status-content">
+                            <div class="filter-search">
+                                <input type="text" placeholder="Search status" onkeyup="filterOptions('status')">
+                                <div class="selection-count" id="statusSelectionCount">0 Status selected</div>
+                            </div>
+                            <div class="options-list" id="status-options">
+                                <label class="option-item select-all-item">
+                                    <input type="checkbox" id="selectAllStatuses" onchange="toggleSelectAll('status', this)">
+                                    <span><strong>Select All</strong></span>
+                                </label>
+                                <label class="option-item">
+                                    <input type="checkbox" name="status" value="active"
+                                           onchange="updateSelectionCount('status')"
+                                           class="status-checkbox">
+                                    <span>Active</span>
+                                </label>
+                                <label class="option-item">
+                                    <input type="checkbox" name="status" value="inactive"
+                                           onchange="updateSelectionCount('status')"
+                                           class="status-checkbox">
+                                    <span>Inactive</span>
                                 </label>
                             </div>
                         </div>
@@ -1354,19 +1466,25 @@ function toggleSelectAll(category, selectAllCheckbox) {
     let checkboxSelector;
     if (category === 'unit') {
         checkboxSelector = '.unit-checkbox';
+    } else if (category === 'year') {
+        checkboxSelector = '.year-checkbox';
+    } else if (category === 'semester') {
+        checkboxSelector = '.semester-checkbox';
+    } else if (category === 'status') {
+        checkboxSelector = '.status-checkbox';
     } else {
         checkboxSelector = `input[name="${category}"]`;
     }
-    
+
     const checkboxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}`);
     const isChecked = selectAllCheckbox.checked;
-    
+
     checkboxes.forEach(checkbox => {
         checkbox.checked = isChecked;
         const changeEvent = new Event('change', { bubbles: true });
         checkbox.dispatchEvent(changeEvent);
     });
-    
+
     updateSelectionCount(category);
 }
 
@@ -1374,25 +1492,37 @@ function updateSelectionCount(category) {
     let checkboxSelector;
     if (category === 'unit') {
         checkboxSelector = '.unit-checkbox';
+    } else if (category === 'year') {
+        checkboxSelector = '.year-checkbox';
+    } else if (category === 'semester') {
+        checkboxSelector = '.semester-checkbox';
+    } else if (category === 'status') {
+        checkboxSelector = '.status-checkbox';
     } else {
         checkboxSelector = `input[name="${category}"]`;
     }
-    
+
     const checkboxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}`);
     const checkedBoxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}:checked`);
     const count = checkedBoxes.length;
-    
+
     const countElement = document.getElementById(`${category}SelectionCount`) || document.querySelector(`#${category}-content .selection-count`);
-    const label = category.charAt(0).toUpperCase() + category.slice(1);
+    let label = category.charAt(0).toUpperCase() + category.slice(1);
     if (countElement) {
         countElement.textContent = `${count} ${label} selected`;
     }
-    
+
     let selectAllId;
     if (category === 'unit') {
         selectAllId = 'selectAllUnits';
+    } else if (category === 'year') {
+        selectAllId = 'selectAllYears';
+    } else if (category === 'semester') {
+        selectAllId = 'selectAllSemesters';
+    } else if (category === 'status') {
+        selectAllId = 'selectAllStatuses';
     }
-    
+
     if (selectAllId) {
         const selectAllCheckbox = document.getElementById(selectAllId);
         if (selectAllCheckbox && checkboxes.length > 0) {
@@ -1400,18 +1530,27 @@ function updateSelectionCount(category) {
             selectAllCheckbox.indeterminate = (count > 0 && count < checkboxes.length);
         }
     }
-    
+
     updateFilterBadge();
     setFilterTypeBadge(category, count);
 }
 
 function updateFilterBadge() {
     let totalFilterCategories = 0;
-    
+
     if (document.querySelectorAll('input[name="unit"]:checked').length > 0) {
         totalFilterCategories++;
     }
-    
+    if (document.querySelectorAll('input[name="year"]:checked').length > 0) {
+        totalFilterCategories++;
+    }
+    if (document.querySelectorAll('input[name="semester"]:checked').length > 0) {
+        totalFilterCategories++;
+    }
+    if (document.querySelectorAll('input[name="status"]:checked').length > 0) {
+        totalFilterCategories++;
+    }
+
     const badge = document.getElementById('filterBadge');
     if (badge) {
         if (totalFilterCategories > 0) {
@@ -1445,11 +1584,11 @@ function clearAllFilters() {
         cb.checked = false;
         cb.indeterminate = false;
     });
-    
-    ['unit'].forEach(category => {
+
+    ['unit', 'year', 'semester', 'status'].forEach(category => {
         updateSelectionCount(category);
     });
-    
+
     updateFilterBadge();
 }
 
@@ -1497,11 +1636,15 @@ document.addEventListener('click', function(e) {
 
 document.addEventListener('DOMContentLoaded', function() {
     loadBatches();
-    
-    // Initialize filter badge and selection counts
+
+    // Initialize filter badge and selection counts for all filters
     updateSelectionCount('unit');
+    updateSelectionCount('year');
+    updateSelectionCount('semester');
+    updateSelectionCount('status');
     updateFilterBadge();
-    // Populate year dropdown (2025-2100)
+
+    // Populate year dropdown in form (2025-2100)
     const yearSelect = document.getElementById('yearOfBatch');
     for (let year = 2025; year <= 2100; year++) {
         const option = document.createElement('option');
@@ -1509,7 +1652,21 @@ document.addEventListener('DOMContentLoaded', function() {
         option.textContent = year.toString();
         yearSelect.appendChild(option);
     }
-    
+
+    // Populate year filter (2025-2100)
+    const yearFilterOptions = document.getElementById('year-options');
+    for (let year = 2025; year <= 2100; year++) {
+        const label = document.createElement('label');
+        label.className = 'option-item';
+        label.innerHTML = `
+            <input type="checkbox" name="year" value="${year}"
+                   onchange="updateSelectionCount('year')"
+                   class="year-checkbox">
+            <span>${year}</span>
+        `;
+        yearFilterOptions.appendChild(label);
+    }
+
     // Add event listener for unit selection
     document.getElementById('unitSelect').addEventListener('change', function() {
         loadAvailableLearners();
@@ -1527,10 +1684,20 @@ function loadBatches() {
     const searchText = document.getElementById('searchInput').value.trim();
     const filters = getBatchFilters();
     let url = `/api/batches/?page=${currentPage}&page_size=${batchesPerPage}&search=${searchText}&include_inactive=true&`;
+
     if (filters.unitTypes.length > 0) {
         url += 'unitType=' + filters.unitTypes.join(',') + '&';
     }
-    
+    if (filters.years.length > 0) {
+        url += 'year=' + filters.years.join(',') + '&';
+    }
+    if (filters.semesters.length > 0) {
+        url += 'semester=' + filters.semesters.join(',') + '&';
+    }
+    if (filters.statuses.length > 0) {
+        url += 'status=' + filters.statuses.join(',') + '&';
+    }
+
     // Show loading spinner
     const loadingSpinner = document.getElementById('batchesLoadingSpinner');
     const showMoreBtn = document.getElementById('showMoreBatchesBtn');
@@ -1630,8 +1797,18 @@ function loadMoreBatches() {
     const searchText = document.getElementById('searchInput').value.trim();
     const filters = getBatchFilters();
     let url = `/api/batches/?page=${currentPage}&page_size=${batchesPerPage}&search=${searchText}&include_inactive=true&`;
+
     if (filters.unitTypes.length > 0) {
         url += 'unitType=' + filters.unitTypes.join(',') + '&';
+    }
+    if (filters.years.length > 0) {
+        url += 'year=' + filters.years.join(',') + '&';
+    }
+    if (filters.semesters.length > 0) {
+        url += 'semester=' + filters.semesters.join(',') + '&';
+    }
+    if (filters.statuses.length > 0) {
+        url += 'status=' + filters.statuses.join(',') + '&';
     }
 
     const showMoreBtn = document.getElementById('showMoreBatchesBtn');
@@ -2017,6 +2194,14 @@ document.getElementById('batchForm').addEventListener('submit', function(e) {
         showError('batchNameError', 'Batch name is required');
         return;
     }
+    if (!formData.yearOfBatch) {
+        showError('yearOfBatchError', 'Year of batch is required');
+        return;
+    }
+    if (!formData.semester) {
+        showError('semesterError', 'Semester is required');
+        return;
+    }
     if (!formData.unitType) {
         showError('unitTypeError', 'Unit type is required');
         return;
@@ -2053,8 +2238,16 @@ document.getElementById('batchForm').addEventListener('submit', function(e) {
     .then(data => {
         if (data.success) {
             showSuccess('Batch created successfully!');
-            toggleAddBatchPanel();
-            loadBatches();
+            // Redirect to batch detail page with courses tab
+            const batchId = data.batch_id || data.id;
+            if (batchId) {
+                // Redirect to batch detail page with courses tab
+                window.location.href = `/batch-management/${batchId}/#courses`;
+            } else {
+                // Fallback if batch ID not returned
+                toggleAddBatchPanel();
+                loadBatches();
+            }
         } else {
             showErrorNotification(data.error || 'Error creating batch');
         }
@@ -2196,8 +2389,15 @@ function toggleBatchStatus(batchId, status) {
 
 function getBatchFilters() {
     const unitTypes = Array.from(document.querySelectorAll('input[name="unit"]:checked')).map(cb => cb.value);
+    const years = Array.from(document.querySelectorAll('input[name="year"]:checked')).map(cb => cb.value);
+    const semesters = Array.from(document.querySelectorAll('input[name="semester"]:checked')).map(cb => cb.value);
+    const statuses = Array.from(document.querySelectorAll('input[name="status"]:checked')).map(cb => cb.value);
+
     return {
-        unitTypes
+        unitTypes,
+        years,
+        semesters,
+        statuses
     };
 }
 

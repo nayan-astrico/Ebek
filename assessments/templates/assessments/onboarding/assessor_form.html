@@ -16,7 +16,7 @@
                         <form method="post" action="{% url 'assessor_edit' form.instance.pk %}" novalidate onsubmit="submitAssessorForm(event, this)">
                         {% endif %}
                         {% csrf_token %}
-                        
+
                         {% if form.non_field_errors %}
                         <div class="alert alert-danger">
                             {% for error in form.non_field_errors %}
@@ -26,7 +26,7 @@
                         {% endif %}
 
                         <div class="form-group">
-                            <label for="{{ form.assessor_name.id_for_label }}">Full Name</label>
+                            <label for="{{ form.assessor_name.id_for_label }}" class="form-label required">Full Name</label>
                             {{ form.assessor_name }}
                             {% if form.assessor_name.errors %}
                             <div class="invalid-feedback d-block">
@@ -38,7 +38,7 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="{{ form.assessor_email.id_for_label }}">Email</label>
+                            <label for="{{ form.assessor_email.id_for_label }}" class="form-label required">Email</label>
                             {{ form.assessor_email }}
                             {% if form.assessor_email.errors %}
                             <div class="invalid-feedback d-block">
@@ -50,7 +50,7 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="{{ form.assessor_phone.id_for_label }}">Mobile Number</label>
+                            <label for="{{ form.assessor_phone.id_for_label }}" class="form-label required">Mobile Number</label>
                             {{ form.assessor_phone }}
                             {% if form.assessor_phone.errors %}
                             <div class="invalid-feedback d-block">
@@ -62,7 +62,7 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="{{ form.assessor_type.id_for_label }}">Type</label>
+                            <label for="{{ form.assessor_type.id_for_label }}" class="form-label required">Type</label>
                             {{ form.assessor_type }}
                             {% if form.assessor_type.errors %}
                             <div class="invalid-feedback d-block">
@@ -75,13 +75,13 @@
 
                         <div id="external-unit-fields" style="display: {% if action == 'Edit' and form.instance.assessor_type == 'external' %}block{% else %}none{% endif %};">
                             <div class="form-group">
-                                <label>Unit Type</label><br>
+                                <label class="form-label">Unit Type</label><br>
                                 {{ form.unit_type }}
                             </div>
                             <div class="row">
                                 <div class="col-md-6" id="institution-field" style="display: {% if action == 'Edit' and form.instance.assessor_type == 'external' and form.instance.institution %}block{% else %}none{% endif %};">
                                     <div class="form-group">
-                                        <label for="{{ form.institution.id_for_label }}">Institution</label>
+                                        <label for="{{ form.institution.id_for_label }}" class="form-label">Institution</label>
                                         <select name="institution" id="institution-select" class="form-control">
                                             <option value="">Select Institution</option>
                                             {% if form.instance.institution %}
@@ -99,7 +99,7 @@
                                 </div>
                                 <div class="col-md-6" id="hospital-field" style="display: {% if action == 'Edit' and form.instance.assessor_type == 'external' and form.instance.hospital %}block{% else %}none{% endif %};">
                                     <div class="form-group">
-                                        <label for="{{ form.hospital.id_for_label }}">Hospital</label>
+                                        <label for="{{ form.hospital.id_for_label }}" class="form-label">Hospital</label>
                                         <select name="hospital" id="hospital-select" class="form-control">
                                             <option value="">Select Hospital</option>
                                             {% if form.instance.hospital %}
@@ -122,7 +122,7 @@
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="form-group">
-                                        <label for="{{ form.staff_id.id_for_label }}">Staff ID</label>
+                                        <label for="{{ form.staff_id.id_for_label }}" class="form-label">Staff ID</label>
                                         {{ form.staff_id }}
                                         {% if form.staff_id.errors %}
                                         <div class="invalid-feedback d-block">
@@ -135,7 +135,7 @@
                                 </div>
                                 <div class="col-md-6">
                                     <div class="form-group">
-                                        <label for="{{ form.branch.id_for_label }}">Branch</label>
+                                        <label for="{{ form.branch.id_for_label }}" class="form-label">Branch</label>
                                         {{ form.branch }}
                                         {% if form.branch.errors %}
                                         <div class="invalid-feedback d-block">
@@ -153,7 +153,7 @@
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="form-group">
-                                        <label for="{{ form.location.id_for_label }}">Location</label>
+                                        <label for="{{ form.location.id_for_label }}" class="form-label">Location</label>
                                         {{ form.location }}
                                         {% if form.location.errors %}
                                         <div class="invalid-feedback d-block">
@@ -170,7 +170,7 @@
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group">
-                                    <label for="{{ form.qualification.id_for_label }}">Qualification</label>
+                                    <label for="{{ form.qualification.id_for_label }}" class="form-label">Qualification</label>
                                     {{ form.qualification }}
                                     {% if form.qualification.errors %}
                                     <div class="invalid-feedback d-block">
@@ -183,7 +183,7 @@
                             </div>
                             <div class="col-md-6">
                                 <div class="form-group">
-                                    <label for="{{ form.designation.id_for_label }}">Designation</label>
+                                    <label for="{{ form.designation.id_for_label }}" class="form-label">Designation</label>
                                     {{ form.designation }}
                                     {% if form.designation.errors %}
                                     <div class="invalid-feedback d-block">
@@ -199,7 +199,7 @@
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group">
-                                    <label for="{{ form.specialization.id_for_label }}">Assessment Specialization</label>
+                                    <label for="{{ form.specialization.id_for_label }}" class="form-label">Assessment Specialization</label>
                                     {{ form.specialization }}
                                     {% if form.specialization.errors %}
                                     <div class="invalid-feedback d-block">
@@ -209,14 +209,6 @@
                                     </div>
                                     {% endif %}
                                 </div>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <div class="custom-control custom-switch">
-                                <input type="checkbox" class="custom-control-input" id="is_verifier" name="is_verifier"
-                                       {% if form.instance.is_verifier %}checked{% endif %}>
-                                <label class="custom-control-label" for="is_verifier">Is Verifier</label>
                             </div>
                         </div>
 

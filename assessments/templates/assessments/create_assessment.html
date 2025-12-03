@@ -10,7 +10,7 @@
 <div class="header">
     <div class="header-left">
         <h1>Assessments</h1>
-        <p class="text-muted">Manage your assessments.</p>
+        <p class="text-muted">Manage your assessments</p>
     </div>
     <div class="header-right">
         {% if "bulk_upload_learners" in request.user.get_all_permissions or request.user.has_all_permissions %}
@@ -77,8 +77,8 @@
             </div>
             <h3>No procedures found</h3>
             <p>Try creating or importing a procedure.</p>
-            {% if "create_procedure" in request.user.get_all_permissions or request.user.has_all_permissions %}
-            <button class="btn btn-primary" onclick="toggleAddProcedurePanel()">
+            {% if "bulk_upload_learners" in request.user.get_all_permissions or request.user.has_all_permissions %}
+            <button class="btn btn-primary" onclick="toggleUploadPanel()">
                 <i class="fas fa-plus"></i>
                 Create Assessment
             </button>
@@ -99,37 +99,13 @@
     <form class="filter-form">
         <div class="filter-layout">
             <div class="filter-types">
-                <div class="filter-type active" data-filter="status" onclick="switchProcedureFilter('status')">
-                    <span>Status</span>
-                </div>
-                <div class="filter-type" data-filter="category" onclick="switchProcedureFilter('category')">
+                <div class="filter-type active" data-filter="category" onclick="switchProcedureFilter('category')">
                     <span>Category</span>
                 </div>
             </div>
 
             <div class="filter-content-wrapper">
-                <div class="filter-content active" id="procedure-status-content">
-                    <div class="filter-search">
-                        <input type="text" placeholder="Search status" id="procedureFilterStatusSearch" oninput="filterStatusOptions(this.value)">
-                        <div class="selection-count" id="procedureStatusSelectionCount">0 Status selected</div>
-                    </div>
-                    <div class="options-list" id="procedureFilterStatusOptions">
-                        <label class="option-item select-all-item">
-                            <input type="checkbox" id="selectAllStatuses" onchange="toggleSelectAllStatuses(this)">
-                            <span><strong>Select All</strong></span>
-                        </label>
-                        <label class="option-item">
-                            <input type="checkbox" name="status" value="active" onchange="updateProcedureStatusSelectionCount()" class="status-checkbox">
-                            <span>Active</span>
-                        </label>
-                        <label class="option-item">
-                            <input type="checkbox" name="status" value="inactive" onchange="updateProcedureStatusSelectionCount()" class="status-checkbox">
-                            <span>Inactive</span>
-                        </label>
-                    </div>
-                </div>
-
-             <div class="filter-content" id="procedure-category-content">
+             <div class="filter-content active" id="procedure-category-content">
                     <div class="filter-search">
                         <input type="text" placeholder="Search category" id="procedureFilterCategorySearch" oninput="filterProcedureCategoryOptions(this.value)">
                         <div class="selection-count" id="procedureCategorySelectionCount">0 Categories selected</div>
@@ -1244,8 +1220,8 @@ function populateSidePanel(procedure) {
         panel.className = 'side-panel';
         panel.innerHTML = `
             <div class="side-panel-header">
-                <h2 id="procedurePanelTitle"></h2>
-                <button class="close-btn" onclick="toggleProcedurePanel(false)">×</button>
+                <h3 id="procedurePanelTitle"></h3>
+                <button class="btn-close" onclick="toggleProcedurePanel(false)"><i class="fas fa-times"></i></button>
             </div>
             <div class="side-panel-body" id="procedurePanelBody"></div>
         `;
@@ -1564,8 +1540,8 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .btn-close {
-    width: 32px;
-    height: 32px;
+    width: 44px;
+    height: 44px;
     border: none;
     background: none;
     color: #64748b;
@@ -1574,12 +1550,25 @@ document.addEventListener('DOMContentLoaded', function() {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
+    padding: 8px 12px;
+    min-width: 44px;
+    min-height: 44px;
 }
 
 .btn-close:hover {
-    background: #e2e8f0;
-    color: #1a202c;
+    background-color: #f1f5f9;
+    color: #1e293b;
+    transform: scale(1.05);
+}
+
+.btn-close:active {
+    transform: scale(0.95);
+}
+
+.btn-close:focus {
+    outline: 2px solid #F16564;
+    outline-offset: 2px;
 }
 
 .upload-content {
