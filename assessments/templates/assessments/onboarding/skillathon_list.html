@@ -105,9 +105,10 @@
 <!-- Search and Filter Bar -->
 <div class="search-filter-bar">
     <div class="search-box">
-        <input type="text" 
-               placeholder="Search skillathon events..." 
-               value="{{ state }}"
+        <i class="fas fa-search"></i>
+        <input type="text"
+               placeholder="Search skillathons..."
+               value="{{ search_query|default:'' }}"
                id="skillathonSearchInput"
                oninput="filterSkillathons(this.value)">
     </div>

@@ -2141,6 +2141,7 @@ def fetch_exam_metrics(request):
 
        # Track student-level marks for student-level grade distribution (Total Marks Method)
        student_marks = {}  # {email: {'obtained': total, 'max': total}}
+       student_gender = {}  # {email: gender} - Track student gender (use first exam occurrence)
 
        for exam in exam_assignments:
            exam_doc = exam.to_dict()
@@ -2154,8 +2155,13 @@ def fetch_exam_metrics(request):
                procedure_name = exam_doc.get('procedure_name', 'Unknown')
            # Track completed procedure for this student
            student_completed_procedures[email].add(procedure_name)
-          
+
            gender = (exam_doc.get('gender') or 'others').lower()
+
+           # Store student's gender (use first occurrence)
+           if email not in student_gender:
+               student_gender[email] = gender
+
            percentage = 0
            total_score = exam_doc.get("marks", 0)
            max_marks = sum(
@@ -2175,10 +2181,6 @@ def fetch_exam_metrics(request):
 
            # Procedure counts
            procedure_counts[procedure_name] += 1
-
-           # Gender metrics (keep exam-level breakdown for gender analysis)
-           gender_metrics["total"][gender] += 1
-           gender_metrics["grade_wise"][grade][gender] += 1
 
            # Skill-wise metrics
            if procedure_name not in skill_wise_metrics:
@@ -2230,6 +2232,31 @@ def fetch_exam_metrics(request):
                student_grade = get_grade_letter(student_overall_pct)
                # Increment grade count for this STUDENT (not exam)
                grade_distribution[student_grade] += 1
+
+       # Calculate STUDENT-LEVEL gender metrics using Total Marks Method
+       # Reset gender_metrics to recalculate at student-level (not exam-level)
+       gender_metrics = {
+           "total": {"male": 0, "female": 0, "others": 0},
+           "grade_wise": {
+               "A": {"male": 0, "female": 0, "others": 0},
+               "B": {"male": 0, "female": 0, "others": 0},
+               "C": {"male": 0, "female": 0, "others": 0},
+               "D": {"male": 0, "female": 0, "others": 0},
+               "E": {"male": 0, "female": 0, "others": 0}
+           }
+       }
+
+       # Count STUDENTS by gender and their overall grade (one count per student)
+       for email, marks in student_marks.items():
+           if marks['max'] > 0:
+               # Calculate this student's overall percentage using Total Marks Method
+               student_overall_pct = round((marks['obtained'] / marks['max']) * 100, 2)
+               student_grade = get_grade_letter(student_overall_pct)
+               student_gender_val = student_gender.get(email, 'others')
+
+               # Count this STUDENT once per gender and grade (STUDENT-LEVEL, not exam-level)
+               gender_metrics["total"][student_gender_val] += 1
+               gender_metrics["grade_wise"][student_grade][student_gender_val] += 1
 
        # Finalize all missed critical steps for each procedure
        for proc_name in skill_wise_metrics:
@@ -4124,17 +4151,22 @@ def remove_procedure_from_course(request, course_id):
 # Batch API endpoints
 @csrf_exempt
 def fetch_batches(request):
-    """API endpoint to fetch all batches, with optional filtering by unitType and status."""
+    """API endpoint to fetch all batches, with optional filtering by unitType, status, year, semester, and unitName."""
     try:
         # Get filter parameters from query string
         unit_type_param = request.GET.get('unitType', '').strip()
         status_param = request.GET.get('status', '').strip()
+        year_param = request.GET.get('year', '').strip()
+        semester_param = request.GET.get('semester', '').strip()
         search = request.GET.get('search', '').strip().lower()
         page = int(request.GET.get('page', 1))
         page_size = int(request.GET.get('page_size', 10))
         include_inactive = request.GET.get('include_inactive', '').lower() == 'true'
 
         unit_types = [u.strip().lower() for u in unit_type_param.split(',') if u.strip()] if unit_type_param else []
+        years = [y.strip() for y in year_param.split(',') if y.strip()] if year_param else []
+        semesters = [s.strip() for s in semester_param.split(',') if s.strip()] if semester_param else []
+
         # Default to active batches only unless status is explicitly provided or include_inactive is true
         if status_param:
             statuses = [s.strip().lower() for s in status_param.split(',') if s.strip()]
@@ -4228,13 +4260,19 @@ def fetch_batches(request):
             batch_unit_type = batch_data.get('unitType', '').lower()
             batch_status = batch_data.get('status', 'active').lower()
             batch_name = batch_data.get('batchName', '').lower()
-            
+            batch_year = str(batch_data.get('yearOfBatch', ''))
+            batch_semester = str(batch_data.get('semester', ''))
+
             # Apply filters
             if unit_types and batch_unit_type not in unit_types:
                 continue
             if statuses and batch_status not in statuses:
                 continue
             if search and search not in batch_name:
+                continue
+            if years and batch_year not in years:
+                continue
+            if semesters and batch_semester not in semesters:
                 continue
 
             # Get unit name
@@ -8095,102 +8133,64 @@ def fetch_osce_report_optimized(request):
                     'success': False,
                     'error': 'Please select a specific semester to apply OSCE Level or Procedure filters'
                 }, status=400)
-            
+
             # Get semester metrics
             sem_doc_id = f"{unit_name}_{academic_year}_{semester}"
             sem_doc = db.collection('SemesterMetrics').document(sem_doc_id).get()
-            
+
             if not sem_doc.exists:
                 return JsonResponse({
                     'success': False,
                     'error': f'No metrics found for semester {semester}'
                 }, status=404)
-            
+
             sem_data = sem_doc.to_dict()
-            
+
             # Filter data based on OSCE level or procedure
             filtered_skills = {}
             filtered_timeline = []
             filtered_students = {}
             filtered_scores = []
-            
+
             # Filter skills_performance
             skills_performance = sem_data.get('skills_performance', {})
             for skill_id, skill_data in skills_performance.items():
                 osce_types = skill_data.get('osce_types', [])
-                
+
                 # Apply OSCE level filter
                 if osce_level and osce_level != 'All':
                     if osce_level not in osce_types:
                         continue
-                
+
                 # Apply procedure filter
                 if skill:
                     if skill_id != skill:
                         continue
-                
+
                 filtered_skills[skill_id] = skill_data
-            
+
             # Filter OSCE activity timeline
             osce_timeline = sem_data.get('osce_activity_timeline', [])
             for osce in osce_timeline:
                 osce_type = osce.get('osce_level', '')
-                
+
                 # Apply OSCE level filter
                 if osce_level and osce_level != 'All':
                     if osce_type != osce_level:
                         continue
-                
+
                 # Apply procedure filter (check if procedure is in this OSCE)
                 if skill:
                     # This requires checking if the skill was assessed in this OSCE
                     # For now, we'll include all OSCEs (can be refined later)
                     pass
-                
+
                 filtered_timeline.append(osce)
-            
+
             # Filter student batch report (recalculate based on filtered data)
             # This is complex, so for now we'll return full student list
             # but indicate that scores are filtered
             student_batch_report = sem_data.get('student_batch_report', [])
-            
-            # Recalculate aggregate metrics from filtered data
-            if filtered_skills:
-                all_skill_scores = []
-                for skill_data in filtered_skills.values():
-                    # We don't have individual scores, use avg_score * attempts as approximation
-                    avg = skill_data.get('avg_score', 0)
-                    attempts = skill_data.get('attempts', 0)
-                    # This is approximate
-                    all_skill_scores.extend([avg] * attempts)
-                
-                filtered_avg_score = round(sum(all_skill_scores) / len(all_skill_scores), 2) if all_skill_scores else 0
-                filtered_pass_rate = round(sum(1 for s in all_skill_scores if s >= 80) / len(all_skill_scores) * 100, 2) if all_skill_scores else 0
-            else:
-                filtered_avg_score = 0
-                filtered_pass_rate = 0
-            
-            # Calculate category performance from filtered skills
-            category_scores = defaultdict(list)
-            for skill_data in filtered_skills.values():
-                category = skill_data.get('category', 'Unknown')
-                avg_score = skill_data.get('avg_score', 0)
-                if avg_score > 0:
-                    category_scores[category].append(avg_score)
-            
-            category_wise_performance = []
-            for category in ['Core Skills', 'Infection Control', 'Communication', 'Documentation', 'Pre-Procedure', 'Critical Thinking']:
-                if category in category_scores:
-                    avg = round(sum(category_scores[category]) / len(category_scores[category]), 2)
-                    category_wise_performance.append({
-                        'category': category,
-                        'percentage': avg
-                    })
-                else:
-                    category_wise_performance.append({
-                        'category': category,
-                        'percentage': None
-                    })
             
             # Build skills_by_category for filtered skills
             skills_by_category = defaultdict(list)
@@ -8361,6 +8361,10 @@ def fetch_semester_metrics(request):
                     # Update skills_performance if available in type breakdown
                     if 'skills_performance' in type_data:
                         data['skills_performance'] = type_data['skills_performance']
+
+                    # Update skills_evaluated from pre-computed value
+                    if 'skills_evaluated' in type_data:
+                        data['skills_evaluated'] = type_data['skills_evaluated']
                 else:
                     # OSCE level not found, skip this document or return empty data
                     continue

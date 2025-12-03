@@ -231,7 +231,7 @@
 <div class="filter-overlay" id="filterOverlay" onclick="toggleFilterPanel()"></div>
 
 <!-- Table -->
-<div class="card" style="width: fit-content;">
+<div class="card">
     <div class="table-wrapper">
         <table class="table">
             <thead>
@@ -516,19 +516,19 @@
             <div id="editB2CFieldsContainer">
                 <div class="form-group">
                     <label class="form-label">Procedures</label>
-                    <div id="editProcedures" class="chip-container"></div>
                     <div class="dropdown-container">
                         <button class="dropdown-btn" id="editProcedureDropdownBtn">Select Procedure</button>
                         <ul class="dropdown-list" id="editProcedureDropdownList"></ul>
                     </div>
+                    <div id="editProcedures" class="chip-container"></div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Assessors</label>
-                    <div id="editAssessors" class="chip-container"></div>
                     <div class="dropdown-container">
                         <button class="dropdown-btn" id="editAssessorDropdownBtn">Select Assessor</button>
                         <ul class="dropdown-list" id="editAssessorDropdownList"></ul>
                     </div>
+                    <div id="editAssessors" class="chip-container"></div>
                 </div>
             </div>
 
@@ -813,10 +813,11 @@
        with span sized to 263.23px x 24px as requested */
     .dropdown-list li label span {
         display: inline-block;
-        width: 263.23px;
         height: 24px;
         font-size: 16px;
         line-height: 24px;
+        white-space: nowrap;
+        flex: 1;
     }
 
     .dropdown-list li input[type="checkbox"] {
@@ -1937,7 +1938,7 @@
     }
 
     .table-wrapper {
-        overflow: visible;
+        overflow-x: auto;
         width: 100%;
     }
 
@@ -1945,7 +1946,6 @@
     .table {
         width: 100%;
         border-collapse: collapse;
-        min-width: 1200px; /* Ensures horizontal scroll on smaller screens */
         overflow: visible;
     }
 </style>
@@ -2580,10 +2580,10 @@
         $(document).on('click', '#assessorDropdownList li', function(e) {
             e.preventDefault();
             e.stopPropagation();
-            
+
             const value = $(this).data('value');
             const id = $(this).data('id');
-    
+
             // Toggle checkbox if present
             const checkbox = $(this).find('input[type="checkbox"]');
             if (checkbox.length) {
@@ -2594,8 +2594,9 @@
                 $(`#assessorChipsContainer`).append(`<span class="chip" data-id="${id}" data-value="${value}">${value}<span class="remove">&times;</span></span>`);
                 updateChipDisplay('assessorChipsContainer', 'Assessors');
             }
-            $(this).closest('.dropdown-list').hide().removeClass('show');
-            $('#assessorDropdownBtn').removeClass('active');
+            // Keep dropdown open for multi-select
+            // $(this).closest('.dropdown-list').hide().removeClass('show');
+            // $('#assessorDropdownBtn').removeClass('active');
         });
 
         // Prevent double toggle when clicking the checkbox directly in B2C assessor dropdown

@@ -1784,17 +1784,18 @@ function updateSelectedProcedures() {
 function handleSelectAllProcedures(checked) {
     // Get all procedure checkboxes (excluding "Select All")
     const procedureCheckboxes = document.querySelectorAll('#proceduresOptions input[type="checkbox"]:not(#procSelectAll)');
-    
-    // Only select all if checking "Select All"
-    // If unchecking "Select All", don't deselect the options (per user requirement)
+
+    // Select or deselect all procedures based on "Select All" checkbox state
     if (checked) {
         procedureCheckboxes.forEach(checkbox => {
             checkbox.checked = true;
         });
+    } else {
+        procedureCheckboxes.forEach(checkbox => {
+            checkbox.checked = false;
+        });
     }
-    // Note: When unchecking "Select All", we don't deselect all options
-    // The options remain selected, only the "Select All" checkbox gets unchecked
-    
+
     // Update the selected tags display
     updateSelectedProcedures();
 }

@@ -535,6 +535,55 @@
     pointer-events: auto;
 }
 
+/* Close Button Styling - Override Bootstrap */
+button.btn-close,
+.btn-close {
+    background: none !important;
+    border: none !important;
+    padding: 8px 12px !important;
+    cursor: pointer;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    color: #64748b !important;
+    font-size: 20px;
+    line-height: 1;
+    min-width: 44px;
+    min-height: 44px;
+    box-shadow: none !important;
+}
+
+button.btn-close:hover,
+.btn-close:hover {
+    background-color: #f1f5f9 !important;
+    color: #1e293b !important;
+    transform: scale(1.05);
+    text-decoration: none;
+    box-shadow: none !important;
+}
+
+button.btn-close:active,
+.btn-close:active {
+    transform: scale(0.95);
+    box-shadow: none !important;
+}
+
+button.btn-close:focus,
+.btn-close:focus {
+    outline: 2px solid #F16564;
+    outline-offset: 2px;
+    box-shadow: none !important;
+}
+
+button.btn-close i,
+.btn-close i {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .header {

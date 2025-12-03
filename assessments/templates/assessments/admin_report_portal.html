@@ -932,6 +932,41 @@ function initSearchableDropdown() {
     });
 }
 
+// Helper function to show loader for a container
+function showLoader(containerId) {
+    const container = document.getElementById(containerId);
+    if (container) {
+        container.innerHTML = `
+            <div class="loading">
+                <div class="spinner"></div>
+                <p style="color: #64748b; font-size: 14px; margin: 0;">Loading data...</p>
+            </div>
+        `;
+    }
+}
+
+// Helper function to show empty state
+function showEmptyState(containerId, title, subtitle) {
+    const container = document.getElementById(containerId);
+    if (container) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
+                        <path d="M3 9h18M9 3v18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <rect x="5" y="12" width="3" height="6" rx="1" fill="currentColor" opacity="0.6"/>
+                        <rect x="10" y="8" width="3" height="10" rx="1" fill="currentColor" opacity="0.6"/>
+                        <rect x="15" y="5" width="3" height="13" rx="1" fill="currentColor" opacity="0.6"/>
+                    </svg>
+                </div>
+                <p class="empty-text">${title}</p>
+                <p class="empty-subtitle">${subtitle}</p>
+            </div>
+        `;
+    }
+}
+
 function applyFilters() {
     currentFilters = {
         academic_year: document.getElementById('academicYearFilter').value,
@@ -952,6 +987,8 @@ function loadKPIsAndMetrics() {
 }
 
 function loadKPIs() {
+    showLoader('kpiContainer');
+
     const year = currentFilters.academic_year || new Date().getFullYear().toString();
     const semester = currentFilters.semester && currentFilters.semester !== '' ? currentFilters.semester : null;
     const institution = currentFilters.institution !== 'All' ? currentFilters.institution : null;
@@ -977,25 +1014,12 @@ function loadKPIs() {
             if (data.success && data.documents && data.documents.length > 0) {
                 // Extract the data from documents array
                 const metricsArray = data.documents.map(doc => doc.data);
-                // Aggregate KPIs from semester metrics
-                const kpis = aggregateKPIsFromMetrics(metricsArray);
+                // Aggregate KPIs from semester metrics, pass osceLevel for context
+                const kpis = aggregateKPIsFromMetrics(metricsArray, osceLevel);
                 displayKPIs(kpis);
                 kpiData = kpis;
             } else {
-                document.getElementById('kpiContainer').innerHTML =
-                    `<div class="empty-state">
-                        <div class="empty-icon">
-                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
-                                <path d="M3 9h18M9 3v18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                <rect x="5" y="12" width="3" height="6" rx="1" fill="currentColor" opacity="0.6"/>
-                                <rect x="10" y="8" width="3" height="10" rx="1" fill="currentColor" opacity="0.6"/>
-                                <rect x="15" y="5" width="3" height="13" rx="1" fill="currentColor" opacity="0.6"/>
-                            </svg>
-                        </div>
-                        <p class="empty-text">No KPI data available</p>
-                        <p class="empty-subtitle">Try selecting different filters</p>
-                    </div>`;
+                showEmptyState('kpiContainer', 'No KPI data available', 'Try selecting different filters');
             }
         })
         .catch(error => {
@@ -1005,17 +1029,20 @@ function loadKPIs() {
         });
 }
 
-function aggregateKPIsFromMetrics(metricsArray) {
+function aggregateKPIsFromMetrics(metricsArray, osceLevel) {
     // Handle both UnitMetrics and SemesterMetrics
-    // UnitMetrics: already aggregated per unit/year
-    // SemesterMetrics: per semester, need aggregation
+    // Use pre-computed pass_rate and avg_score (Student-Average Method)
+    // Do NOT recalculate from raw_scores (which are exam-level)
+    // When OSCE level is specified, extract metrics from osce_type_breakdown
 
     const kpis = {
         institutions_active: new Set(),
         students_assessed_set: new Set(),
         osces_conducted: 0,
         total_students: 0,
-        scores: []
+        pass_rates: [],
+        avg_scores: [],
+        students_assessed_counts: []
     };
 
     let studentsAssessedFromUnitMetrics = 0;
@@ -1025,26 +1052,46 @@ function aggregateKPIsFromMetrics(metricsArray) {
             kpis.institutions_active.add(metric.unit_name);
         }
 
+        // If OSCE level is specified and osce_type_breakdown exists, use OSCE-specific data
+        let metricsToUse = metric;
+        if (osceLevel && osceLevel !== 'All' && metric.osce_type_breakdown && metric.osce_type_breakdown[osceLevel]) {
+            // Use pre-computed data from osce_type_breakdown for this OSCE level
+            const typeData = metric.osce_type_breakdown[osceLevel];
+            metricsToUse = {
+                ...metric,
+                osces_conducted: typeData.osces_conducted || 0,
+                total_students: typeData.total_students || 0,
+                students_assessed: typeData.students_assessed || 0,
+                assessed_student_ids: typeData.assessed_student_ids || [],
+                pass_rate: typeData.pass_rate || 0,
+                avg_score: typeData.avg_score || 0
+            };
+        }
+
         // Handle both UnitMetrics (total_osces) and SemesterMetrics (osces_conducted)
-        kpis.osces_conducted += metric.total_osces || metric.osces_conducted || 0;
-        kpis.total_students += metric.total_students || 0;
+        kpis.osces_conducted += metricsToUse.total_osces || metricsToUse.osces_conducted || 0;
+        kpis.total_students += metricsToUse.total_students || 0;
 
         // UnitMetrics has pre-calculated students_assessed
         // SemesterMetrics has assessed_student_ids that need de-duplication
-        if (metric.students_assessed) {
+        if (metricsToUse.students_assessed) {
             // UnitMetrics: students_assessed is already the count
-            studentsAssessedFromUnitMetrics += metric.students_assessed;
+            studentsAssessedFromUnitMetrics += metricsToUse.students_assessed;
+            kpis.students_assessed_counts.push(metricsToUse.students_assessed);
         }
 
         // Collect assessed student IDs (from SemesterMetrics)
-        if (metric.assessed_student_ids && Array.isArray(metric.assessed_student_ids)) {
-            metric.assessed_student_ids.forEach(id => kpis.students_assessed_set.add(id));
+        if (metricsToUse.assessed_student_ids && Array.isArray(metricsToUse.assessed_student_ids)) {
+            metricsToUse.assessed_student_ids.forEach(id => kpis.students_assessed_set.add(id));
         }
 
-        // Collect scores for pass rate calculation
-        // Both UnitMetrics and SemesterMetrics have raw_scores (student percentages)
-        if (metric.raw_scores && Array.isArray(metric.raw_scores)) {
-            kpis.scores.push(...metric.raw_scores);
+        // Collect pre-computed pass_rate and avg_score (Student-Average Method)
+        // These are already calculated using student-level percentages in process_metric_queue.py
+        if (metricsToUse.pass_rate !== undefined && metricsToUse.pass_rate !== null) {
+            kpis.pass_rates.push(metricsToUse.pass_rate);
+        }
+        if (metricsToUse.avg_score !== undefined && metricsToUse.avg_score !== null) {
+            kpis.avg_scores.push(metricsToUse.avg_score);
         }
     });
 
@@ -1055,12 +1102,14 @@ function aggregateKPIsFromMetrics(metricsArray) {
         ? studentsAssessedFromUnitMetrics
         : kpis.students_assessed_set.size;
 
-    const avgScore = kpis.scores.length > 0
-        ? (kpis.scores.reduce((a, b) => a + b, 0) / kpis.scores.length).toFixed(2)
+    // Use pre-computed pass_rate (average of all metrics' pass_rates)
+    const passRate = kpis.pass_rates.length > 0
+        ? parseFloat((kpis.pass_rates.reduce((a, b) => a + b, 0) / kpis.pass_rates.length).toFixed(2))
         : 0;
-    const passCount = kpis.scores.filter(s => s >= 80).length;
-    const passRate = kpis.scores.length > 0
-        ? ((passCount / kpis.scores.length) * 100).toFixed(2)
+
+    // Use pre-computed avg_score (average of all metrics' avg_scores)
+    const avgScore = kpis.avg_scores.length > 0
+        ? parseFloat((kpis.avg_scores.reduce((a, b) => a + b, 0) / kpis.avg_scores.length).toFixed(2))
         : 0;
 
     return {
@@ -1068,9 +1117,9 @@ function aggregateKPIsFromMetrics(metricsArray) {
         students_assessed: studentsCount,
         osces_conducted: kpis.osces_conducted,
         total_students: kpis.total_students,
-        avg_osce_score: parseFloat(avgScore),
-        avg_osce_grade: getGradeFromPercentage(parseFloat(avgScore)),
-        pass_rate: parseFloat(passRate)
+        avg_osce_score: avgScore,
+        avg_osce_grade: getGradeFromPercentage(avgScore),
+        pass_rate: passRate
     };
 }
 
@@ -1141,6 +1190,8 @@ function displayKPIs(kpis) {
 }
 
 function loadInstitutionsMetrics() {
+    showLoader('institutionsMetricsContainer');
+
     const year = currentFilters.academic_year || new Date().getFullYear().toString();
     const semester = currentFilters.semester && currentFilters.semester !== '' ? currentFilters.semester : null;
     const institution = currentFilters.institution !== 'All' ? currentFilters.institution : null;
@@ -1401,6 +1452,8 @@ function filterInstitutionsTable(searchTerm) {
 // ============================================
 
 function loadStateAnalysis() {
+    showLoader('stateAnalysisContainer');
+
     const year = currentFilters.academic_year || new Date().getFullYear().toString();
     const semester = currentFilters.semester && currentFilters.semester !== '' ? currentFilters.semester : null;
     const institution = currentFilters.institution !== 'All' ? currentFilters.institution : null;
@@ -1435,6 +1488,7 @@ function loadStateAnalysis() {
 
 function aggregateMetricsByState(metricsArray) {
     // Group metrics by state and aggregate
+    // Use pre-computed pass_rate and avg_score (Student-Average Method)
     const stateGroups = {};
 
     metricsArray.forEach(metric => {
@@ -1445,9 +1499,9 @@ function aggregateMetricsByState(metricsArray) {
                 state: state,
                 institutes: new Set(),
                 students: 0,
-                scores: [],
-                osces: 0,
-                passCount: 0
+                pass_rates: [],
+                avg_scores: [],
+                osces: 0
             };
         }
 
@@ -1459,28 +1513,30 @@ function aggregateMetricsByState(metricsArray) {
         // Sum students
         stateGroups[state].students += metric.total_students || 0;
 
-        // Collect scores for averaging
-        if (metric.raw_scores && Array.isArray(metric.raw_scores)) {
-            stateGroups[state].scores.push(...metric.raw_scores);
+        // Collect pre-computed pass_rate and avg_score
+        if (metric.pass_rate !== undefined && metric.pass_rate !== null) {
+            stateGroups[state].pass_rates.push(metric.pass_rate);
+        }
+        if (metric.avg_score !== undefined && metric.avg_score !== null) {
+            stateGroups[state].avg_scores.push(metric.avg_score);
         }
 
         // Sum OSCEs
         stateGroups[state].osces += metric.total_osces || metric.osces_conducted || 0;
-
-        // Count pass (score >= 80)
-        if (metric.raw_scores && Array.isArray(metric.raw_scores)) {
-            stateGroups[state].passCount += metric.raw_scores.filter(s => s >= 80).length;
-        }
     });
 
     // Convert to array and calculate final metrics
     const stateMetrics = Object.values(stateGroups).map(state => {
         const institutesCount = state.institutes.size;
-        const avgScore = state.scores.length > 0
-            ? (state.scores.reduce((a, b) => a + b, 0) / state.scores.length)
+
+        // Use pre-computed avg_score (average of all metrics' avg_scores)
+        const avgScore = state.avg_scores.length > 0
+            ? (state.avg_scores.reduce((a, b) => a + b, 0) / state.avg_scores.length)
             : 0;
-        const passRate = state.scores.length > 0
-            ? ((state.passCount / state.scores.length) * 100)
+
+        // Use pre-computed pass_rate (average of all metrics' pass_rates)
+        const passRate = state.pass_rates.length > 0
+            ? (state.pass_rates.reduce((a, b) => a + b, 0) / state.pass_rates.length)
             : 0;
 
         return {
@@ -1717,6 +1773,8 @@ function filterStateAnalysisTable(searchValue) {
 // ============================================
 
 function loadOSCETypeAnalysis() {
+    showLoader('osceTypeAnalysisContainer');
+
     const year = currentFilters.academic_year || new Date().getFullYear().toString();
     const semester = currentFilters.semester && currentFilters.semester !== '' ? currentFilters.semester : null;
     const institution = currentFilters.institution !== 'All' ? currentFilters.institution : null;
@@ -1751,6 +1809,7 @@ function aggregateOSCETypeMetrics(metricsArray) {
     const osceTypes = {
         'Classroom': {
             type: 'Classroom',
+            institutesSet: new Set(),  // Track unique institutes for this type
             institutesCount: 0,
             totalInstitutes: 0,
             studentsAssessed: 0,
@@ -1761,6 +1820,7 @@ function aggregateOSCETypeMetrics(metricsArray) {
         },
         'Mock': {
             type: 'Mock',
+            institutesSet: new Set(),  // Track unique institutes for this type
             institutesCount: 0,
             totalInstitutes: 0,
             studentsAssessed: 0,
@@ -1771,6 +1831,7 @@ function aggregateOSCETypeMetrics(metricsArray) {
         },
         'Final': {
             type: 'Final',
+            institutesSet: new Set(),  // Track unique institutes for this type
             institutesCount: 0,
             totalInstitutes: 0,
             studentsAssessed: 0,
@@ -1787,6 +1848,7 @@ function aggregateOSCETypeMetrics(metricsArray) {
     // Process each metric
     metricsArray.forEach(metric => {
         const osceTypeBreakdown = metric.osce_type_breakdown || {};
+        const instituteName = metric.unit_name;
 
         // For each OSCE type
         Object.keys(osceTypes).forEach(osceType => {
@@ -1799,8 +1861,8 @@ function aggregateOSCETypeMetrics(metricsArray) {
 
                 // Only count as "running" if students_assessed > 0
                 if (studentsAssessedInType > 0) {
-                    // Count institutions running this type
-                    osceTypes[osceType].institutesCount++;
+                    // Add institution to set (will only be counted once even across multiple semesters)
+                    osceTypes[osceType].institutesSet.add(instituteName);
 
                     // Sum students assessed
                     osceTypes[osceType].studentsAssessed += studentsAssessedInType;
@@ -1819,6 +1881,11 @@ function aggregateOSCETypeMetrics(metricsArray) {
                 }
             }
         });
+    });
+
+    // Convert institute sets to counts (unique institutes only)
+    Object.keys(osceTypes).forEach(osceType => {
+        osceTypes[osceType].institutesCount = osceTypes[osceType].institutesSet.size;
     });
 
     // Calculate final metrics and convert to array
@@ -2022,46 +2089,201 @@ function sortOSCETypeTable(columnIndex) {
 
 // Category Analysis Functions
 function loadCategoryAnalysis() {
+    showLoader('categoryAnalysisContainer');
+
     const year = currentFilters.academic_year || new Date().getFullYear().toString();
     const semester = currentFilters.semester && currentFilters.semester !== '' ? currentFilters.semester : null;
     const institution = currentFilters.institution !== 'All' ? currentFilters.institution : null;
     const osceLevel = currentFilters.osce_level && currentFilters.osce_level !== '' ? currentFilters.osce_level : 'All';
     const params = new URLSearchParams();
 
-    // Build query parameters - always use semester metrics for category data (UnitMetrics doesn't have category breakdown)
+    // Determine which endpoint to use
+    // Use UnitMetrics when NO semester filter (all semesters) AND no OSCE level filter
+    // Use SemesterMetrics when specific semester OR specific OSCE level is selected
+    const useUnitMetrics = !semester && osceLevel === 'All';
+    const endpoint = useUnitMetrics ? '/api/unit-metrics/' : '/api/semester-metrics/';
+
+    // Build query parameters
     if (year) params.append('year', year);
     if (institution) params.append('unit_name', institution);
     if (semester) params.append('semester', semester);
     if (osceLevel !== 'All') params.append('osce_level', osceLevel);
 
-    fetch(`/api/semester-metrics/?${params}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && data.documents && data.documents.length > 0) {
-                // Extract the data from documents array
-                const metricsArray = data.documents.map(doc => doc.data);
-                const categoryMetrics = aggregateMetricsByCategory(metricsArray);
+    // When using UnitMetrics, we need to also fetch SemesterMetrics for student count data
+    if (useUnitMetrics) {
+        // Fetch both UnitMetrics (for avg scores) and SemesterMetrics (for student counts)
+        const semesterParams = new URLSearchParams();
+        if (year) semesterParams.append('year', year);
+        if (institution) semesterParams.append('unit_name', institution);
+
+        Promise.all([
+            fetch(`${endpoint}?${params}`).then(r => r.json()),
+            fetch(`/api/semester-metrics/?${semesterParams}`).then(r => r.json())
+        ])
+        .then(([unitData, semesterData]) => {
+            if (unitData.success && unitData.documents && unitData.documents.length > 0) {
+                const unitMetricsArray = unitData.documents.map(doc => doc.data);
+                const semesterMetricsArray = semesterData.success && semesterData.documents
+                    ? semesterData.documents.map(doc => doc.data)
+                    : [];
+                const categoryMetrics = aggregateCategoryMetricsFromUnitWithStudentCounts(unitMetricsArray, semesterMetricsArray);
                 displayCategoryAnalysis(categoryMetrics);
             } else {
-                document.getElementById('categoryAnalysisContainer').innerHTML =
-                    `<div class="empty-state">
-                        <div class="empty-icon">
-                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
-                                <path d="M3 9h18M9 3v18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                <rect x="5" y="12" width="3" height="6" rx="1" fill="currentColor" opacity="0.6"/>
-                                <rect x="10" y="8" width="3" height="10" rx="1" fill="currentColor" opacity="0.6"/>
-                                <rect x="15" y="5" width="3" height="13" rx="1" fill="currentColor" opacity="0.6"/>
-                            </svg>
-                        </div>
-                        <p class="empty-text">No category data available</p>
-                        <p class="empty-subtitle">Apply filters to view category analytics</p>
-                    </div>`;
+                showEmptyState('categoryAnalysisContainer', 'No category data available', 'Apply filters to view category analytics');
             }
         })
         .catch(error => {
             console.error('Error loading category analysis:', error);
+            showEmptyState('categoryAnalysisContainer', 'Error loading data', 'Please try again');
         });
+    } else {
+        // Original flow for semester/OSCE level filters
+        fetch(`${endpoint}?${params}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.documents && data.documents.length > 0) {
+                    const metricsArray = data.documents.map(doc => doc.data);
+                    const categoryMetrics = aggregateMetricsByCategory(metricsArray);
+                    displayCategoryAnalysis(categoryMetrics);
+                } else {
+                    showEmptyState('categoryAnalysisContainer', 'No category data available', 'Apply filters to view category analytics');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading category analysis:', error);
+                showEmptyState('categoryAnalysisContainer', 'Error loading data', 'Please try again');
+            });
+    }
+}
+
+// Extract category metrics from UnitMetrics (avg scores) + SemesterMetrics (student counts)
+// Hybrid approach: Uses pre-computed avg scores from UnitMetrics, student counts from SemesterMetrics
+function aggregateCategoryMetricsFromUnitWithStudentCounts(unitMetricsArray, semesterMetricsArray) {
+    const categories = {};
+    const institutionSet = new Set();
+
+    // First pass: collect all institutions
+    unitMetricsArray.forEach(metric => {
+        if (metric.unit_name) {
+            institutionSet.add(metric.unit_name);
+        }
+    });
+    const totalInstitutions = institutionSet.size;
+
+    // Extract category performance from UnitMetrics (avg scores)
+    unitMetricsArray.forEach(metric => {
+        const categoryPerformance = metric.category_performance || {};
+
+        Object.entries(categoryPerformance).forEach(([catName, avgScore]) => {
+            if (!categories[catName]) {
+                categories[catName] = {
+                    category: catName,
+                    institutes: new Set(),
+                    avgScore: avgScore,
+                    scoreCount: 0,
+                    scoreSum: 0,
+                    uniqueStudents: new Set()  // Track unique students from semester metrics
+                };
+            }
+
+            categories[catName].institutes.add(metric.unit_name);
+
+            // Accumulate scores for averaging across institutions
+            if (avgScore !== undefined && avgScore !== null) {
+                categories[catName].scoreSum += avgScore;
+                categories[catName].scoreCount++;
+            }
+        });
+    });
+
+    // Extract student counts from SemesterMetrics (student_batch_report)
+    semesterMetricsArray.forEach(metric => {
+        if (metric.student_batch_report && Array.isArray(metric.student_batch_report)) {
+            Object.keys(categories).forEach(catName => {
+                // Count unique students who have this category in their category_breakdown
+                metric.student_batch_report.forEach(student => {
+                    if (student.user_id && student.category_breakdown && student.category_breakdown[catName]) {
+                        categories[catName].uniqueStudents.add(student.user_id);
+                    }
+                });
+            });
+        }
+    });
+
+    // Convert to array and calculate final metrics
+    const result = Object.values(categories).map(cat => {
+        const institutesCount = cat.institutes.size;
+        const avgScore = cat.scoreCount > 0 ? cat.scoreSum / cat.scoreCount : 0;
+        const uniqueStudentsCount = cat.uniqueStudents.size;
+
+        return {
+            category: cat.category,
+            institutesCount: institutesCount,
+            percentageOfTotal: totalInstitutions > 0 ? (institutesCount / totalInstitutions) * 100 : 0,
+            studentsAssessed: uniqueStudentsCount,  // From SemesterMetrics student counts
+            avgScore: avgScore,  // From UnitMetrics pre-computed values
+            passRate: 0  // TODO: May need to calculate from SemesterMetrics if needed
+        };
+    });
+
+    return result.sort((a, b) => a.category.localeCompare(b.category));
+}
+
+// Extract category metrics directly from pre-computed UnitMetrics
+// Used when all semesters are selected (no semester filter)
+function aggregateCategoryMetricsFromUnit(metricsArray) {
+    const categories = {};
+    const institutionSet = new Set();
+
+    // First pass: collect all institutions
+    metricsArray.forEach(metric => {
+        if (metric.unit_name) {
+            institutionSet.add(metric.unit_name);
+        }
+    });
+    const totalInstitutions = institutionSet.size;
+
+    // Extract category performance directly from UnitMetrics
+    metricsArray.forEach(metric => {
+        const categoryPerformance = metric.category_performance || {};
+
+        Object.entries(categoryPerformance).forEach(([catName, avgScore]) => {
+            if (!categories[catName]) {
+                categories[catName] = {
+                    category: catName,
+                    institutes: new Set(),
+                    avgScore: avgScore,
+                    scoreCount: 0,
+                    scoreSum: 0
+                };
+            }
+
+            categories[catName].institutes.add(metric.unit_name);
+
+            // Accumulate scores for averaging across institutions
+            if (avgScore !== undefined && avgScore !== null) {
+                categories[catName].scoreSum += avgScore;
+                categories[catName].scoreCount++;
+            }
+        });
+    });
+
+    // Convert to array and calculate final metrics
+    const result = Object.values(categories).map(cat => {
+        const institutesCount = cat.institutes.size;
+        const avgScore = cat.scoreCount > 0 ? cat.scoreSum / cat.scoreCount : 0;
+
+        return {
+            category: cat.category,
+            institutesCount: institutesCount,
+            percentageOfTotal: totalInstitutions > 0 ? (institutesCount / totalInstitutions) * 100 : 0,
+            studentsAssessed: 0,  // Not available from UnitMetrics, will be calculated from SemesterMetrics if needed
+            avgScore: avgScore,
+            passRate: 0  // Not available from UnitMetrics category_performance
+        };
+    });
+
+    return result.sort((a, b) => a.category.localeCompare(b.category));
 }
 
 function aggregateMetricsByCategory(metricsArray) {
@@ -2078,7 +2300,7 @@ function aggregateMetricsByCategory(metricsArray) {
 
     // Second pass: aggregate by category
     metricsArray.forEach(metric => {
-        if (metric.skills_performance) {
+        if (metric.skills_performance && metric.student_batch_report) {
             Object.values(metric.skills_performance).forEach(skill => {
                 if (!skill.category) return;
 
@@ -2090,16 +2312,29 @@ function aggregateMetricsByCategory(metricsArray) {
                         categories[catName] = {
                             category: catName,
                             institutes: new Set(),
-                            totalStudents: 0,
+                            uniqueStudents: new Set(),  // Track unique students per category
                             scoreSum: 0,
                             scoreCount: 0,
                             passCount: 0,
+                            totalAttempts: 0,
                             scoresList: []
                         };
                     }
 
                     categories[catName].institutes.add(metric.unit_name);
-                    categories[catName].totalStudents += skill.students_attempted;
+
+                    // Collect unique student IDs who attempted this skill/category
+                    if (metric.student_batch_report && Array.isArray(metric.student_batch_report)) {
+                        metric.student_batch_report.forEach(student => {
+                            if (student.user_id && student.category_breakdown && student.category_breakdown[catName]) {
+                                // Student has data for this category
+                                categories[catName].uniqueStudents.add(student.user_id);
+                            }
+                        });
+                    }
+
+                    // Track total attempts across all skills in this category
+                    categories[catName].totalAttempts += skill.students_attempted;
 
                     if (skill.avg_score !== undefined && skill.avg_score !== null) {
                         categories[catName].scoreSum += skill.avg_score;
@@ -2121,14 +2356,15 @@ function aggregateMetricsByCategory(metricsArray) {
     // Convert to array and calculate final metrics
     const result = Object.values(categories).map(cat => {
         const institutesCount = cat.institutes.size;
+        const uniqueStudentsCount = cat.uniqueStudents.size;  // Count of unique students in this category
         const avgScore = cat.scoreCount > 0 ? cat.scoreSum / cat.scoreCount : 0;
-        const passRate = cat.totalStudents > 0 ? (cat.passCount / cat.totalStudents) * 100 : 0;
+        const passRate = uniqueStudentsCount > 0 ? (cat.passCount / uniqueStudentsCount) * 100 : 0;
 
         return {
             category: cat.category,
             institutesCount: institutesCount,
             percentageOfTotal: totalInstitutions > 0 ? (institutesCount / totalInstitutions) * 100 : 0,
-            studentsAssessed: cat.totalStudents,
+            studentsAssessed: uniqueStudentsCount,  // CHANGED: Use unique student count instead of total attempts
             avgScore: avgScore,
             passRate: passRate
         };
@@ -2326,6 +2562,69 @@ function filterCategoryTable(searchTerm) {
     });
 }
 
+// OSCE Level Filter Management - Disable when "All Semesters" is selected
+function updateOSCELevelFilterState() {
+    const semesterFilter = document.getElementById('semesterFilter');
+    const osceLevelFilter = document.getElementById('osceLevelFilter');
+
+    if (!semesterFilter || !osceLevelFilter) return;
+
+    const isAllSemesters = !semesterFilter.value || semesterFilter.value === '';
+
+    if (isAllSemesters) {
+        // Disable OSCE level filter when "All Semesters" is selected
+        osceLevelFilter.disabled = true;
+        osceLevelFilter.style.opacity = '0.5';
+        osceLevelFilter.style.cursor = 'not-allowed';
+        // Reset OSCE level to "All OSCE Levels"
+        osceLevelFilter.value = '';
+    } else {
+        // Enable OSCE level filter when specific semester is selected
+        osceLevelFilter.disabled = false;
+        osceLevelFilter.style.opacity = '1';
+        osceLevelFilter.style.cursor = 'pointer';
+    }
+}
+
+// Add event listener for semester filter changes
+document.addEventListener('DOMContentLoaded', function() {
+    const semesterFilter = document.getElementById('semesterFilter');
+    if (semesterFilter) {
+        semesterFilter.addEventListener('change', updateOSCELevelFilterState);
+    }
+    // Initialize state after page loads
+    setTimeout(() => {
+        updateOSCELevelFilterState();
+    }, 100);
+});
+
+// Also initialize state if DOM is already loaded (for cases where script loads after DOM ready)
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', updateOSCELevelFilterState);
+} else {
+    updateOSCELevelFilterState();
+}
+
+// Add validation in applyFilters to prevent "All Semesters" + specific OSCE level
+const originalApplyFilters = applyFilters;
+applyFilters = function() {
+    const semesterFilter = document.getElementById('semesterFilter');
+    const osceLevelFilter = document.getElementById('osceLevelFilter');
+
+    if (semesterFilter && osceLevelFilter) {
+        const semester = semesterFilter.value;
+        const osceLevel = osceLevelFilter.value;
+
+        // Check if trying to submit "All Semesters" + specific OSCE level
+        if ((!semester || semester === '') && osceLevel && osceLevel !== '') {
+            alert('When "All Semesters" is selected, you can only view "All OSCE Levels". Please select a specific semester to filter by OSCE level.');
+            return;
+        }
+    }
+
+    // Call the original applyFilters function
+    originalApplyFilters();
+};
 
 </script>
 {% endblock %}

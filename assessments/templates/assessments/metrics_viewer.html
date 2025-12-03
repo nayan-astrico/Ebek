@@ -1782,6 +1782,18 @@ async function applySemesterFilters() {
         return;
     }
 
+    // Get filter values
+    const semester = document.getElementById('semSemesterFilter').value;
+    const osceLevel = document.getElementById('semOsceLevelFilter').value;
+
+    // Validation: When "All Semesters" is selected, only "All OSCE Levels" is allowed
+    if (!semester || semester === '') {
+        if (osceLevel && osceLevel !== 'All') {
+            alert('When "All Semesters" is selected, you can only view "All OSCE Levels". Please select a specific semester to filter by OSCE level.');
+            return;
+        }
+    }
+
     const container = document.getElementById('semesterDashboard');
     container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading semester metrics...</p></div>';
 
@@ -1819,10 +1831,6 @@ async function applySemesterFilters() {
     params.append('unit_name', unitName);
     params.append('year', academicYear); // Backend expects 'year', but we use academic_year
 
-    // Get optional filter values
-    const semester = document.getElementById('semSemesterFilter').value;
-    const osceLevel = document.getElementById('semOsceLevelFilter').value;
-
     // Determine which API to use based on semester selection and osce level filter
     // Use SemesterMetrics if osce_level filter is applied (even if "All Semesters" is selected)
     // because UnitMetrics doesn't have osce_type_breakdown
@@ -1848,28 +1856,27 @@ async function applySemesterFilters() {
         if (data.success && data.count > 0) {
             let dashboardData = data.documents[0].data;
 
-            // If OSCE level filter is applied, extract data from osce_type_breakdown
+            // If OSCE level filter is applied, extract OSCE-type-specific data
             if (osceLevel && osceLevel !== 'All') {
                 const osce_type_breakdown = dashboardData.osce_type_breakdown || {};
                 if (osce_type_breakdown[osceLevel]) {
                     const typeData = osce_type_breakdown[osceLevel];
-                    // Replace dashboard data with OSCE type specific data
-                    dashboardData = {
-                        ...dashboardData,
-                        total_students: typeData.total_students,
-                        students_assessed: typeData.students_assessed,
-                        osces_conducted: typeData.osces_conducted,
-                        avg_score: typeData.avg_score,
-                        pass_rate: typeData.pass_rate,
-                        grade_letter: typeData.grade_letter,
-                        grade_distribution: typeData.grade_distribution,
-                        category_performance: typeData.category_performance,
-                        category_details: typeData.category_details,  // Add category drill-down data for filtered view
-                        skills_performance: typeData.skills_performance,
-                        osce_activity_timeline: typeData.osce_activity_timeline,
-                        student_batch_report: typeData.student_batch_report,
-                        raw_scores: typeData.raw_scores
-                    };
+                    // Store original total_students (from Batches collection)
+                    const originalTotalStudents = dashboardData.total_students;
+
+                    // Replace students_assessed with OSCE-type-specific value
+                    dashboardData.students_assessed = typeData.students_assessed || 0;
+                    // Replace category, grade, and timeline data with OSCE-type-specific data
+                    dashboardData.category_performance = typeData.category_performance || {};
+                    dashboardData.grade_distribution = typeData.grade_distribution || {};
+                    dashboardData.osce_activity_timeline = typeData.osce_activity_timeline || [];
+                    // Replace score and grade with OSCE-type-specific values
+                    dashboardData.avg_score = typeData.avg_score || 0;
+                    dashboardData.grade_letter = typeData.grade_letter || '-';
+
+                    // IMPORTANT: Preserve total_students from Batches collection
+                    // Enrolled count should NEVER change when OSCE level is selected
+                    dashboardData.total_students = originalTotalStudents;
                 }
             }
 
@@ -3966,16 +3973,32 @@ document.addEventListener('DOMContentLoaded', function() {
         loadSemesterMetricsData();
     }
 
-    // Add event listener to semester filter to reset OSCE level when "All Semesters" is selected
+    // Add event listener to semester filter to disable/enable OSCE level based on semester selection
     const semesterFilter = document.getElementById('semSemesterFilter');
     const osceLevelFilter = document.getElementById('semOsceLevelFilter');
     if (semesterFilter && osceLevelFilter) {
         semesterFilter.addEventListener('change', function() {
-            // If "All Semesters" is selected (empty value), reset OSCE Level to "All"
+            // If "All Semesters" is selected (empty value)
             if (this.value === '') {
+                // Disable OSCE level filter and force to "All"
                 osceLevelFilter.value = 'All';
+                osceLevelFilter.disabled = true;
+                osceLevelFilter.style.opacity = '0.5';
+                osceLevelFilter.style.cursor = 'not-allowed';
+            } else {
+                // Enable OSCE level filter for specific semester
+                osceLevelFilter.disabled = false;
+                osceLevelFilter.style.opacity = '1';
+                osceLevelFilter.style.cursor = 'pointer';
             }
         });
+
+        // Initialize on page load - check if All Semesters is selected
+        if (semesterFilter.value === '') {
+            osceLevelFilter.disabled = true;
+            osceLevelFilter.style.opacity = '0.5';
+            osceLevelFilter.style.cursor = 'not-allowed';
+        }
     }
 
     // Initialize Candidate Report dropdown
@@ -3993,16 +4016,32 @@ if (document.readyState === 'loading') {
         loadSemesterMetricsData();
     }
 
-    // Add event listener to semester filter to reset OSCE level when "All Semesters" is selected
+    // Add event listener to semester filter to disable/enable OSCE level based on semester selection
     const semesterFilter = document.getElementById('semSemesterFilter');
     const osceLevelFilter = document.getElementById('semOsceLevelFilter');
     if (semesterFilter && osceLevelFilter) {
         semesterFilter.addEventListener('change', function() {
-            // If "All Semesters" is selected (empty value), reset OSCE Level to "All"
+            // If "All Semesters" is selected (empty value)
             if (this.value === '') {
+                // Disable OSCE level filter and force to "All"
                 osceLevelFilter.value = 'All';
+                osceLevelFilter.disabled = true;
+                osceLevelFilter.style.opacity = '0.5';
+                osceLevelFilter.style.cursor = 'not-allowed';
+            } else {
+                // Enable OSCE level filter for specific semester
+                osceLevelFilter.disabled = false;
+                osceLevelFilter.style.opacity = '1';
+                osceLevelFilter.style.cursor = 'pointer';
             }
         });
+
+        // Initialize on page load - check if All Semesters is selected
+        if (semesterFilter.value === '') {
+            osceLevelFilter.disabled = true;
+            osceLevelFilter.style.opacity = '0.5';
+            osceLevelFilter.style.cursor = 'not-allowed';
+        }
     }
 
     // Initialize Candidate Report dropdown

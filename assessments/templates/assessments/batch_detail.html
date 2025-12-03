@@ -258,7 +258,6 @@
                     <tr>
                         <th>Course Name</th>
                         <th>Procedures</th>
-                        <th>OSCE Types</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -1237,12 +1236,11 @@ function renderCourseRow(course) {
             <td>${course.name}</td>
             <td>
                 <div class="procedure-pills">
-                    ${course.procedures && course.procedures.length > 0 
+                    ${course.procedures && course.procedures.length > 0
                         ? course.procedures.map(proc => `<span class="pill">${proc}</span>`).join('')
                         : '<span class="pill" style="background:#f8d7da;color:#721c24;">No procedures</span>'}
                 </div>
             </td>
-            <td>${course.osce_types.join(', ')}</td>
             {% if "remove_course_from_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
             <td>
                 <div class="actions">
@@ -1285,7 +1283,7 @@ function loadMoreCourses() {
                 tbody.insertAdjacentHTML('beforeend', renderCourseRow(course));
             });
             if (courseOffset === 0 && courses.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#666;">No courses found</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:#666;">No courses found</td></tr>`;
                 document.getElementById('showMoreCoursesBtn').style.display = 'none';
             } else if (!allCoursesLoaded) {
                 document.getElementById('showMoreCoursesBtn').style.display = 'block';
@@ -1396,8 +1394,7 @@ function saveBatchName() {
         if (data.success) {
             // Update the display
             document.getElementById('batchNameText').textContent = newName;
-            document.querySelector('.info-value').textContent = newName;
-            
+
             // Switch back to display mode
             cancelBatchNameEdit();
             
@@ -1927,12 +1924,12 @@ function displayBatchCourses(courses) {
     const tableBody = document.getElementById('coursesTableBody');
     
     if (courses.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #666;">No courses assigned to this batch</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: #666;">No courses assigned to this batch</td></tr>';
         return;
     }
-    
+
     tableBody.innerHTML = '';
-    
+
     courses.forEach(course => {
         const row = document.createElement('tr');
         row.innerHTML = `
@@ -1942,7 +1939,6 @@ function displayBatchCourses(courses) {
                     ${course.procedures.map(proc => `<span class="pill">${proc}</span>`).join('')}
                 </div>
             </td>
-            <td>${course.osce_types.join(', ')}</td>
             <td>
                 <div class="actions">
                     <button class="btn-icon btn-danger" onclick="removeCourse('${course.id}')">
