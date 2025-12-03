@@ -70,13 +70,9 @@ def group_list(request):
     selected_types = request.GET.getlist('type')
     selected_statuses = request.GET.getlist('status')
     
-    # Apply search filter
+    # Search only by name
     if search_query:
-        groups = groups.filter(
-            Q(name__icontains=search_query) |
-            Q(group_head__full_name__icontains=search_query) |
-            Q(group_head__email__icontains=search_query)
-        )
+        groups = groups.filter(name__icontains=search_query)
     
     # Apply filters
     if selected_types:
@@ -273,13 +269,9 @@ def institution_list(request):
     selected_states = request.GET.getlist('state')
     selected_statuses = request.GET.getlist('status')
     
+    # Search only by name
     if search_query:
-        institutions = institutions.filter(
-            Q(name__icontains=search_query) |
-            Q(address__icontains=search_query) |
-            Q(district__icontains=search_query) |
-            Q(state__icontains=search_query)
-        )
+        institutions = institutions.filter(name__icontains=search_query)
     
     if selected_groups:
         institutions = institutions.filter(group_id__in=selected_groups)
@@ -594,10 +586,11 @@ def institution_list_api(request):
     
     institutions = Institution.objects.all().order_by('-created_at') if request.user.has_all_permissions() else request.user.assigned_institutions.all().order_by('-created_at')
     
-    # Apply search filter if search query exists - only search by Institution Name (starts with)
+    # Apply search filter if search query exists - search anywhere in Institution Name (case-insensitive)
     if search_query:
         print(f"DEBUG: Applying institution search filter for: '{search_query}'")
-        institutions = institutions.filter(name__istartswith=search_query)
+        # Use icontains so matches are found even if the search text is in the middle of the name
+        institutions = institutions.filter(name__icontains=search_query)
     print(request.GET)
     
     # Apply other filters
@@ -682,13 +675,9 @@ def hospital_list(request):
     selected_states = request.GET.getlist('state')
     selected_statuses = request.GET.getlist('status')
     
+    # Search only by name
     if search_query:
-        hospitals = hospitals.filter(
-            Q(name__icontains=search_query) |
-            Q(address__icontains=search_query) |
-            Q(district__icontains=search_query) |
-            Q(state__icontains=search_query)
-        )
+        hospitals = hospitals.filter(name__icontains=search_query)
     
     if selected_groups:
         hospitals = hospitals.filter(group_id__in=selected_groups)
@@ -730,10 +719,8 @@ def hospital_create(request):
                 return JsonResponse({'error': 'Hospital already exists for this onboarding type.'}, status=400)
 
             hospital = form.save(commit=False)
-            if request.POST.get('is_active') == 'on':
-                hospital.is_active = True
-            else:
-                hospital.is_active = False
+            # Set is_active to True by default for new hospitals
+            hospital.is_active = True
             hospital.save()
             messages.success(request, 'Hospital created successfully.')
             return HttpResponse('OK')
@@ -758,10 +745,7 @@ def hospital_edit(request, pk):
                 return JsonResponse({'error': 'Hospital already exists for this onboarding type.'}, status=400)
             
             
-            if request.POST.get('is_active') == 'on':
-                hospital.is_active = True
-            else:
-                hospital.is_active = False
+            # Preserve existing is_active value when editing (form doesn't include the slider anymore)
             hospital = form.save(commit=False)
             hospital.save()
             messages.success(request, 'Hospital updated successfully.')
@@ -998,15 +982,10 @@ def hospital_list_api(request):
     
     hospitals = Hospital.objects.all().order_by('-created_at') if request.user.has_all_permissions() else request.user.assigned_hospitals.all().order_by('-created_at')
     
-    # Apply search filter if search query exists
+    # Apply search filter if search query exists - only search by name
     if search_query:
         print(f"DEBUG: Applying hospital search filter for: '{search_query}'")
-        hospitals = hospitals.filter(
-            Q(name__icontains=search_query) |
-            Q(address__icontains=search_query) |
-            Q(district__icontains=search_query) |
-            Q(state__icontains=search_query)
-        )
+        hospitals = hospitals.filter(name__icontains=search_query)
     
     # Apply other filters
     selected_groups = request.GET.getlist('group')
@@ -1073,13 +1052,10 @@ def group_list_api(request):
     groups = Group.objects.all().order_by('-created_at')
     
     # Apply search filter if search query exists
+    # Search only by name
     if search_query:
         print(f"DEBUG: Applying group search filter for: '{search_query}'")
-        groups = groups.filter(
-            Q(name__icontains=search_query) |
-            Q(group_head__full_name__icontains=search_query) |
-            Q(group_head__email__icontains=search_query)
-        )
+        groups = groups.filter(name__icontains=search_query)
         print(f"DEBUG: Filtered groups count: {groups.count()}")
     
     # Apply other filters
@@ -2160,14 +2136,9 @@ def assessor_list(request):
         ).order_by('-created_at')
     
     
+    # Search only by name
     if search_query:
-        assessors = assessors.filter(
-            Q(assessor_user__full_name__icontains=search_query) |
-            Q(assessor_user__email__icontains=search_query) |
-            Q(assessor_user__phone_number__icontains=search_query) |
-            Q(specialization__icontains=search_query) |
-            Q(location__icontains=search_query)
-        )
+        assessors = assessors.filter(assessor_user__full_name__icontains=search_query)
     
     if selected_specialities:
         assessors = assessors.filter(specialization__in=selected_specialities)
@@ -2438,16 +2409,10 @@ def assessor_list_api(request):
             Q(institution_id__in=assigned_colleges) | Q(hospital_id__in=assigned_hospitals)
         ).order_by('-created_at')
         
-    # Apply search filter if search query exists
+    # Apply search filter if search query exists - only search by name
     if search_query:
         print(f"DEBUG: Applying assessor search filter for: '{search_query}'")
-        assessors = assessors.filter(
-            Q(assessor_user__full_name__icontains=search_query) |
-            Q(assessor_user__email__icontains=search_query) |
-            Q(assessor_user__phone_number__icontains=search_query) |
-            Q(specialization__icontains=search_query) |
-            Q(location__icontains=search_query)
-        )
+        assessors = assessors.filter(assessor_user__full_name__icontains=search_query)
     
     # Apply other filters
     selected_specialities = request.GET.getlist('speciality')
@@ -2671,14 +2636,10 @@ def skillathon_list_api(request):
     else:
         events = SkillathonEvent.objects.filter(id__in=assigned_skillathons).order_by('-date')
     
-    # Apply search filter if search query exists
+    # Apply search filter if search query exists - only search by name
     if search_query:
         print(f"DEBUG: Applying skillathon search filter for: '{search_query}'")
-        events = events.filter(
-            Q(name__icontains=search_query) |
-            Q(city__icontains=search_query) |
-            Q(state__icontains=search_query)
-        )
+        events = events.filter(name__icontains=search_query)
     
     # Apply date filters
     date_from = request.GET.get('date_from')
@@ -2778,15 +2739,10 @@ def learner_list_api(request):
             Q(college_id__in=assigned_colleges) | Q(hospital_id__in=assigned_hospitals)
         ).order_by('-created_at')
     
-    # Apply search filter if search query exists
+    # Apply search filter if search query exists - only search by name
     if search_query:
         print(f"DEBUG: Applying learner search filter for: '{search_query}'")
-        learners = learners.filter(
-            Q(learner_user__full_name__icontains=search_query) |
-            Q(learner_user__email__icontains=search_query) |
-            Q(learner_user__phone_number__icontains=search_query) |
-            Q(learner_type__icontains=search_query)
-        )
+        learners = learners.filter(learner_user__full_name__icontains=search_query)
     
     selected_institutions = request.GET.getlist('institution')
     selected_hospitals = request.GET.getlist('hospital')

@@ -84,6 +84,16 @@
     font-weight: 600;
     color: #1a202c;
 }
+
+.btn-primary:disabled,
+.btn.btn-primary:disabled {
+    background: #F16564 !important;
+    background-color: #F16564 !important;
+    color: white !important;
+    opacity: 1 !important;
+    cursor: not-allowed;
+    border-color: #F16564 !important;
+}
 </style>
 
 
@@ -110,8 +120,7 @@
         <input type="text"
                placeholder="Search assessors..."
                value="{{ search_query }}"
-               id="assessorSearchInput"
-               oninput="filterAssessors(this.value)">
+               id="assessorSearchInput">
     </div>
 </div>
 
@@ -340,6 +349,14 @@
     color: white;
     outline: none;
     box-shadow: none;
+}
+
+.btn-primary:disabled,
+.btn.btn-primary:disabled {
+    background: #F16564;
+    color: white !important;
+    opacity: 1 !important;
+    cursor: not-allowed;
 }
 
 /* Search and Filter Bar */
@@ -851,6 +868,34 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize filter badge
     updateFilterBadge();
     
+    // Initialize search token
+    currentSearchToken = 0;
+    
+    // Clear table and show loading button
+    const tbody = document.getElementById('assessorTableBody');
+    if (tbody) {
+        tbody.innerHTML = '';
+    }
+    
+    // Hide empty state
+    setElementStyle('assessorEmptyState', 'display', 'none');
+    
+    // Show loading button
+    const showMoreBtn = document.getElementById('showMoreBtn');
+    if (showMoreBtn) {
+        showMoreBtn.style.display = 'inline-block';
+        showMoreBtn.textContent = 'Loading...';
+        showMoreBtn.disabled = true;
+    }
+    
+    // Hook up search input event listener
+    const searchInput = document.getElementById('assessorSearchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            filterAssessors(this.value);
+        });
+    }
+    
     // Load all institutions and hospitals on page load
     loadAllInstitutionsAndHospitals();
     
@@ -1044,6 +1089,10 @@ let loading = false;
 let allLoaded = false;
 let currentSearchQuery = '';
 let currentFilters = {};
+// Tracks latest search context so stale async responses are ignored
+let currentSearchToken = 0;
+// Debounce timer for search input
+let searchDebounceTimer = null;
 
 function buildAssessorQueryParams() {
     const params = new URLSearchParams();
@@ -1108,6 +1157,10 @@ function renderAssessorRow(assessor) {
 function loadMoreAssessors() {
     if (loading || allLoaded) return Promise.resolve();
     
+    // Capture the search context for this specific request
+    const requestSearchToken = currentSearchToken;
+    const requestSearchQuery = currentSearchQuery;
+    
     loading = true;
     setElementText('showMoreBtn', 'Loading...');
     setElementStyle('showMoreBtn', 'disabled', 'true');
@@ -1116,7 +1169,13 @@ function loadMoreAssessors() {
     return fetch(`/onboarding/assessors/api/?${queryParams}`)
         .then(response => response.json())
         .then(data => {
-            const assessors = data.assessors;
+            // If the search has changed since this request was made, ignore this response
+            if (requestSearchToken !== currentSearchToken || requestSearchQuery !== currentSearchQuery) {
+                console.log('DEBUG: Ignoring stale assessor search response for:', requestSearchQuery);
+                return;
+            }
+            
+            const assessors = data.assessors || [];
             allLoaded = data.all_loaded;
             
             if (allLoaded) {
@@ -1126,50 +1185,123 @@ function loadMoreAssessors() {
             offset += assessors.length;
             const tbody = document.getElementById('assessorTableBody');
             
-            if (offset === 0 && assessors.length === 0) {
+            const wasFirstLoad = (offset - assessors.length) === 0;
+            if (wasFirstLoad && assessors.length === 0) {
                 setElementStyle('assessorEmptyState', 'display', 'block');
                 setElementStyle('showMoreBtn', 'display', 'none');
             } else {
                 setElementStyle('assessorEmptyState', 'display', 'none');
-            assessors.forEach(assessor => {
-                tbody.insertAdjacentHTML('beforeend', renderAssessorRow(assessor));
-            });
+                assessors.forEach(assessor => {
+                    tbody.insertAdjacentHTML('beforeend', renderAssessorRow(assessor));
+                });
             }
-        })
-        .catch(error => {
-            console.error('Error loading assessors:', error);
-        })
-        .finally(() => {
-            loading = false;
-            if (!allLoaded) {
+            
+            // Update button state
+            if (!allLoaded && assessors.length > 0) {
                 setElementStyle('showMoreBtn', 'display', 'inline-block');
                 setElementText('showMoreBtn', 'Show More');
                 setElementStyle('showMoreBtn', 'disabled', 'false');
             }
+        })
+        .catch(error => {
+            console.error('Error loading assessors:', error);
+            // On error, restore button state
+            const showMoreBtn = document.getElementById('showMoreBtn');
+            if (showMoreBtn) {
+                const tbody = document.getElementById('assessorTableBody');
+                if (tbody && tbody.children.length > 0) {
+                    showMoreBtn.textContent = 'Show More';
+                    showMoreBtn.disabled = false;
+                } else {
+                    showMoreBtn.style.display = 'none';
+                }
+            }
+        })
+        .finally(() => {
+            loading = false;
         });
 }
 
 function filterAssessors(searchQuery) {
-    currentSearchQuery = searchQuery;
-    resetAssessorList();
-    applySearch();
+    // Clear any existing debounce timer
+    if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+    }
+    
+    // Update search query immediately for UI responsiveness
+    const trimmedSearch = (searchQuery || '').trim();
+    
+    // If search is cleared, execute immediately (no debounce for clearing)
+    if (trimmedSearch === '' && currentSearchQuery !== '') {
+        currentSearchQuery = '';
+        currentSearchToken++;
+        resetAssessorList();
+        loadMoreAssessors();
+        return;
+    }
+    
+    // Debounce the API call - wait 300ms after user stops typing
+    searchDebounceTimer = setTimeout(function() {
+        // Trim the search text and update global currentSearchQuery
+        currentSearchQuery = trimmedSearch;
+        console.log('DEBUG: Debounced assessor search triggered with:', currentSearchQuery);
+        
+        // Increment search token so older async responses can be ignored
+        currentSearchToken++;
+        
+        // Reset list and reload with new search query
+        resetAssessorList();
+        loadMoreAssessors();
+        
+        // Clear the timer reference
+        searchDebounceTimer = null;
+    }, 300);
 }
 
 function applySearch() {
     offset = 0;
     allLoaded = false;
+    loading = false;
+    
+    // Clear any pending search debounce timer
+    if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = null;
+    }
+    
+    // Clear table immediately
     document.getElementById('assessorTableBody').innerHTML = '';
-    setElementStyle('showMoreBtn', 'display', 'block');
+    
+    // Show loading button
+    setElementStyle('showMoreBtn', 'display', 'inline-block');
+    setElementText('showMoreBtn', 'Loading...');
+    setElementStyle('showMoreBtn', 'disabled', 'true');
     setElementStyle('assessorEmptyState', 'display', 'none');
+    
     loadMoreAssessors();
 }
 
 function resetAssessorList() {
     offset = 0;
     allLoaded = false;
+    loading = false;
+    
+    // Clear any pending search debounce timer
+    if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = null;
+    }
+    
+    // Clear table immediately
     document.getElementById('assessorTableBody').innerHTML = '';
-    setElementStyle('showMoreBtn', 'display', 'block');
+    
+    // Hide empty state
     setElementStyle('assessorEmptyState', 'display', 'none');
+    
+    // Show loading button
+    setElementStyle('showMoreBtn', 'display', 'inline-block');
+    setElementText('showMoreBtn', 'Loading...');
+    setElementStyle('showMoreBtn', 'disabled', 'true');
 }
 
 function applyFilters() {
@@ -1191,6 +1323,10 @@ function applyFilters() {
     }
     
     console.log('Current filters:', currentFilters);
+    
+    // Increment search token so older async responses can be ignored
+    currentSearchToken++;
+    
     resetAssessorList();
     loadMoreAssessors();
 }

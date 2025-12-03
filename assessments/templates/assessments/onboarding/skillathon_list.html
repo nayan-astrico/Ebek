@@ -84,6 +84,16 @@
     font-weight: 600;
     color: #1a202c;
 }
+
+.btn-primary:disabled,
+.btn.btn-primary:disabled {
+    background: #F16564 !important;
+    background-color: #F16564 !important;
+    color: white !important;
+    opacity: 1 !important;
+    cursor: not-allowed;
+    border-color: #F16564 !important;
+}
 </style>
 
 <!-- Header -->
@@ -109,8 +119,7 @@
         <input type="text"
                placeholder="Search skillathons..."
                value="{{ search_query|default:'' }}"
-               id="skillathonSearchInput"
-               oninput="filterSkillathons(this.value)">
+               id="skillathonSearchInput">
     </div>
     <button class="btn-filter" onclick="toggleFilterPanel()" id="filterBtn">
         <i class="fas fa-filter"></i>
@@ -1111,6 +1120,9 @@ let loading = false;
 let allLoaded = false;
 let currentSearchQuery = '';
 let currentFilters = {};
+// Tracks latest search context so stale async responses are ignored
+let currentSearchToken = 0;
+let searchDebounceTimer = null;
 
 function buildSkillathonQueryParams() {
     const params = new URLSearchParams();
@@ -1133,11 +1145,22 @@ function buildSkillathonQueryParams() {
     return params.toString();
 }
 
-// Search functionality
+// Search functionality with debouncing
 function filterSkillathons(searchQuery) {
-    currentSearchQuery = searchQuery;
-    resetSkillathonList();
-    applySearch();
+    // Clear any existing debounce timer
+    if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = null;
+    }
+    
+    // Only update if search query actually changed
+    if (searchQuery.trim() !== currentSearchQuery.trim()) {
+        currentSearchQuery = searchQuery.trim();
+        // Increment search token to ignore stale responses
+        currentSearchToken++;
+        resetSkillathonList();
+        applySearch();
+    }
 }
 
 // Filter application
@@ -1173,16 +1196,31 @@ function applyFilters() {
 function applySearch() {
     offset = 0;
     allLoaded = false;
+    loading = false;
+    
+    // Clear table immediately
     document.getElementById('skillathonTableBody').innerHTML = '';
-    setElementStyle('showMoreBtn', 'display', 'block');
+    
+    // Show loading button
+    setElementStyle('showMoreBtn', 'display', 'inline-block');
+    setElementText('showMoreBtn', 'Loading...');
+    setElementStyle('showMoreBtn', 'disabled', 'true');
+    
     loadMoreSkillathons();
 }
 
 function resetSkillathonList() {
     offset = 0;
     allLoaded = false;
+    loading = false;
+    
+    // Clear table immediately
     document.getElementById('skillathonTableBody').innerHTML = '';
-    setElementStyle('showMoreBtn', 'display', 'block');
+    
+    // Show loading button
+    setElementStyle('showMoreBtn', 'display', 'inline-block');
+    setElementText('showMoreBtn', 'Loading...');
+    setElementStyle('showMoreBtn', 'disabled', 'true');
 }
 
 function renderSkillathonRow(event) {
@@ -1222,16 +1260,27 @@ function renderSkillathonRow(event) {
 }
 
 function loadMoreSkillathons() {
-    if (loading || allLoaded) return;
+    if (loading || allLoaded) return Promise.resolve();
+    
+    // Capture the search context for this specific request
+    const requestSearchToken = currentSearchToken;
+    const requestSearchQuery = currentSearchQuery;
+    
     loading = true;
     setElementText('showMoreBtn', 'Loading...');
     setElementStyle('showMoreBtn', 'disabled', 'true');
     
     const queryParams = buildSkillathonQueryParams();
-    fetch(`/onboarding/skillathons/api/?${queryParams}`)
+    return fetch(`/onboarding/skillathons/api/?${queryParams}`)
         .then(response => response.json())
         .then(data => {
-            const events = data.events;
+            // If the search has changed since this request was made, ignore this response
+            if (requestSearchToken !== currentSearchToken || requestSearchQuery !== currentSearchQuery) {
+                console.log('DEBUG: Ignoring stale skillathon search response for:', requestSearchQuery);
+                return;
+            }
+            
+            const events = data.events || [];
             allLoaded = data.all_loaded;
             
             if (allLoaded) {
@@ -1241,7 +1290,8 @@ function loadMoreSkillathons() {
             offset += events.length;
             const tbody = document.getElementById('skillathonTableBody');
             
-            if (offset === 0 && events.length === 0) {
+            const wasFirstLoad = (offset - events.length) === 0;
+            if (wasFirstLoad && events.length === 0) {
                 tbody.innerHTML = `<tr>
                     <td colspan="4" class="empty">
                         <i class="fas fa-calendar-alt"></i>
@@ -1258,20 +1308,63 @@ function loadMoreSkillathons() {
                     tbody.insertAdjacentHTML('beforeend', renderSkillathonRow(event));
                 });
             }
-        })
-        .catch(error => {
-            console.error('Error loading skillathons:', error);
-        })
-        .finally(() => {
-            loading = false;
-            if (!allLoaded) {
+            
+            // Update button state
+            if (!allLoaded && events.length > 0) {
                 setElementStyle('showMoreBtn', 'display', 'inline-block');
                 setElementText('showMoreBtn', 'Show More');
                 setElementStyle('showMoreBtn', 'disabled', 'false');
             }
+        })
+        .catch(error => {
+            console.error('Error loading skillathons:', error);
+            // On error, restore button state
+            const showMoreBtn = document.getElementById('showMoreBtn');
+            if (showMoreBtn) {
+                const tbody = document.getElementById('skillathonTableBody');
+                if (tbody && tbody.children.length > 0) {
+                    showMoreBtn.textContent = 'Show More';
+                    showMoreBtn.disabled = false;
+                } else {
+                    showMoreBtn.style.display = 'none';
+                }
+            }
+        })
+        .finally(() => {
+            loading = false;
+            // Always restore button state in finally block
+            if (!allLoaded) {
+                const showMoreBtn = document.getElementById('showMoreBtn');
+                if (showMoreBtn && showMoreBtn.textContent === 'Loading...') {
+                    setElementStyle('showMoreBtn', 'display', 'inline-block');
+                    setElementText('showMoreBtn', 'Show More');
+                    setElementStyle('showMoreBtn', 'disabled', 'false');
+                }
+            }
         });
 }
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize search token
+    currentSearchToken = 0;
+    
+    // Hook up search input event listener with debouncing
+    const searchInput = document.getElementById('skillathonSearchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const searchValue = this.value.trim();
+            
+            // Clear any existing debounce timer
+            if (searchDebounceTimer) {
+                clearTimeout(searchDebounceTimer);
+            }
+            
+            // Debounce the search - wait 300ms after user stops typing
+            searchDebounceTimer = setTimeout(function() {
+                filterSkillathons(searchValue);
+            }, 300);
+        });
+    }
+    
     loadMoreSkillathons();
 });
 </script>

@@ -140,14 +140,6 @@
                                 {% endif %}
                             </div>
 
-                            <div class="form-group">
-                                <div class="custom-control custom-switch">
-                                    <input type="checkbox" class="custom-control-input" id="is_active" name="is_active"
-                                           {% if form.instance.is_active %}checked{% endif %}>
-                                    <label class="custom-control-label" for="is_active">Active</label>
-                                </div>
-                            </div>
-
                             <div class="form-group" style="display: none;">
                                 <div class="custom-control custom-switch">
                                     <input type="checkbox" class="custom-control-input" id="{{ form.allowed_to_take_classroom_test.id_for_label }}" name="allowed_to_take_classroom_test"

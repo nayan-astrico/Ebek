@@ -31,8 +31,7 @@
             <input 
                 type="text" 
                 placeholder="Search procedures..." 
-                id="procedureSearchInput" 
-                oninput="filterProcedures(this.value)"
+                id="procedureSearchInput"
             >
         </div>
     <button class="btn-filter" onclick="toggleProcedureFilterPanel()" id="filterBtn">
@@ -376,7 +375,7 @@
     <!-- Actions -->
     <div class="upload-actions">
         <button type="button" class="btn btn-light" onclick="toggleUploadPanel()">Cancel</button>
-        <button type="button" class="btn btn-primary" id="uploadButton" onclick="submitUpload()">
+        <button type="button" class="btn btn-primary" id="uploadButton">
             <i class="fas fa-upload"></i>
             Upload
         </button>
@@ -465,6 +464,11 @@ document.addEventListener('DOMContentLoaded', () => {
         fileInput.value = '';
         previewContainer.innerHTML = '';
         validationContainer.innerHTML = '';
+        
+        // Reset upload button state
+        uploadButton.disabled = false;
+        uploadButton.style.opacity = '1';
+        uploadButton.style.cursor = 'pointer';
 
         // Reset UI to show upload placeholder
         const uploadPlaceholder = document.querySelector('.upload-placeholder');
@@ -544,18 +548,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const validations = response.validation || [];
         if (validations.length) {
-            let html = '<ul>';
+            let html = '<ul class="validation-errors">';
             validations.forEach(v => html += `<li>Row ${v.row}: ${v.message}</li>`);
             html += '</ul>';
             validationContainer.innerHTML = html;
+            // Disable upload button if there are validation errors
+            uploadButton.disabled = true;
+            uploadButton.style.opacity = '0.6';
+            uploadButton.style.cursor = 'not-allowed';
         } else {
-            validationContainer.innerHTML = '<p class="success">All rows valid ..</p>';
+            validationContainer.innerHTML = '<p class="success">All rows valid ✓</p>';
+            // Enable upload button if no validation errors
+            uploadButton.disabled = false;
+            uploadButton.style.opacity = '1';
+            uploadButton.style.cursor = 'pointer';
         }
     }
 
     // Upload button click
     uploadButton.addEventListener('click', async () => {
         if (!selectedFile) return alert('Please select a file first');
+        
+        // Check if there are validation errors
+        const validationErrors = document.querySelector('.validation-errors');
+        if (validationErrors) {
+            alert('Please fix all validation errors before uploading. Check the validation results above.');
+            return;
+        }
 
         const procedureName = document.getElementById('procedureName').value.trim();
         const category = document.getElementById('category').value;
@@ -1334,8 +1353,12 @@ let procedureOffset = 0;
 const procedureLimit = 10;
 let proceduresLoading = false;
 let allProceduresLoaded = false;
-let firstProcedureLoad = true;
+let firstProcedureLoad = false;
 let currentProcedureSearch = '';
+// Tracks latest search context so stale async responses are ignored
+let currentProcedureSearchToken = 0;
+// Debounce timer for search input
+let procedureSearchDebounceTimer = null;
 
 
 
@@ -1385,16 +1408,16 @@ function buildProcedureQueryParams() {
         params.append('search', currentProcedureSearch.trim());
     }
 
-    // Status filters
-    if (currentProcedureFilters.status && currentProcedureFilters.status.length > 0) {
-        currentProcedureFilters.status.forEach(status => {
+    // Status filters - use window.currentProcedureFilters
+    if (window.currentProcedureFilters && window.currentProcedureFilters.status && window.currentProcedureFilters.status.length > 0) {
+        window.currentProcedureFilters.status.forEach(status => {
             params.append('status', status);
         });
     }
 
-    // Category filters
-    if (currentProcedureFilters.category && currentProcedureFilters.category.length > 0) {
-        currentProcedureFilters.category.forEach(cat => {
+    // Category filters - use window.currentProcedureFilters
+    if (window.currentProcedureFilters && window.currentProcedureFilters.category && window.currentProcedureFilters.category.length > 0) {
+        window.currentProcedureFilters.category.forEach(cat => {
             params.append('category', cat);
         });
     }
@@ -1408,25 +1431,42 @@ function loadMoreProcedures() {
     if (proceduresLoading || allProceduresLoaded) return;
     proceduresLoading = true;
 
-    const spinner = document.getElementById('proceduresLoadingSpinner');
+    // Capture the search context for this specific request
+    const requestSearchToken = currentProcedureSearchToken;
+    const requestSearch = currentProcedureSearch;
+
+    // Show loading state on button
     const showMoreBtn = document.getElementById('showMoreProceduresBtn');
+    showMoreBtn.style.display = 'inline-block';
+    showMoreBtn.textContent = 'Loading...';
+    showMoreBtn.disabled = true;
 
-    if (firstProcedureLoad) {
-        spinner.style.display = 'flex';
-        showMoreBtn.style.display = 'none';
-    } else {
-        showMoreBtn.innerText = 'Loading...';
-        showMoreBtn.disabled = true;
-    }
-
-    fetch(`/fetch-assessments/?${buildProcedureQueryParams()}`)
-        .then(response => response.json())
+    const apiUrl = `/fetch-assessments/?${buildProcedureQueryParams()}`;
+    console.log('Fetching procedures from:', apiUrl);
+    
+    fetch(apiUrl)
+        .then(response => {
+            console.log('Response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
+            // If the search has changed since this request was made, ignore this response
+            if (requestSearchToken !== currentProcedureSearchToken || requestSearch !== currentProcedureSearch) {
+                console.log('Ignoring stale search response');
+                proceduresLoading = false;
+                return;
+            }
+            
+            console.log('Received procedures data:', data);
+            console.log('Number of procedures:', data.assessments ? data.assessments.length : 0);
+
             const procedures = data.assessments || [];
 
             if (procedures.length < procedureLimit || data.all_loaded) {
                 allProceduresLoaded = true;
-                showMoreBtn.style.display = 'none';
             }
 
             procedureOffset += procedures.length;
@@ -1435,7 +1475,10 @@ function loadMoreProcedures() {
 
             procedures.forEach(proc => tbody.appendChild(renderProcedureRow(proc)));
 
-            if (procedureOffset === 0 && procedures.length === 0) {
+            // Handle empty state - check if this is the first load (offset was 0 before increment)
+            const wasFirstLoad = (procedureOffset - procedures.length) === 0;
+            if (wasFirstLoad && procedures.length === 0) {
+                // First load and no results
                 tbody.innerHTML = '';
                 document.getElementById('emptyProceduresState').style.display = 'block';
                 showMoreBtn.style.display = 'none';
@@ -1443,16 +1486,32 @@ function loadMoreProcedures() {
                 document.getElementById('emptyProceduresState').style.display = 'none';
             }
 
-            if (!allProceduresLoaded && allProcedures.length > 0) {
+            // Update button state - always restore button state when results come back
+            if (allProceduresLoaded) {
+                // All results loaded, hide button
+                showMoreBtn.style.display = 'none';
+            } else if (allProcedures.length > 0) {
+                // More results available, show "Show More" button
                 showMoreBtn.style.display = 'inline-block';
-                showMoreBtn.innerText = 'Show More';
+                showMoreBtn.textContent = 'Show More';
                 showMoreBtn.disabled = false;
+            } else {
+                // No results yet but not all loaded (shouldn't happen, but handle it)
+                showMoreBtn.style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            // On error, restore button state
+            if (allProcedures.length > 0) {
+                showMoreBtn.textContent = 'Show More';
+                showMoreBtn.disabled = false;
+            } else {
+                showMoreBtn.style.display = 'none';
             }
         })
         .finally(() => {
             proceduresLoading = false;
-            spinner.style.display = 'none';
-            firstProcedureLoad = false;
         });
 }
 
@@ -1460,17 +1519,56 @@ function resetProceduresAndLoad() {
     procedureOffset = 0;
     allProceduresLoaded = false;
     allProcedures = [];
-    firstProcedureLoad = true;
-    document.getElementById('proceduresTableBody').innerHTML = '';
-    document.getElementById('showMoreProceduresBtn').style.display = 'none';
-    document.getElementById('proceduresLoadingSpinner').style.display = 'flex';
+    firstProcedureLoad = false;
+    
+    // Clear table immediately
+    const tbody = document.getElementById('proceduresTableBody');
+    tbody.innerHTML = '';
+    
+    // Hide empty state
+    const emptyState = document.getElementById('emptyProceduresState');
+    if (emptyState) {
+        emptyState.style.display = 'none';
+    }
+    
+    // Show loading button
+    const showMoreBtn = document.getElementById('showMoreProceduresBtn');
+    showMoreBtn.style.display = 'inline-block';
+    showMoreBtn.textContent = 'Loading...';
+    showMoreBtn.disabled = true;
+    
     loadMoreProcedures();
 }
 
-// Filter / search support
+// Filter / search support with debouncing
 function filterProcedures(query) {
-    currentProcedureSearch = query.trim();
-    resetProceduresAndLoad();
+    // Clear any existing debounce timer
+    if (procedureSearchDebounceTimer) {
+        clearTimeout(procedureSearchDebounceTimer);
+    }
+    
+    const trimmedQuery = query.trim();
+    
+    // If search is cleared, execute immediately (no debounce for clearing)
+    if (trimmedQuery === '' && currentProcedureSearch !== '') {
+        currentProcedureSearch = '';
+        currentProcedureSearchToken++;
+        resetProceduresAndLoad();
+        return;
+    }
+    
+    // Debounce the API call - wait 300ms after user stops typing
+    procedureSearchDebounceTimer = setTimeout(function() {
+        // Only increment search token if search actually changed
+        if (trimmedQuery !== currentProcedureSearch) {
+            currentProcedureSearch = trimmedQuery;
+            // Increment search token so older async responses can be ignored
+            currentProcedureSearchToken++;
+            resetProceduresAndLoad();
+        }
+        // Clear the timer reference
+        procedureSearchDebounceTimer = null;
+    }, 300);
 }
 
 // Initialize Procedures table
@@ -1478,16 +1576,32 @@ document.addEventListener('DOMContentLoaded', function() {
     procedureOffset = 0;
     allProceduresLoaded = false;
     allProcedures = [];
-    firstProcedureLoad = true;
+    firstProcedureLoad = false;
     currentProcedureSearch = '';
+    currentProcedureSearchToken = 0;
+    
+    // Clear table
     document.getElementById('proceduresTableBody').innerHTML = '';
-    document.getElementById('showMoreProceduresBtn').style.display = 'none';
-    document.getElementById('proceduresLoadingSpinner').style.display = 'flex';
+    
+    // Hide empty state
+    const emptyState = document.getElementById('emptyProceduresState');
+    if (emptyState) {
+        emptyState.style.display = 'none';
+    }
+    
+    // Show loading button
+    const showMoreBtn = document.getElementById('showMoreProceduresBtn');
+    showMoreBtn.style.display = 'inline-block';
+    showMoreBtn.textContent = 'Loading...';
+    showMoreBtn.disabled = true;
+    
     loadMoreProcedures();
 
-    // Hook up procedure search input
+    // Hook up procedure search input (remove inline oninput handler to avoid duplicate calls)
     const searchInput = document.getElementById('procedureSearchInput');
     if (searchInput) {
+        // Remove inline oninput handler by setting it to null, then add event listener
+        searchInput.oninput = null;
         searchInput.addEventListener('input', function() {
             filterProcedures(this.value);
         });
@@ -2657,6 +2771,14 @@ input:checked + .slider:before {
     background: #F16564;
     color: white;
     border: none;
+}
+
+.btn-primary:disabled {
+    background: #F16564;
+    color: white;
+    opacity: 1;
+    cursor: not-allowed;
+}
     padding: 10px 24px;
     border-radius: 6px;
     font-weight: 500;
@@ -2666,6 +2788,13 @@ input:checked + .slider:before {
 
 .btn-primary:hover {
     background: #e45857;
+}
+
+.btn-primary:disabled {
+    background: #F16564;
+    color: white;
+    opacity: 1;
+    cursor: not-allowed;
 }
 
 .btn-sm {

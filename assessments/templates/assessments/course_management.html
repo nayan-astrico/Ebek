@@ -590,6 +590,13 @@
     cursor: not-allowed;
 }
 
+.btn-primary:disabled {
+    background: #F16564;
+    color: white;
+    opacity: 1;
+    cursor: not-allowed;
+}
+
 /* Multiselect Styles */
 .multiselect-container {
     position: relative;
@@ -1163,6 +1170,8 @@ let allCoursesLoaded = false;
 let firstLoad = true;
 let currentSearch = '';
 let currentStatusFilters = [];
+// Tracks latest search context so stale async responses are ignored
+let currentSearchToken = 0;
 
 function renderCourseRow(course) {
     const row = document.createElement('tr');
@@ -1218,23 +1227,31 @@ function buildCourseQueryParams() {
 }
 
 function loadMoreCourses() {
-    if (courseLoading || allCoursesLoaded) return;
+    if (allCoursesLoaded) return;
     courseLoading = true;
-    if (firstLoad) {
-        document.getElementById('coursesLoadingSpinner').style.display = 'flex';
-        document.getElementById('showMoreCoursesBtn').style.display = 'none';
-    } else {
-        document.getElementById('showMoreCoursesBtn').innerText = 'Loading...';
-        document.getElementById('showMoreCoursesBtn').disabled = true;
-    }
+
+    // Capture the search context for this specific request
+    const requestSearchToken = currentSearchToken;
+    const requestSearch = currentSearch;
+
+    // Show loading state on button
+    const showMoreBtn = document.getElementById('showMoreCoursesBtn');
+    showMoreBtn.style.display = 'inline-block';
+    showMoreBtn.textContent = 'Loading...';
+    showMoreBtn.disabled = true;
 
     fetch(`/fetch-courses/?${buildCourseQueryParams()}`)
         .then(response => response.json())
         .then(data => {
+            // If the search has changed since this request was made, ignore this response
+            if (requestSearchToken !== currentSearchToken || requestSearch !== currentSearch) {
+                return;
+            }
+
             const courses = data.courses || [];
             if (courses.length < courseLimit || data.all_loaded) {
                 allCoursesLoaded = true;
-                document.getElementById('showMoreCoursesBtn').style.display = 'none';
+                showMoreBtn.style.display = 'none';
             }
             courseOffset += courses.length;
             allCourses = allCourses.concat(courses);
@@ -1245,20 +1262,28 @@ function loadMoreCourses() {
             if (courseOffset === 0 && courses.length === 0) {
                 tbody.innerHTML = '';
                 document.getElementById('emptyState').style.display = 'block';
-                document.getElementById('showMoreCoursesBtn').style.display = 'none';
+                showMoreBtn.style.display = 'none';
             } else {
                 document.getElementById('emptyState').style.display = 'none';
             }
             if (!allCoursesLoaded && allCourses.length > 0) {
-                document.getElementById('showMoreCoursesBtn').style.display = 'inline-block';
-                document.getElementById('showMoreCoursesBtn').innerText = 'Show More';
-                document.getElementById('showMoreCoursesBtn').disabled = false;
+                showMoreBtn.style.display = 'inline-block';
+                showMoreBtn.textContent = 'Show More';
+                showMoreBtn.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            // On error, restore button state
+            if (allCourses.length > 0) {
+                showMoreBtn.textContent = 'Show More';
+                showMoreBtn.disabled = false;
+            } else {
+                showMoreBtn.style.display = 'none';
             }
         })
         .finally(() => {
             courseLoading = false;
-            document.getElementById('coursesLoadingSpinner').style.display = 'none';
-            firstLoad = false;
         });
 }
 
@@ -1266,16 +1291,32 @@ function resetCoursesAndLoad() {
     courseOffset = 0;
     allCoursesLoaded = false;
     allCourses = [];
-    firstLoad = true;
-    document.getElementById('coursesTableBody').innerHTML = '';
-    document.getElementById('showMoreCoursesBtn').style.display = 'none';
-    document.getElementById('coursesLoadingSpinner').style.display = 'flex';
+    firstLoad = false; // Changed to false so button shows instead of spinner
+    
+    // Clear table immediately
+    const tbody = document.getElementById('coursesTableBody');
+    tbody.innerHTML = '';
+    
+    // Hide empty state
+    const emptyState = document.getElementById('emptyState');
+    if (emptyState) {
+        emptyState.style.display = 'none';
+    }
+    
+    // Show loading button
+    const showMoreBtn = document.getElementById('showMoreCoursesBtn');
+    showMoreBtn.style.display = 'inline-block';
+    showMoreBtn.textContent = 'Loading...';
+    showMoreBtn.disabled = true;
+    
     loadMoreCourses();
 }
 
 // Hook up search and filter to lazy loading
 function filterCourses(searchText) {
     currentSearch = searchText || '';
+    // Increment search token so older async responses can be ignored
+    currentSearchToken++;
     currentStatusFilters = Array.from(document.querySelectorAll('#filterStatusOptions input[type="checkbox"]:checked')).map(cb => cb.value);
     resetCoursesAndLoad();
 }
@@ -1284,6 +1325,8 @@ function applyFilters() {
     const selectedStatuses = Array.from(document.querySelectorAll('#filterStatusOptions input[type="checkbox"]:checked')).map(cb => cb.value);
     currentStatusFilters = selectedStatuses;
     currentSearch = document.getElementById('searchInput').value;
+    // Increment search token so older async responses can be ignored
+    currentSearchToken++;
     currentFilters.status = selectedStatuses;
     resetCoursesAndLoad();
     updateFilterBadge();
@@ -1299,12 +1342,25 @@ document.addEventListener('DOMContentLoaded', function() {
     courseOffset = 0;
     allCoursesLoaded = false;
     allCourses = [];
-    firstLoad = true;
+    firstLoad = false;
     currentSearch = '';
     currentStatusFilters = [];
+    
+    // Clear table
     document.getElementById('coursesTableBody').innerHTML = '';
-    document.getElementById('showMoreCoursesBtn').style.display = 'none';
-    document.getElementById('coursesLoadingSpinner').style.display = 'flex';
+    
+    // Hide empty state
+    const emptyState = document.getElementById('emptyState');
+    if (emptyState) {
+        emptyState.style.display = 'none';
+    }
+    
+    // Show loading button
+    const showMoreBtn = document.getElementById('showMoreCoursesBtn');
+    showMoreBtn.style.display = 'inline-block';
+    showMoreBtn.textContent = 'Loading...';
+    showMoreBtn.disabled = true;
+    
     loadMoreCourses();
     loadProcedures();
     setupEventListeners();

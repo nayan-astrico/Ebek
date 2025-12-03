@@ -3869,7 +3869,7 @@ def fetch_courses(request):
             course_data = doc.to_dict()
             name = course_data.get('courseName', '').lower()
             status = course_data.get('status', 'active').lower()
-            # Filter by search
+            # Filter by search - search anywhere in course name (case-insensitive)
             if search and search not in name:
                 continue
             # Filter by status
@@ -4268,6 +4268,7 @@ def fetch_batches(request):
                 continue
             if statuses and batch_status not in statuses:
                 continue
+            # Filter by search - search anywhere in batch name (case-insensitive)
             if search and search not in batch_name:
                 continue
             if years and batch_year not in years:
@@ -5270,7 +5271,7 @@ def fetch_batch_courses_paginated(request, batch_id):
                 course_data = course_doc.to_dict()
                 course_name = course_data.get('courseName', '').lower()
                 
-                # Apply search filter
+                # Apply search filter - search anywhere in course name (case-insensitive)
                 if search and search not in course_name:
                     continue
                 
@@ -6677,10 +6678,14 @@ def upload_preview(request):
                 except ValueError:
                     errors.append({'row': row_number, 'message': 'Marks must be an integer'})
 
-            # Critical must be boolean
-            critical = str(row.get('Critical')).strip().lower()
-            if critical not in ['true', 'false', '1', '0']:
-                errors.append({'row': row_number, 'message': 'Critical must be boolean (True/False)'})
+            # Critical must be exactly 'true' or 'false' (case-insensitive), no blanks, no numbers, no other values
+            critical_value = row.get('Critical')
+            if pd.isna(critical_value) or str(critical_value).strip() == '':
+                errors.append({'row': row_number, 'message': 'Critical column cannot be blank. It must be "True" or "False"'})
+            else:
+                critical = str(critical_value).strip().lower()
+                if critical not in ['true', 'false']:
+                    errors.append({'row': row_number, 'message': f'Critical column must be "True" or "False" Found: "{critical_value}"'})
 
         return JsonResponse({
             'status': 'success',
@@ -6832,9 +6837,27 @@ def upload_excel(request):
         if missing_cols:
             return JsonResponse({'status': 'error', 'message': f'Missing columns: {", ".join(missing_cols)}'})
 
-        # Convert Marks and Critical
+        # Validate Critical column before processing
+        critical_errors = []
+        for idx, row in df.iterrows():
+            row_number = idx + 2  # Excel row number
+            critical_value = row.get('Critical')
+            if pd.isna(critical_value) or str(critical_value).strip() == '':
+                critical_errors.append(f'Row {row_number}: Critical column cannot be blank. It must be "True" or "False"')
+            else:
+                critical = str(critical_value).strip().lower()
+                if critical not in ['true', 'false']:
+                    critical_errors.append(f'Row {row_number}: Critical column must be "True" or "False" Found: "{critical_value}"')
+        
+        if critical_errors:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Critical column validation failed:\n' + '\n'.join(critical_errors)
+            })
+        
+        # Convert Marks and Critical (now safe to convert since validated)
         df['Marks'] = pd.to_numeric(df['Marks'], errors='coerce').fillna(0).astype(int)
-        df['Critical'] = df['Critical'].astype(str).str.lower().map({'true': True, 'false': False, '1': True, '0': False}).fillna(False)
+        df['Critical'] = df['Critical'].astype(str).str.strip().str.lower().map({'true': True, 'false': False})
 
         # Fill missing strings
         df[['Section', 'Parameters', 'Indicators', 'Category (i.e C for Communication, K for Knowledge and D for Documentation)']] = \
@@ -8209,6 +8232,17 @@ def fetch_osce_report_optimized(request):
                     'osce_types': skill_data.get('osce_types', []),
                     'station_breakdown': skill_data.get('station_breakdown', {})
                 })
+            
+            # Calculate filtered average score and pass rate from filtered skills
+            if filtered_skills:
+                filtered_avg_scores = [skill_data.get('avg_score', 0) for skill_data in filtered_skills.values()]
+                filtered_pass_rates = [skill_data.get('pass_rate', 0) for skill_data in filtered_skills.values()]
+                filtered_avg_score = round(sum(filtered_avg_scores) / len(filtered_avg_scores), 2) if filtered_avg_scores else 0
+                filtered_pass_rate = round(sum(filtered_pass_rates) / len(filtered_pass_rates), 2) if filtered_pass_rates else 0
+            else:
+                # No filtered skills, use default values
+                filtered_avg_score = 0
+                filtered_pass_rate = 0
             
             # Build semester_wise_performance (single row for filtered data)
             semester_wise_performance = [{
