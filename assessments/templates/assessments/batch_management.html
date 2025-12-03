@@ -2,6 +2,89 @@
 
 {% block content %}
 {% load custom_filters %}
+{% load static %}
+<style>
+.btn-filter {
+    position: relative;
+}
+
+.filter-badge {
+    background: #F16564;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    position: absolute;
+    top: -5px;
+    right: -5px;
+}
+
+.filter-type {
+    position: relative;
+}
+
+.filter-type .filter-type-badge {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    padding: 0 6px;
+    border-radius: 9px;
+    background: #F16564;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    cursor: pointer;
+    width: 100%;
+    user-select: none;
+    margin: 0;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    pointer-events: auto;
+    position: relative;
+}
+
+.option-item:hover {
+    background-color: #f7fafc;
+}
+
+.option-item span {
+    pointer-events: none;
+    flex: 1;
+}
+
+.select-all-item {
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 12px;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.select-all-item span {
+    font-weight: 600;
+    color: #1a202c;
+}
+</style>
 
 {% if request.user|check_icon_navigation_permissions:'batches' %}
 <!-- Header -->
@@ -27,9 +110,10 @@
             <i class="fas fa-search"></i>
             <input type="text" id="searchInput" placeholder="Search batches...">
         </div>
-        <button class="btn-filter" onclick="toggleFilterPanel()">
+        <button class="btn-filter" onclick="toggleFilterPanel()" id="filterBtn">
             <i class="fas fa-filter"></i>
             Filters
+            <span class="filter-badge" id="filterBadge" style="display: none;">0</span>
         </button>
     </div>
 
@@ -52,6 +136,14 @@
                 </div>
 
                 <div class="form-group">
+                    <label>Year of Batch</label>
+                    <select class="form-control" id="yearOfBatch" name="yearOfBatch">
+                        <option value="">Select Year</option>
+                    </select>
+                    <div class="error-message" id="yearOfBatchError"></div>
+                </div>
+
+                <div class="form-group">
                     <label>Unit Type <span class="text-danger">*</span></label>
                     <select class="form-control" id="unitType" name="unitType" onchange="handleUnitTypeChange()" required>
                         <option value="">Select Unit Type</option>
@@ -60,6 +152,24 @@
                     </select>
                     <div class="error-message" id="unitTypeError"></div>
                 </div>
+
+                <div class="form-group">
+                    <label>Semester</label>
+                    <select class="form-control" id="semester" name="semester">
+                        <option value="">Select Semester</option>
+                        <option value="1">Semester 1</option>
+                        <option value="2">Semester 2</option>
+                        <option value="3">Semester 3</option>
+                        <option value="4">Semester 4</option>
+                        <option value="5">Semester 5</option>
+                        <option value="6">Semester 6</option>
+                        <option value="7">Semester 7</option>
+                        <option value="8">Semester 8</option>
+                    </select>
+                    <div class="error-message" id="semesterError"></div>
+                </div>
+
+                
 
                 <div class="form-group">
                     <label>Unit <span class="text-danger">*</span></label>
@@ -86,7 +196,6 @@
                     <div class="multiselect-container">
                         <div class="multiselect-input" onclick="toggleLearnersDropdown()" id="learnersInput">
                             <span class="placeholder">Select learners</span>
-                            <div class="selected-tags" id="selectedLearners"></div>
                             <i class="fas fa-chevron-down"></i>
                         </div>
                         <div class="multiselect-dropdown" id="learnersDropdown">
@@ -104,6 +213,7 @@
                             </div>
                         </div>
                     </div>
+                    <div class="selected-tags" id="selectedLearners"></div>
                     <div class="error-message" id="learnersError"></div>
                 </div>
 
@@ -142,16 +252,24 @@
                         <!-- Unit Type Content -->
                         <div class="filter-content active" id="unit-content">
                             <div class="filter-search">
-                                <input type="text" placeholder="Search unit types">
-                                <div class="selection-count">0 Unit selected</div>
+                                <input type="text" placeholder="Search unit types" onkeyup="filterOptions('unit')">
+                                <div class="selection-count" id="unitSelectionCount">0 Unit selected</div>
                             </div>
-                            <div class="options-list">
+                            <div class="options-list" id="unit-options">
+                                <label class="option-item select-all-item">
+                                    <input type="checkbox" id="selectAllUnits" onchange="toggleSelectAll('unit', this)">
+                                    <span><strong>Select All</strong></span>
+                                </label>
                                 <label class="option-item">
-                                    <input type="checkbox" name="unit" value="hospital">
+                                    <input type="checkbox" name="unit" value="hospital"
+                                           onchange="updateSelectionCount('unit')"
+                                           class="unit-checkbox">
                                     <span>Hospital</span>
                                 </label>
                                 <label class="option-item">
-                                    <input type="checkbox" name="unit" value="institution">
+                                    <input type="checkbox" name="unit" value="institution"
+                                           onchange="updateSelectionCount('unit')"
+                                           class="unit-checkbox">
                                     <span>Institution</span>
                                 </label>
                             </div>
@@ -162,6 +280,7 @@
                 <!-- Filter Actions -->
                 <div class="filter-actions">
                     <button type="button" class="btn btn-light" onclick="toggleFilterPanel()">Cancel</button>
+                    <button type="button" class="btn btn-light" onclick="clearAllFilters()">Clear All</button>
                     <button type="submit" class="btn btn-primary">Apply filter</button>
                 </div>
             </form>
@@ -173,10 +292,17 @@
                 <thead>
                     <tr>
                         <th>Batch Name</th>
+                        <th>Year</th>
+                        <th>Semester</th>
                         <th>Unit Type</th>
                         <th>Unit Name</th>
                         <th>Learners</th>
+                        {% if "update_batch_status" in request.user.get_all_permissions or request.user.has_all_permissions %}
+                        <th>Status</th>
+                        {% endif %}
+                        {% if "edit_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
                         <th>Actions</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody id="batchesTableBody">
@@ -205,6 +331,69 @@
                 </button>
                 {% endif %}
             </div>
+        </div>
+        <script>
+        // Declare variables first
+        var canCreateBatch = false;
+        var canEditBatch = false;
+        var canDeleteBatch = false;
+        var canUpdateStatus = false;
+
+        // Then set them based on permissions
+        {% if "create_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canCreateBatch = true;
+        {% endif %}
+
+        {% if "edit_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canEditBatch = true;
+        {% endif %}
+
+        {% if "delete_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canDeleteBatch = true;
+        {% endif %}
+
+        {% if "update_batch_status" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canUpdateStatus = true;
+        {% endif %}
+
+        var userPermissions = {
+            canCreate: canCreateBatch,
+            canEdit: canEditBatch,
+            canDelete: canDeleteBatch,
+            canUpdateStatus: canUpdateStatus
+        };
+
+        var showStatusColumn = userPermissions.canUpdateStatus;
+        var showActionsColumn = userPermissions.canEdit;
+        </script>
+    </div>
+</div>
+
+<!-- Confirmation Modal for Marking Batch as Inactive -->
+<div class="modal-overlay" id="inactiveBatchModal" style="display: none;">
+    <div class="confirmation-modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-exclamation-triangle" style="color: #F16564;"></i> Mark Batch as Inactive</h3>
+        </div>
+        <div class="modal-body">
+            <p><strong>Please note the following:</strong></p>
+            <ul style="list-style: none; padding-left: 0; margin: 16px 0;">
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-eye-slash" style="color: #F16564; margin-right: 8px;"></i>
+                    This batch will <strong>no longer be visible</strong> in the create assessment dropdown
+                </li>
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-redo" style="color: #F16564; margin-right: 8px;"></i>
+                    You can mark it as active again later if needed
+                </li>
+            </ul>
+            <p style="margin-top: 16px; color: #666;">Are you sure you want to mark this batch as inactive?</p>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-light" onclick="cancelInactiveBatch()">Cancel</button>
+            <button class="btn btn-danger" onclick="confirmInactiveBatch()">
+                <i class="fas fa-check"></i> Yes, Mark as Inactive
+            </button>
         </div>
     </div>
 </div>
@@ -442,6 +631,15 @@
     background: white;
 }
 
+.multiselect-input i {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.multiselect-input .placeholder {
+    flex: 1;
+}
+
 .multiselect-input.active {
     border-color: #F16564;
 }
@@ -453,23 +651,27 @@
 .selected-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: 6px;
+    margin-top: 12px;
 }
 
 .tag {
-    background: #f7fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 4px;
-    padding: 2px 8px;
+    background: #F16564;
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+    padding: 5px 10px;
     font-size: 12px;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
 }
 
 .tag-remove {
     cursor: pointer;
-    color: #666;
+    color: #fff;
+    font-weight: 700;
+    opacity: 0.9;
 }
 
 .multiselect-dropdown {
@@ -984,6 +1186,139 @@
 .select-all-item:hover .select-all-text {
     color: #F16564;
 }
+
+/* Toggle Switch for Status */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: #1AA09A;
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* Confirmation Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.confirmation-modal {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    max-width: 500px;
+    width: 90%;
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #2d3748;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+.modal-body p {
+    margin: 0 0 8px 0;
+    color: #4a5568;
+    line-height: 1.6;
+}
+
+.modal-body ul li {
+    color: #4a5568;
+    line-height: 1.8;
+}
+
+.modal-actions {
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.btn-danger {
+    background: #F16564;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #e45857;
+}
 </style>
 
 <script>
@@ -1000,8 +1335,180 @@ let availableUnits = [];
 let selectedUnit = null;
 
 // Load batches on page load
+function filterOptions(category) {
+    const searchInput = document.querySelector(`#${category}-content .filter-search input`);
+    const searchTerm = searchInput.value.toLowerCase();
+    const options = document.querySelectorAll(`#${category}-options .option-item`);
+    
+    options.forEach(option => {
+        if (option.classList.contains('select-all-item')) {
+            option.style.display = '';
+            return;
+        }
+        const text = option.querySelector('span')?.textContent.toLowerCase() || '';
+        option.style.display = text.includes(searchTerm) ? '' : 'none';
+    });
+}
+
+function toggleSelectAll(category, selectAllCheckbox) {
+    let checkboxSelector;
+    if (category === 'unit') {
+        checkboxSelector = '.unit-checkbox';
+    } else {
+        checkboxSelector = `input[name="${category}"]`;
+    }
+    
+    const checkboxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}`);
+    const isChecked = selectAllCheckbox.checked;
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = isChecked;
+        const changeEvent = new Event('change', { bubbles: true });
+        checkbox.dispatchEvent(changeEvent);
+    });
+    
+    updateSelectionCount(category);
+}
+
+function updateSelectionCount(category) {
+    let checkboxSelector;
+    if (category === 'unit') {
+        checkboxSelector = '.unit-checkbox';
+    } else {
+        checkboxSelector = `input[name="${category}"]`;
+    }
+    
+    const checkboxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}`);
+    const checkedBoxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}:checked`);
+    const count = checkedBoxes.length;
+    
+    const countElement = document.getElementById(`${category}SelectionCount`) || document.querySelector(`#${category}-content .selection-count`);
+    const label = category.charAt(0).toUpperCase() + category.slice(1);
+    if (countElement) {
+        countElement.textContent = `${count} ${label} selected`;
+    }
+    
+    let selectAllId;
+    if (category === 'unit') {
+        selectAllId = 'selectAllUnits';
+    }
+    
+    if (selectAllId) {
+        const selectAllCheckbox = document.getElementById(selectAllId);
+        if (selectAllCheckbox && checkboxes.length > 0) {
+            selectAllCheckbox.checked = (count === checkboxes.length);
+            selectAllCheckbox.indeterminate = (count > 0 && count < checkboxes.length);
+        }
+    }
+    
+    updateFilterBadge();
+    setFilterTypeBadge(category, count);
+}
+
+function updateFilterBadge() {
+    let totalFilterCategories = 0;
+    
+    if (document.querySelectorAll('input[name="unit"]:checked').length > 0) {
+        totalFilterCategories++;
+    }
+    
+    const badge = document.getElementById('filterBadge');
+    if (badge) {
+        if (totalFilterCategories > 0) {
+            badge.textContent = totalFilterCategories;
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+function setFilterTypeBadge(category, count) {
+    const el = document.querySelector(`.filter-type[data-filter="${category}"]`);
+    if (!el) return;
+    let badge = el.querySelector('.filter-type-badge');
+    if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'filter-type-badge';
+        el.appendChild(badge);
+    }
+    if (count > 0) {
+        badge.textContent = String(count);
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function clearAllFilters() {
+    document.querySelectorAll('.filter-form input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+        cb.indeterminate = false;
+    });
+    
+    ['unit'].forEach(category => {
+        updateSelectionCount(category);
+    });
+    
+    updateFilterBadge();
+}
+
+// Make entire option row clickable to toggle checkbox
+document.addEventListener('click', function(e) {
+    const label = e.target.closest('label.option-item');
+    if (!label) return;
+    
+    if (label.classList.contains('select-all-item')) {
+        return;
+    }
+    
+    const checkbox = label.querySelector('input[type="checkbox"]');
+    if (!checkbox) return;
+    
+    if (e.target === checkbox || e.target.type === 'checkbox') {
+        setTimeout(function() {
+            const container = label.closest('.filter-content');
+            if (container) {
+                const category = container.id.replace('-content', '');
+                if (category) {
+                    updateSelectionCount(category);
+                }
+            }
+        }, 10);
+        return;
+    }
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    checkbox.checked = !checkbox.checked;
+    
+    const changeEvent = new Event('change', { bubbles: true, cancelable: false });
+    checkbox.dispatchEvent(changeEvent);
+    
+    const container = label.closest('.filter-content');
+    if (container) {
+        const category = container.id.replace('-content', '');
+        if (category) {
+            updateSelectionCount(category);
+        }
+    }
+}, true);
+
 document.addEventListener('DOMContentLoaded', function() {
     loadBatches();
+    
+    // Initialize filter badge and selection counts
+    updateSelectionCount('unit');
+    updateFilterBadge();
+    // Populate year dropdown (2025-2100)
+    const yearSelect = document.getElementById('yearOfBatch');
+    for (let year = 2025; year <= 2100; year++) {
+        const option = document.createElement('option');
+        option.value = year.toString();
+        option.textContent = year.toString();
+        yearSelect.appendChild(option);
+    }
     
     // Add event listener for unit selection
     document.getElementById('unitSelect').addEventListener('change', function() {
@@ -1019,7 +1526,7 @@ document.addEventListener('DOMContentLoaded', function() {
 function loadBatches() {
     const searchText = document.getElementById('searchInput').value.trim();
     const filters = getBatchFilters();
-    let url = `/api/batches/?page=${currentPage}&page_size=${batchesPerPage}&search=${searchText}&`;
+    let url = `/api/batches/?page=${currentPage}&page_size=${batchesPerPage}&search=${searchText}&include_inactive=true&`;
     if (filters.unitTypes.length > 0) {
         url += 'unitType=' + filters.unitTypes.join(',') + '&';
     }
@@ -1067,26 +1574,44 @@ function displayBatches(batches) {
     
     batches.forEach(batch => {
         const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${batch.batchName}</td>
-            <td>${batch.unitType.charAt(0).toUpperCase() + batch.unitType.slice(1)}</td>
-            <td>${batch.unitName}</td>
-            <td>${batch.learnerCount}</td>
-            <td>
-                <div class="actions">
-                    {% if "edit_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                    <button class="btn-icon" onclick="editBatch('${batch.id}')">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    {% endif %}
-                    {% if "delete_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                    <button class="btn-icon btn-danger" onclick="deleteBatch('${batch.id}')">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                    {% endif %}
-                </div>
-            </td>
-        `;
+
+        var showStatus = userPermissions.canUpdateStatus;
+        var showActions = userPermissions.canEdit;
+
+        var semesterDisplay = batch.semester ? 'Semester ' + batch.semester : '-';
+        var html = '<td>' + batch.batchName + '</td>' +
+                   '<td>' + (batch.yearOfBatch || '-') + '</td>' +
+                   '<td>' + semesterDisplay + '</td>' +
+                   '<td>' + (batch.unitType.charAt(0).toUpperCase() + batch.unitType.slice(1)) + '</td>' +
+                   '<td>' + batch.unitName + '</td>' +
+                   '<td>' + batch.learnerCount + '</td>';
+
+        // Status column - toggle switch
+        if (showStatus) {
+            var isActive = batch.status === 'active';
+            html += '<td>' +
+                    '<label class="switch">' +
+                        '<input type="checkbox" ' + (isActive ? 'checked' : '') +
+                        ' onchange="handleBatchStatusChange(\'' + batch.id + '\', this.checked ? \'active\' : \'inactive\', this)">' +
+                        '<span class="slider round"></span>' +
+                    '</label>' +
+                    '</td>';
+        }
+
+        // Actions column - only edit button (delete removed)
+        if (showActions) {
+            html += '<td><div class="actions">';
+
+            if (userPermissions.canEdit) {
+                html += '<button class="btn-icon" onclick="editBatch(\'' + batch.id + '\')">' +
+                        '<i class="fas fa-edit"></i>' +
+                        '</button>';
+            }
+
+            html += '</div></td>';
+        }
+
+        row.innerHTML = html;
         tbody.appendChild(row);
     });
 }
@@ -1104,7 +1629,7 @@ function loadMoreBatches() {
     currentPage++;
     const searchText = document.getElementById('searchInput').value.trim();
     const filters = getBatchFilters();
-    let url = `/api/batches/?page=${currentPage}&page_size=${batchesPerPage}&search=${searchText}&`;
+    let url = `/api/batches/?page=${currentPage}&page_size=${batchesPerPage}&search=${searchText}&include_inactive=true&`;
     if (filters.unitTypes.length > 0) {
         url += 'unitType=' + filters.unitTypes.join(',') + '&';
     }
@@ -1156,20 +1681,32 @@ function handleUnitTypeChange() {
     const unitDropdownInput = document.getElementById('unitDropdownInput');
     const learnersInput = document.getElementById('learnersInput');
     const learnersRequired = document.getElementById('learnersRequired');
-    
+    const semesterSelect = document.getElementById('semester');
+
     // Reset unit selection
     selectedUnit = null;
     document.getElementById('unitPlaceholder').textContent = 'Select Unit';
     document.getElementById('unitPlaceholder').className = 'placeholder';
     document.getElementById('unitSelect').value = '';
-    
+
     if (unitType) {
         unitDropdownInput.style.pointerEvents = 'auto';
         unitDropdownInput.style.opacity = '1';
         learnersInput.style.pointerEvents = 'auto';
         learnersInput.style.opacity = '1';
         learnersRequired.style.display = 'inline';
-        
+
+        // Handle semester based on unit type
+        if (unitType === 'hospital') {
+            // For hospitals, set semester to 1 and disable
+            semesterSelect.value = '1';
+            semesterSelect.disabled = true;
+        } else {
+            // For institutions, enable semester selection
+            semesterSelect.disabled = false;
+            semesterSelect.value = ''; // Reset to default
+        }
+
         // Load units for the selected type
         loadUnits(unitType);
     } else {
@@ -1178,11 +1715,15 @@ function handleUnitTypeChange() {
         learnersInput.style.pointerEvents = 'none';
         learnersInput.style.opacity = '0.5';
         learnersRequired.style.display = 'none';
-        
+
+        // Reset semester when no unit type is selected
+        semesterSelect.disabled = false;
+        semesterSelect.value = '';
+
         // Clear unit options
         document.getElementById('unitOptionsContainer').innerHTML = '';
     }
-    
+
     // Clear learners when unit type changes
     availableLearners = [];
     document.getElementById('learnersOptions').innerHTML = '';
@@ -1192,11 +1733,11 @@ function handleUnitTypeChange() {
 }
 
 function loadUnits(unitType) {
-    const endpoint = unitType === 'hospital' ? '/api/fetch-hospitals/' : '/fetch-institutes/';
+    const endpoint = unitType === 'hospital' ? '/api/fetch-hospitals/?onboarding_type=b2b' : '/fetch-institutes/?onboarding_type=b2b&unit_type=institution';
     const container = document.getElementById('unitOptionsContainer');
-    
+
     console.log('Loading units for type:', unitType, 'from endpoint:', endpoint);
-    
+
     // Show loading state
     container.innerHTML = `
         <div class="loading-units">
@@ -1204,7 +1745,7 @@ function loadUnits(unitType) {
             <div>Loading units...</div>
         </div>
     `;
-    
+
     fetch(endpoint)
         .then(response => {
             console.log('Response status:', response.status);
@@ -1212,14 +1753,14 @@ function loadUnits(unitType) {
         })
         .then(data => {
             console.log('API response:', data);
-            
+
             let units = [];
             if (unitType === 'hospital' && data.success && data.units) {
                 units = data.units;
             } else if (unitType === 'institution' && data.institutes) {
                 units = data.institutes;
             }
-            
+
             console.log('Available units:', units);
             availableUnits = units;
             displayUnits(availableUnits);
@@ -1279,6 +1820,10 @@ function loadAvailableLearners() {
 
 function displayLearners(learners) {
     const container = document.getElementById('learnersOptions');
+    
+    // Store currently selected IDs before clearing
+    const currentSelections = selectedLearners.slice();
+    
     container.innerHTML = '';
     
     if (learners.length === 0) {
@@ -1292,8 +1837,12 @@ function displayLearners(learners) {
         option.style.display = 'flex';
         option.style.alignItems = 'center';
         option.style.cursor = 'pointer';
+        
+        // Check if this learner was previously selected
+        const isChecked = currentSelections.includes(learner.id);
+        
         option.innerHTML = `
-            <input type="checkbox" id="learner_${learner.id}" value="${learner.id}" onchange="updateSelectedLearners()" style="margin-left: 12px; margin-right: 12px;">
+            <input type="checkbox" id="learner_${learner.id}" value="${learner.id}" ${isChecked ? 'checked' : ''} onchange="updateSelectedLearners()" style="margin-left: 12px; margin-right: 12px;">
             <div>
                 <div style="font-weight: 500;">${learner.name}</div>
                 <div style="font-size: 12px; color: #666;">${learner.email}</div>
@@ -1329,6 +1878,7 @@ function filterLearners(searchText) {
         learner.name.toLowerCase().includes(searchText.toLowerCase()) ||
         learner.email.toLowerCase().includes(searchText.toLowerCase())
     );
+    
     displayLearners(filtered);
     
     // Update select all checkbox state after filtering
@@ -1338,29 +1888,54 @@ function filterLearners(searchText) {
 }
 
 function updateSelectedLearners() {
-    const checkboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]:checked');
     const selectedTags = document.getElementById('selectedLearners');
-    const placeholder = document.querySelector('.placeholder');
+    const selectAllCheckbox = document.getElementById('selectAllLearners');
     
+    // Build selectedLearners array from ALL available learners (not just visible)
+    const newSelectedLearners = [];
+    
+    availableLearners.forEach(learner => {
+        const checkbox = document.querySelector(`#learner_${learner.id}`);
+        if (checkbox) {
+            // Checkbox exists (visible in current filter)
+            if (checkbox.checked) {
+                newSelectedLearners.push(learner.id);
+            }
+        } else {
+            // Checkbox doesn't exist (filtered out) - keep if previously selected
+            if (selectedLearners.includes(learner.id)) {
+                newSelectedLearners.push(learner.id);
+            }
+        }
+    });
+    
+    selectedLearners = newSelectedLearners;
     selectedTags.innerHTML = '';
-    selectedLearners = Array.from(checkboxes).map(cb => cb.value);
     
+   // If more than 5 learners selected, show summary tag
+    if (selectedLearners.length > 5) {
+        const summaryTag = document.createElement('div');
+        summaryTag.className = 'tag';
+        summaryTag.innerHTML = `Selected Learners (${selectedLearners.length})`;
+        selectedTags.appendChild(summaryTag);
+        updateSelectAllState();
+        return;
+    }
+
+    // Otherwise, show individual tags for 5 or fewer selected learners
     if (selectedLearners.length > 0) {
-        placeholder.style.display = 'none';
-        checkboxes.forEach(checkbox => {
-            const learner = availableLearners.find(l => l.id === checkbox.value);
+        selectedLearners.forEach(learnerId => {
+            const learner = availableLearners.find(l => l.id === learnerId);
             if (learner) {
                 const tag = document.createElement('div');
                 tag.className = 'tag';
                 tag.innerHTML = `
                     ${learner.name}
-                    <span class="tag-remove" onclick="removeLearner('${checkbox.value}')">&times;</span>
+                    <span class="tag-remove" onclick="removeLearner('${learnerId}')">&times;</span>
                 `;
                 selectedTags.appendChild(tag);
             }
         });
-    } else {
-        placeholder.style.display = 'block';
     }
     
     // Update select all checkbox state
@@ -1384,7 +1959,7 @@ function clearErrors() {
 function resetForm() {
     document.getElementById('batchForm').reset();
     document.getElementById('selectedLearners').innerHTML = '';
-    document.querySelector('.placeholder').style.display = 'block';
+    //document.querySelector('.placeholder').style.display = 'block';
     document.getElementById('unitSelect').disabled = true;
     selectedLearners = [];
     clearErrors();
@@ -1430,6 +2005,8 @@ document.getElementById('batchForm').addEventListener('submit', function(e) {
     
     const formData = {
         batchName: document.getElementById('batchName').value.trim(),
+        yearOfBatch: document.getElementById('yearOfBatch').value,
+        semester: document.getElementById('semester').value,
         unitType: document.getElementById('unitType').value,
         unitId: document.getElementById('unitSelect').value,
         learnerIds: selectedLearners
@@ -1479,12 +2056,12 @@ document.getElementById('batchForm').addEventListener('submit', function(e) {
             toggleAddBatchPanel();
             loadBatches();
         } else {
-            showError('Error creating batch: ' + data.error);
+            showErrorNotification(data.error || 'Error creating batch');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        showError('Error creating batch');
+        showErrorNotification('Error creating batch. Please try again.');
     })
     .finally(() => {
         btnText.style.display = 'inline-block';
@@ -1527,31 +2104,94 @@ function editBatch(batchId) {
     window.location.href = `/batch-management/${batchId}/`;
 }
 
-function deleteBatch(batchId) {
-    if (confirm('Are you sure you want to delete this batch?')) {
-        fetch(`/api/batches/${batchId}/delete/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showSuccess('Batch deleted successfully!');
-                currentPage = 1;
-                allBatches = [];
-                loadBatches();
-            } else {
-                showError('Error deleting batch: ' + (data.error || 'Unknown error'));
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showError('Error deleting batch');
-        });
+// Variables to store batch info for the modal
+let pendingBatchId = null;
+let pendingBatchStatus = null;
+let pendingCheckbox = null;
+
+function handleBatchStatusChange(batchId, newStatus, checkboxElement) {
+    console.log('[MODAL] handleBatchStatusChange called:', batchId, newStatus);
+    if (newStatus === 'inactive') {
+        // Store the pending info and show confirmation modal
+        pendingBatchId = batchId;
+        pendingBatchStatus = newStatus;
+        pendingCheckbox = checkboxElement;
+
+        console.log('[MODAL] Showing modal for batch:', batchId);
+        const modal = document.getElementById('inactiveBatchModal');
+        console.log('[MODAL] Modal element:', modal);
+
+        // Show the modal
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    } else {
+        // If marking as active, no confirmation needed
+        console.log('[MODAL] Marking as active, no confirmation needed');
+        toggleBatchStatus(batchId, newStatus);
     }
+}
+
+function confirmInactiveBatch() {
+    // Hide modal
+    document.getElementById('inactiveBatchModal').style.display = 'none';
+    document.body.style.overflow = '';
+
+    // Proceed with status change
+    if (pendingBatchId && pendingBatchStatus) {
+        toggleBatchStatus(pendingBatchId, pendingBatchStatus);
+    }
+
+    // Clear pending data
+    pendingBatchId = null;
+    pendingBatchStatus = null;
+    pendingCheckbox = null;
+}
+
+function cancelInactiveBatch() {
+    // Hide modal
+    document.getElementById('inactiveBatchModal').style.display = 'none';
+    document.body.style.overflow = '';
+
+    // Revert the checkbox
+    if (pendingCheckbox) {
+        pendingCheckbox.checked = true; // Revert to active (checked)
+    }
+
+    // Clear pending data
+    pendingBatchId = null;
+    pendingBatchStatus = null;
+    pendingCheckbox = null;
+}
+
+function toggleBatchStatus(batchId, status) {
+    fetch(`/api/batches/${batchId}/toggle-status/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({ status: status })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showSuccess(data.message || 'Batch status updated successfully!');
+        } else {
+            showErrorNotification(data.error || 'Failed to update batch status');
+            // Reload batches to revert the toggle
+            currentPage = 1;
+            allBatches = [];
+            loadBatches();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showErrorNotification('Error updating batch status');
+        // Reload batches to revert the toggle
+        currentPage = 1;
+        allBatches = [];
+        loadBatches();
+    });
 }
 
 function getBatchFilters() {
@@ -1650,26 +2290,26 @@ document.addEventListener('click', function(event) {
 });
 
 
-function showError(message) {
-    console.log("showError", message);
-    // Create a simple notification
-    const notification = $(`
-        <div class="alert alert-danger alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
-            <i class="fas fa-exclamation-triangle"></i>
-            ${message}
-            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                <span aria-hidden="true">&times;</span>
-            </button>
-        </div>
-    `);
+// function showError(message) {
+//     console.log("showError", message);
+//     // Create a simple notification
+//     const notification = $(`
+//         <div class="alert alert-danger alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+//             <i class="fas fa-exclamation-triangle"></i>
+//             ${message}
+//             <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+//                 <span aria-hidden="true">&times;</span>
+//             </button>
+//         </div>
+//     `);
     
-    $('body').append(notification);
+//     $('body').append(notification);
     
-    // Auto remove after 5 seconds
-    setTimeout(function() {
-        notification.alert('close');
-    }, 2000);
-}
+//     // Auto remove after 5 seconds
+//     setTimeout(function() {
+//         notification.alert('close');
+//     }, 2000);
+// }
 
 function showSuccess(message) {
     // Create a simple notification
@@ -1682,44 +2322,73 @@ function showSuccess(message) {
             </button>
         </div>
     `);
-    
+
     $('body').append(notification);
-    
+
     // Auto remove after 5 seconds
     setTimeout(function() {
         notification.alert('close');
     }, 2000);
 }
 
+function showErrorNotification(message) {
+    // Create an error notification
+    const notification = $(`
+        <div class="alert alert-danger alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-exclamation-circle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+
+    $('body').append(notification);
+
+    // Auto remove after 5 seconds
+    setTimeout(function() {
+        notification.alert('close');
+    }, 5000);
+}
+
 function toggleSelectAllLearners() {
     const selectAllCheckbox = document.getElementById('selectAllLearners');
-    const checkboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]');
+    const visibleCheckboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]');
 
     if (selectAllCheckbox.checked) {
-        checkboxes.forEach(checkbox => {
+        // Check only the VISIBLE checkboxes (append to existing selections)
+        visibleCheckboxes.forEach(checkbox => {
             checkbox.checked = true;
         });
-        updateSelectedLearners(); // Update the selected tags display
+        
+        // Uncheck the "Select All" checkbox immediately after checking visible items
+        // This prevents it from triggering the summary tag display
+        selectAllCheckbox.checked = false;
+        
+        updateSelectedLearners();
     } else {
-        checkboxes.forEach(checkbox => {
+        // Uncheck only the VISIBLE checkboxes
+        visibleCheckboxes.forEach(checkbox => {
             checkbox.checked = false;
         });
-        updateSelectedLearners(); // Update the selected tags display
+        updateSelectedLearners();
     }
 }
 
 function updateSelectAllState() {
     const selectAllCheckbox = document.getElementById('selectAllLearners');
-    const learnerCheckboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]');
-    const checkedCheckboxes = document.querySelectorAll('#learnersOptions input[type="checkbox"]:checked');
     
-    if (learnerCheckboxes.length === 0) {
+    // Count total selected from ALL available learners, not just visible ones
+    const totalLearners = availableLearners.length;
+    const totalSelected = selectedLearners.length;
+    
+    if (totalLearners === 0) {
         selectAllCheckbox.checked = false;
         selectAllCheckbox.indeterminate = false;
-    } else if (checkedCheckboxes.length === 0) {
+    } else if (totalSelected === 0) {
         selectAllCheckbox.checked = false;
         selectAllCheckbox.indeterminate = false;
-    } else if (checkedCheckboxes.length === learnerCheckboxes.length) {
+    } else if (totalSelected === totalLearners) {
         selectAllCheckbox.checked = true;
         selectAllCheckbox.indeterminate = false;
     } else {

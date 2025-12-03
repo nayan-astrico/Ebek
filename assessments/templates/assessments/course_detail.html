@@ -23,7 +23,7 @@
             </button>
             {% endif %}
             {% if "delete_course" in request.user.get_all_permissions or request.user.has_all_permissions %}
-            <button class="btn btn-primary" style="background: #F16564; color: white; border-color: #F16564;" onclick="deleteCourse()">
+            <button class="btn btn-primary" style="background: #F16564; color: white; border-color: #F16564;display: none;" onclick="deleteCourse()">
                 <i class="fas fa-trash"></i>
                 Delete Course
             </button>
@@ -40,7 +40,7 @@
                     <span class="info-value">{{ course.total_procedures }}</span>
                 </div>
 
-                <div class="info-item">
+                <!-- <div class="info-item">
                     <label>OSCE Types</label>
                     <div class="osce-types-display">
                         {% for osce_type in course.osce_types %}
@@ -57,7 +57,7 @@
                             <i class="fas fa-times-circle text-muted"></i> No
                         {% endif %}
                     </span>
-                </div>
+                </div> -->
             </div>
         </div>
     </div>
@@ -295,31 +295,6 @@
             <div class="error-message" id="editProceduresError"></div>
         </div>
 
-        <div class="form-group">
-            <label>OSCE Types <span class="text-danger">*</span></label>
-            <div class="checkbox-group" id="editOsceTypesGroup">
-                <div class="custom-checkbox">
-                    <input type="checkbox" id="editClassroom" name="osce_type" value="classroom">
-                    <label for="editClassroom">Classroom</label>
-                </div>
-                <div class="custom-checkbox">
-                    <input type="checkbox" id="editMock" name="osce_type" value="mock">
-                    <label for="editMock">Mock</label>
-                </div>
-                <div class="custom-checkbox">
-                    <input type="checkbox" id="editFinal" name="osce_type" value="final" onchange="toggleEditVerificationField(this)">
-                    <label for="editFinal">Final</label>
-                </div>
-            </div>
-            <div class="error-message" id="editOsceTypesError"></div>
-        </div>
-
-        <div class="form-group verification-field" id="editVerificationField" style="display: none;">
-            <div class="custom-checkbox">
-                <input type="checkbox" id="editVerification" name="verification_required">
-                <label for="editVerification">Verification Required</label>
-            </div>
-        </div>
 
         <div class="side-panel-actions">
             <button type="button" class="btn btn-light" onclick="closeEditCoursePanel()">Cancel</button>
@@ -2530,8 +2505,6 @@ function submitEditForm() {
         courseName: document.getElementById('editCourseName').value.trim(),
         description: document.getElementById('editDescription').value.trim(),
         procedures: Array.from(document.querySelectorAll('#editProceduresOptions input[type="checkbox"]:checked')).map(cb => cb.value),
-        osceTypes: Array.from(document.querySelectorAll('#editOsceTypesGroup input[name="osce_type"]:checked')).map(cb => cb.value),
-        verificationRequired: document.getElementById('editVerification').checked
     };
     
     const courseId = '{{ course.id }}';
@@ -2747,14 +2720,7 @@ function validateEditForm() {
     if (selectedProcedures.length === 0) {
         showEditError('editProceduresError', 'Please select at least one procedure');
         isValid = false;
-    }
-    
-    // Validate OSCE types
-    const selectedOsceTypes = document.querySelectorAll('#editOsceTypesGroup input:checked');
-    if (selectedOsceTypes.length === 0) {
-        showEditError('editOsceTypesError', 'Please select at least one OSCE type');
-        isValid = false;
-    }
+    }    
     
     return isValid;
 }
@@ -2890,17 +2856,17 @@ function loadUnitNames(unitType) {
 
 // --- Hook up filters and search to AJAX ---
 document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('batchSearch').addEventListener('input', () => loadCourseBatches(1));
+    // document.getElementById('batchSearch').addEventListener('input', () => loadCourseBatches(1));
     document.getElementById('unitTypeFilter').addEventListener('change', function() {
         const unitType = this.value;
         loadUnitNames(unitType);
         document.getElementById('unitNameFilter').value = '';
-        loadCourseBatches(1);
+        // loadCourseBatches(1);
     });
-    document.getElementById('unitNameFilter').addEventListener('change', () => loadCourseBatches(1));
+    // document.getElementById('unitNameFilter').addEventListener('change', () => loadCourseBatches(1));
 
     // Initial load
-    loadCourseBatches(1);
+    // loadCourseBatches(1);
 });
 </script>
 {% endblock %} 

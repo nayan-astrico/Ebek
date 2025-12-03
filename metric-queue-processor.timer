@@ -1,0 +1,17 @@
+[Unit]
+Description=EBEK OSCE Metrics Queue Processor Timer (Runs every 5 minutes)
+Requires=metric-queue-processor.service
+
+[Timer]
+# Run every 5 minutes
+OnCalendar=*:0/5
+# If the system was off, run immediately on boot
+OnBootSec=1min
+# If a run was missed, run as soon as possible
+OnUnitActiveSec=5min
+# Ensure we don't run multiple instances
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
+

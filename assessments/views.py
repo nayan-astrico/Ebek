@@ -4,7 +4,7 @@ import pandas as pd
 from django.http import JsonResponse, HttpResponse
 from django.conf import settings
 from .forms import ExcelUploadForm
-from firebase_admin import firestore
+from firebase_admin import firestore, auth as firebase_auth
 import uuid
 import logging
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
@@ -46,7 +46,7 @@ firebase_database = os.getenv('FIREBASE_DATABASE')
 
 db = firestore.client(database_id=firebase_database)
 
-def parse_excel_to_json(dataframe, procedure_name):
+def parse_excel_to_json(dataframe, procedure_name,category):
     """Parse the uploaded Excel file to JSON."""
     procedure_json = {
         "procedure_name": procedure_name,  # Procedure Name passed as an argument
@@ -78,7 +78,8 @@ def parse_excel_to_json(dataframe, procedure_name):
                 "answer_scored": 0,
                 "sub_section_questions_present": False,
                 "sub_section_questions": [],
-                "category": row["Category"] if pd.isna(row["Indicators"]) and not pd.isna(row["Category"]) else "",
+                "category": category,
+                # "category": row["Category"] if pd.isna(row["Indicators"]) and not pd.isna(row["Category"]) else "",
                 "critical": row["Critical"] == True if not pd.isna(row["Critical"]) else False  # Add critical flag
             }
 
@@ -88,7 +89,9 @@ def parse_excel_to_json(dataframe, procedure_name):
                 "question": row["Indicators"],  # Indicators column
                 "right_marks_for_question": float(row["Marks"]) if not pd.isna(row["Marks"]) else 0,
                 "answer_scored": 0,
-                "category": row["Category"] if not pd.isna(row["Category"]) else "",
+                "category": category,
+
+                # "category": row["Category"] if not pd.isna(row["Category"]) else "",
                 "critical": row["Critical"] == True if not pd.isna(row["Critical"]) else False  # Add critical flag
             })
 
@@ -103,58 +106,6 @@ def parse_excel_to_json(dataframe, procedure_name):
         procedure_json["exammetadata"][0]["section_questions"].append(current_parameter)
 
     return procedure_json
-
-def upload_excel_view(request):
-    if request.method == 'POST':
-        form = ExcelUploadForm(request.POST, request.FILES)
-        if form.is_valid():
-            uploaded_file = form.cleaned_data['file']
-
-            file_name = f"{uuid.uuid4()}_{uploaded_file.name}".replace(" ", "_")
-            file_path = os.path.join(settings.MEDIA_ROOT, 'uploaded_excels', file_name)
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            with open(file_path, 'wb+') as destination:
-                for chunk in uploaded_file.chunks():
-                    destination.write(chunk)
-
-            try:
-                df = pd.read_excel(file_path, header=None)  # Read without header to validate
-
-                # Validate specific cells in row 3
-                if not (
-                    df.iloc[2, 0] == "Section" and
-                    df.iloc[2, 1] == "Parameters" and
-                    df.iloc[2, 2] == "Indicators" and
-                    df.iloc[2, 4] == "Marks" and  # Add Critical column validation
-                    df.iloc[2, 5] == "Critical"
-                ):
-                    raise ValueError("Excel template is incorrect. Ensure row 3 contains 'Section', 'Parameters', 'Indicators', 'Category','Marks', 'Critical' .")
-
-                # Extract Procedure Name
-                procedure_name = df.iloc[0, 1].strip()
-
-                # Process data from row 4 onward
-                df_data = pd.read_excel(file_path, skiprows=3, header=None, 
-                                      names=["Section", "Parameters", "Indicators", "Category","Marks","Critical"])
-                parsed_json = parse_excel_to_json(df_data, procedure_name)
-
-                # Upload to Firebase
-                procedure_ref = db.collection('ProcedureTable').document()
-                procedure_ref.set({
-                    "procedureName": parsed_json['procedure_name'],
-                    "examMetaData": parsed_json['exammetadata'],
-                    "notes": parsed_json['notes'],
-                    "active": True
-                })
-
-                logger.info(f"File uploaded successfully - {procedure_ref.id}")
-                return JsonResponse({"message": "File processed successfully!"}, status=200)
-            except Exception as e:
-                logger.error(f"Error processing file for : {str(e)}")
-                return JsonResponse({"error": str(e)}, status=400)
-        else:
-            return JsonResponse({"error": form.errors}, status=400)
-
 
 def create_assessment(request):
     # Fetch procedures from Firebase
@@ -188,6 +139,7 @@ def create_assessment(request):
         "page_obj": page_obj,
         "query": query,
     })
+
 
 
 class ProcedureAPIView(APIView):
@@ -287,7 +239,7 @@ class ProcedureAPIView(APIView):
             # Start creating the data structure
             data = [["Procedure Name", procedure_name]]  # Procedure name row
             data.append([])  # Empty row
-            data.append(["Section", "Parameters", "Indicators", "Category"])  # Column headers
+            data.append(["Section", "Parameters", "Indicators", "Category (i.e C for Communication, K for Knowledge and D for Documentation)", "Marks", "Critical"])  # Column headers
 
             # Populate rows with exam metadata
             for section in exam_metadata:
@@ -298,6 +250,8 @@ class ProcedureAPIView(APIView):
                         question.get("question", ""),
                         "",  # Indicators will start on the same row
                         question.get("category", "") if not question.get("sub_section_questions_present", False) else "",
+                        question.get("right_marks_for_question", 0) if not question.get("sub_section_questions_present", False) else "",
+                        str(question.get("critical", False)).lower() if not question.get("sub_section_questions_present", False) else "",
                     ]
                     data.append(parameter_row)
 
@@ -310,6 +264,8 @@ class ProcedureAPIView(APIView):
                                 # Place the first indicator on the same row as the parameter
                                 data[-1][2] = indicator.get("question", "")  # Add indicator to the "Indicators" column
                                 data[-1][3] = indicator.get("category", "")  # Add category
+                                data[-1][4] = indicator.get("right_marks_for_question", 0)  # Add marks
+                                data[-1][5] = str(indicator.get("critical", False)).lower()  # Add critical
                             else:
                                 # For subsequent indicators, create a new row
                                 data.append([
@@ -317,6 +273,8 @@ class ProcedureAPIView(APIView):
                                     "",  # No Parameter
                                     indicator.get("question", ""),
                                     indicator.get("category", ""),
+                                    indicator.get("right_marks_for_question", 0),
+                                    str(indicator.get("critical", False)).lower(),
                                 ])
 
             # Convert to a DataFrame
@@ -337,16 +295,80 @@ class ProcedureAPIView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 def fetch_institutes(request):
-    """Fetch all institutes from the InstituteNames collection."""
+    """Fetch institutes from both Django and Firebase, with optional B2B and unit_type filtering."""
     try:
-        institutes_ref = db.collection('InstituteNames')
+        # Check if we need B2B filtering
+        onboarding_type = request.GET.get('onboarding_type', '').lower()
+        unit_type = request.GET.get('unit_type', '').lower()  # 'institution' or 'hospital'
+
         institutes = []
-        for doc in institutes_ref.stream():
-            institute_data = doc.to_dict()
-            institutes.append({
-                'id': doc.id,
-                'instituteName': institute_data.get('instituteName', 'Unnamed Institute')
-            })
+
+        if onboarding_type == 'b2b':
+            # For B2B, fetch from Django Institution/Hospital models with B2B filtering
+
+            # If unit_type is specified, only fetch that type
+            if unit_type == 'institution':
+                # Only fetch institutions
+                django_institutions = Institution.objects.filter(
+                    is_active=True,
+                    onboarding_type='b2b'
+                )
+
+                for inst in django_institutions:
+                    institutes.append({
+                        'id': inst.id,
+                        'instituteName': inst.name,
+                        'type': 'institution'
+                    })
+
+            elif unit_type == 'hospital':
+                # Only fetch hospitals
+                django_hospitals = Hospital.objects.filter(
+                    is_active=True,
+                    onboarding_type='b2b'
+                )
+
+                for hosp in django_hospitals:
+                    institutes.append({
+                        'id': hosp.id,
+                        'instituteName': hosp.name,
+                        'type': 'hospital'
+                    })
+            else:
+                # No unit_type specified, fetch both
+                django_institutions = Institution.objects.filter(
+                    is_active=True,
+                    onboarding_type='b2b'
+                )
+
+                for inst in django_institutions:
+                    institutes.append({
+                        'id': inst.id,
+                        'instituteName': inst.name,
+                        'type': 'institution'
+                    })
+
+                # Also fetch B2B hospitals
+                django_hospitals = Hospital.objects.filter(
+                    is_active=True,
+                    onboarding_type='b2b'
+                )
+
+                for hosp in django_hospitals:
+                    institutes.append({
+                        'id': hosp.id,
+                        'instituteName': hosp.name,
+                        'type': 'hospital'
+                    })
+        else:
+            # Default behavior: fetch from Firebase InstituteNames collection
+            institutes_ref = db.collection('InstituteNames').where('is_active', '==', True)
+            for doc in institutes_ref.stream():
+                institute_data = doc.to_dict()
+                institutes.append({
+                    'id': doc.id,
+                    'instituteName': institute_data.get('instituteName', 'Unnamed Institute')
+                })
 
         return JsonResponse({'institutes': institutes}, status=200)
     except Exception as e:
@@ -376,20 +398,88 @@ def fetch_cohorts(request):
 def fetch_assessors(request):
     """Fetch assessors from the 'EbekCohort'."""
     try:
-        users_ref = db.collection('Users').where('role', '==', 'ebek_admin')
+        # First query: Get all ebek_admin users
+        users_ref = db.collection('Users').where('role', '==', 'ebek_admin').where('is_active', '==', True)
         print(users_ref)
 
-        assessors = []
+        all_assessors = []
+        all_assessor_ids = set()
+        
         for doc in users_ref.stream():
             print(doc)
             user_data = doc.to_dict()
-            assessors.append({
+            all_assessors.append({
                 'id': doc.id,
                 'name': user_data.get('name', 'Unknown Assessor')
             })
-        print(assessors)
-        return JsonResponse({'assessors': assessors}, status=200)
+            all_assessor_ids.add(doc.id)
+        
+        print(f"Found {len(all_assessors)} ebek_admin assessors")
+        
+
+        # Second query: Get users with institution/hospital if institution_id is provided
+        if "institution_id" in request.GET:
+            institution_id = request.GET.get('institution_id')
+            unit_type = request.GET.get('unit_type', 'institution')  # Default to institution
+            print(institution_id)
+            print(f"Filtering by {unit_type}: {institution_id}")
+
+            # Query from the correct collection based on unit_type
+            if unit_type == 'hospital':
+                unit_doc = db.collection('HospitalNames').document(institution_id).get()
+                unit_name = unit_doc.to_dict().get('hospitalName', '') if unit_doc.exists else ''
+            else:  # institution
+                unit_doc = db.collection('InstituteNames').document(institution_id).get()
+                unit_name = unit_doc.to_dict().get('institutionName', '') if unit_doc.exists else ''
+
+            print(f"Unit name: {unit_name}")
+            institution_name = unit_name  # Keep variable name for compatibility
+            # Query 1: Users with institution in institutions_list
+            users_in_institutions = db.collection('Users').where('institutions_list', 'array_contains', institution_name).where('is_active', '==', True).stream()
+            
+            # Process first query
+            for doc in users_in_institutions:
+                if doc.id not in all_assessor_ids:  # Avoid duplicates
+                    user_data = doc.to_dict()
+                    institutions_list = user_data.get('institutions_list', [])
+                    hospitals_list = user_data.get('hospitals_list', [])
+                    
+                    # Only add if lists are not empty
+                    if institutions_list or hospitals_list:
+                        all_assessor_ids.add(doc.id)
+                        all_assessors.append({
+                            'id': doc.id,
+                            'name': user_data.get('name', 'Unknown User')
+                        })
+            
+            # Query 2: Users with institution in hospitals_list
+            users_in_hospitals = db.collection('Users').where('hospitals_list', 'array_contains', institution_name).where('is_active', '==', True).stream()
+            
+            # Process second query (avoid duplicates)
+            for doc in users_in_hospitals:
+                if doc.id not in all_assessor_ids:
+                    user_data = doc.to_dict()
+                    institutions_list = user_data.get('institutions_list', [])
+                    hospitals_list = user_data.get('hospitals_list', [])
+                    
+                    # Only add if lists are not empty
+                    if institutions_list or hospitals_list:
+                        all_assessor_ids.add(doc.id)
+                        all_assessors.append({
+                            'id': doc.id,
+                            'name': user_data.get('name', 'Unknown User')
+                        })
+            
+            print(f"Total assessors after filtering: {len(all_assessors)}")
+
+        # Return combined list
+        return JsonResponse({
+            'assessors': all_assessors,
+            'total_count': len(all_assessors)
+        }, status=200)
+        
     except Exception as e:
+        print(f"Error: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
 
 def fetch_procedures(request):
@@ -407,19 +497,88 @@ def fetch_procedures(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+@csrf_exempt
+def fetch_course_procedures(request, course_id):
+    """API endpoint to fetch procedures for a specific course."""
+    try:
+        # Get the course document
+        course_ref = db.collection('Courses').document(course_id)
+        course_doc = course_ref.get()
+        
+        if not course_doc.exists:
+            return JsonResponse({'success': False, 'error': 'Course not found'}, status=404)
+        
+        course_data = course_doc.to_dict()
+        procedure_refs = course_data.get('procedures', [])
+        
+        # Get procedure details
+        procedures = []
+        for proc_ref in procedure_refs:
+            proc_doc = proc_ref.get()
+            if proc_doc.exists:
+                proc_data = proc_doc.to_dict()
+                procedures.append({
+                    'id': proc_ref.id,
+                    'name': proc_data.get('procedureName', 'Unknown')
+                })
+        
+        return JsonResponse({
+            'success': True,
+            'procedures': procedures
+        }, status=200)
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
 import traceback
 def create_procedure_assignment_and_test(request):
     if request.method == 'POST':
         try:
             data = request.POST
             print(data)
+            
             # Parse required inputs
-            batch_ids = data.getlist('batch_ids')  
-            procedure_ids = data.getlist('procedure_ids')  
-            test_date = data.get('test_date')  
-            assessor_ids = data.getlist('assessor_ids')
+            test_type = data.get('test_type', 'B2C')
+            batch_ids = [bid for bid in data.getlist('batch_ids', []) if bid]
+            test_date = data.get('test_date', None)
+            assessor_ids = [aid for aid in data.getlist('assessor_ids', []) if aid]
+            skillathon_id = data.get('skillathon_id', None)
+            course_id = data.get('course_id', None)
+            exam_type = data.get('exam_type', 'final')
+            institution_id = data.get('institution_id', None)
+            unit_type = data.get('unit_type', None)  # 'institution' or 'hospital'
+
+            
+            
+            # Parse inputs based on test type
+            if test_type == 'B2B':
+                # B2B: Use procedure-assessor mappings
+                import json
+                procedure_assessor_mappings_str = data.get('procedure_assessor_mappings', '[]')
+                try:
+                    raw_mappings = json.loads(procedure_assessor_mappings_str)
+                    # Normalize and filter invalid mappings
+                    procedure_assessor_mappings = []
+                    for m in raw_mappings or []:
+                        pid = (m.get('procedureId') or '').strip()
+                        if not pid:
+                            continue
+                        assessor_list = [aid for aid in (m.get('assessorIds') or []) if aid]
+                        procedure_assessor_mappings.append({
+                            'procedureId': pid,
+                            'procedureName': m.get('procedureName') or '',
+                            'assessorIds': assessor_list,
+                        })
+                except json.JSONDecodeError:
+                    return JsonResponse({'error': 'Invalid procedure-assessor mappings format'}, status=400)
+            else:
+                # B2C: Use original procedure_ids and assessor_ids (legacy)
+                procedure_ids = [pid for pid in data.getlist('procedure_ids') if pid]
+                procedure_assessor_mappings = None  # Keep original logic for B2C
 
             # Convert test_date to datetime object
+            if not test_date:
+                return JsonResponse({'error': 'Test date is required'}, status=400)
             test_date_obj = datetime.strptime(test_date, '%Y-%m-%d')
 
             # Get current user (for now set to null as per your request)
@@ -427,180 +586,417 @@ def create_procedure_assignment_and_test(request):
 
             created_tests = []  # To store references for created tests
 
-            if batch_ids != []:
-                for batch_id in batch_ids:
-                    # Fetch cohort document
-                    cohort_ref = db.collection('Cohort').document(batch_id)
-                    cohort_doc = cohort_ref.get()
-                    if not cohort_doc.exists:
-                        return JsonResponse({'error': f'Cohort with ID {batch_id} does not exist.'}, status=404)
+            if test_type == 'B2B':
+                # B2B Workflow: Create batchassignment objects
+                if not course_id:
+                    return JsonResponse({'error': 'Course ID is required'}, status=400)
+                if not institution_id:
+                    return JsonResponse({'error': 'Institution/Hospital ID is required'}, status=400)
+                if not unit_type or unit_type not in ['institution', 'hospital']:
+                    return JsonResponse({'error': 'Unit type is required and must be either "institution" or "hospital"'}, status=400)
+                if not batch_ids:
+                    return JsonResponse({'error': 'At least one batch must be selected'}, status=400)
+                if not procedure_assessor_mappings:
+                    return JsonResponse({'error': 'At least one procedure must be selected'}, status=400)
+                created_batchassignments = []
+                created_examassignments_all = []
+                try:
+                    for batch_id in batch_ids:
+                        # Fetch batch document
+                        batch_ref = db.collection('Batches').document(batch_id)
+                        batch_doc = batch_ref.get()
+                        if not batch_doc.exists:
+                            return JsonResponse({'error': f'Batch with ID {batch_id} does not exist.'}, status=404)
 
-                    cohort_data = cohort_doc.to_dict()
-                    users = cohort_data.get('users', [])
+                        batch_data = batch_doc.to_dict()
+                        learners = batch_data.get('learners', [])
+                        
+                        # Get course reference
+                        course_ref = db.collection('Courses').document(course_id)
+                        course_doc = course_ref.get()
+                        if not course_doc.exists:
+                            return JsonResponse({'error': f'Course with ID {course_id} does not exist.'}, status=404)
+                        
+                        # Get unit information based on unit_type
+                        unit_ref = None
+                        unit_name = None
 
-                    # Create Test document
-                    test_data = {
-                        'createdBy': None if current_user is None else current_user,  # Supervisor user reference
-                        'cohort': cohort_ref,
-                        'procedureAssignments': [],
-                        'creationDate': datetime.now(),
-                        'testdate': test_date_obj,
-                        'batchname': cohort_data.get('cohortName', ''),
-                        'status': 'Not Completed',
-                    }
-                    test_ref = db.collection('Test').add(test_data)[1]
-                    created_tests.append(test_ref.id)
-
-                    # Create ProcedureAssignments
-                    procedure_assignment_refs = []
-                    for procedure_id in procedure_ids:
+                        try:
+                            if unit_type == 'institution':
+                                institution = Institution.objects.get(id=institution_id, is_active=True, onboarding_type='b2b')
+                                unit_ref = db.collection('InstituteNames').document(str(institution.id))
+                                unit_name = institution.name
+                            elif unit_type == 'hospital':
+                                hospital = Hospital.objects.get(id=institution_id, is_active=True, onboarding_type='b2b')
+                                unit_ref = db.collection('HospitalNames').document(str(hospital.id))
+                                unit_name = hospital.name
+                        except (Institution.DoesNotExist, Hospital.DoesNotExist):
+                            return JsonResponse({'error': f'{unit_type.title()} with ID {institution_id} does not exist.'}, status=404)
+                    # Create batchassignment for each procedure with its specific assessors
+                    processed_mappings = []  # Track successfully processed mappings
+                    for mapping in procedure_assessor_mappings:
+                        procedure_id = mapping.get('procedureId')
+                        if not procedure_id:
+                            continue
+                        procedure_assessor_ids = [aid for aid in mapping.get('assessorIds', []) if aid]
+                        if len(procedure_assessor_ids) == 0:
+                            return JsonResponse({'error': f'Please select at least one assessor for procedure {mapping.get("procedureName") or procedure_id}'}, status=400)
+                        
                         procedure_ref = db.collection('ProcedureTable').document(procedure_id)
                         procedure_data = procedure_ref.get().to_dict()
 
                         if not procedure_data:
                             continue
 
-                        # Create ProcedureAssignment for each assessor
-                        for assessor_id in assessor_ids:
-                            procedure_assignment_data = {
-                                'assignmentToBeDoneDate': test_date_obj,
-                                'cohort': cohort_ref,
-                                'cohortStudentExamTaken': 0,
-                                'creationDate': datetime.now(),
-                                'procedure': procedure_ref,
-                                'status': 'Pending',
-                                'typeOfTest': 'Classroom',
-                                'supervisor': db.collection('Users').document(assessor_id),  # Now using current assessor
-                                'examAssignmentArray': [],
-                                'cohortStudentExamStarted': 0,
-                                'test': test_ref,
-                            }
-                            
-                            procedure_assignment_ref = db.collection('ProcedureAssignment').add(procedure_assignment_data)[1]
-                            procedure_assignment_refs.append(procedure_assignment_ref)
+                        # Create batchassignment object with procedure-specific assessors
+                        batchassignment_data = {
+                            'batch': batch_ref,
+                            'course': course_ref,
+                            'assessorlist': [db.collection('Users').document(str(aid)) for aid in procedure_assessor_ids],
+                            'procedure': procedure_ref,
+                            'examassignment': [],  # Will be populated with exam assignments for each learner
+                            'examType': exam_type,
+                            'testDate': test_date_obj,
+                            'createdAt': datetime.now(),
+                            'status': 'Pending',
+                            'unitType': unit_type,  # "institution" or "hospital"
+                            'unit': unit_ref,      # Reference to institution or hospital
+                            'unit_name': unit_name, # Name of institution or hospital
+                        }
+                        
+                        # Add year and semester from batch
+                        year_of_batch = batch_data.get('yearOfBatch', '')
+                        semester = batch_data.get('semester', '')
+                        if year_of_batch:
+                            batchassignment_data['yearOfBatch'] = year_of_batch
+                        if semester:
+                            batchassignment_data['semester'] = semester
 
-                            # Create ExamAssignments for this procedure assignment
-                            exam_assignment_refs = []
-                            for user_snapshot in users:
-                                exam_meta_data = procedure_data.get('examMetaData', {})
-                                notes = procedure_data.get('notes', '')
-                                procedure_name = procedure_data.get('procedureName', '')
+                        batchassignment_ref = db.collection('BatchAssignment').add(batchassignment_data)[1]
+                        created_batchassignments.append(batchassignment_ref)
 
+                        # Create examassignment for each learner in the batch
+                        exam_assignment_refs = []
+                        for learner_ref in learners:
+                            learner_doc = learner_ref.get()
+                            if learner_doc.exists:
+                                learner_data = learner_doc.to_dict()
+                                
                                 exam_assignment_data = {
-                                    'user': user_snapshot.reference,  # Use the document reference instead of snapshot
-                                    'examMetaData': exam_meta_data,
+                                    'user': learner_ref,
+                                    'examMetaData': procedure_data.get('examMetaData', {}),
                                     'status': 'Pending',
-                                    'notes': notes,
-                                    'procedure_name': procedure_name,
+                                    'notes': procedure_data.get('notes', ''),
+                                    'procedure_name': procedure_data.get('procedureName', ''),
+                                    'unitType': unit_type,  # "institution" or "hospital"
+                                    'unit': unit_ref,      # Reference to institution or hospital
+                                    'unit_name': unit_name, # Name of institution or hospital
+                                    'examType': exam_type,
+                                    'batchassignment': batchassignment_ref,
+                                    'createdAt': datetime.now()
                                 }
-
-                                try:
-                                    user_data = user_snapshot.to_dict()
-                                    exam_assignment_data['institute'] = user_data.get('institution', '')
-                                except (AttributeError, TypeError) as e:
-                                    logger.warning(f"Failed to get institution for user {user_snapshot.id}: {str(e)}")
                                 
                                 exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
                                 exam_assignment_refs.append(exam_assignment_ref)
+                                created_examassignments_all.append(exam_assignment_ref)
 
-                            # Update ProcedureAssignment with exam assignments
-                            procedure_assignment_ref.update({'examAssignmentArray': firestore.ArrayUnion(exam_assignment_refs)})
-
-                    # Update Test document with all procedure assignments
-                    test_ref.update({'procedureAssignments': firestore.ArrayUnion(procedure_assignment_refs)})
-
-                    # Create CohortProcedureAssignments
-                    for assessor_id in assessor_ids:
-                        db.collection('CohortProcedureAssignments').add({
-                            'test': test_ref,
-                            'user': db.collection('Users').document(assessor_id),
-                            'typeOfTest': 'Classroom',
+                        # Update batchassignment with exam assignments (avoid ArrayUnion on empty list)
+                        if exam_assignment_refs:
+                            batchassignment_ref.update({'examassignment': firestore.ArrayUnion(exam_assignment_refs)})
+                        else:
+                            batchassignment_ref.update({'examassignment': []})
+                        mapping['batchassignment_id'] = batchassignment_ref.id
+                        created_tests.append(batchassignment_ref.id)
+                        # Track this successfully processed mapping
+                        processed_mappings.append({
+                            'procedure_id': mapping['procedureId'],
+                            'procedure_name': mapping['procedureName'],
+                            'assessor_ids': mapping['assessorIds'],
+                            'batchassignment_id': batchassignment_ref.id
                         })
-            else:
-                logger.info("Here in else")
-                skillathon_id = data.get('skillathon_id')
-                skillathon_ref = db.collection('Skillathon').document(skillathon_id)
-                skillathon_name = skillathon_ref.get().to_dict()["skillathonName"]
-                test_data = {
-                        'createdBy': None if current_user is None else current_user,  # Supervisor user reference
-                        'procedureAssignments': [],
-                        'creationDate': datetime.now(),
-                        'testdate': test_date_obj,
-                        'status': 'Not Completed',
-                        'skillathon': skillathon_name,
-                    }
-                logger.info(test_data)
-                
-                test_ref = db.collection('Test').add(test_data)[1]
-                created_tests.append(test_ref.id)
 
-                procedure_assignment_refs = []
-                for procedure_id in procedure_ids:
-                    try:
-                        procedure_ref = db.collection('ProcedureTable').document(procedure_id)
-                        procedure_data = procedure_ref.get().to_dict()
-
-                        logger.info("PROCEDURE DATA", procedure_data)
-
-                        if not procedure_data:
-                            logger.info("NO PROCEDURE DATA")
-                            continue
-                        
-                        procedure_assignment_data = {
-                            'assignmentToBeDoneDate': test_date_obj,
-                            'creationDate': datetime.now(),
-                            'procedure': procedure_ref,
-                            'status': 'Pending',
-                            'typeOfTest': 'Classroom',
-                            'supervisors': [db.collection('Users').document(aid) for aid in assessor_ids],
-                            'examAssignmentArray': [],
-                            'cohortStudentExamStarted': 0,
-                            'test': test_ref,
+                    # Create a summary document after processing all mappings for this batch
+                    if processed_mappings:
+                        summary_data = {
+                            'batch_id': batch_id,
+                            'course_id': course_id,
+                            'unit_id': institution_id,
+                            'unitType': unit_type,  # "institution" or "hospital"
+                            'unit_name': unit_name, # Name of institution or hospital
+                            'exam_type': exam_type,
+                            'test_date': test_date_obj,
+                            'procedure_assessor_mappings': processed_mappings,
+                            'created_at': datetime.now(),
+                            'status': 'Not Completed',
+                            'semester': semester,
+                            'yearOfBatch': year_of_batch,
                         }
+                        
+                        # Create summary document
+                        summary_ref = db.collection('BatchAssignmentSummary').add(summary_data)[1]
+                        print(f"Created summary document: {summary_ref.id}")
+                except Exception as e:
+                    # Rollback any created refs if an error occurs
+                    try:
+                        for ref in created_examassignments_all:
+                            try:
+                                ref.delete()
+                            except Exception:
+                                pass
+                        for ref in created_batchassignments:
+                            try:
+                                ref.delete()
+                            except Exception:
+                                pass
+                    finally:
+                        return JsonResponse({'error': str(e)}, status=500)
 
-                        procedure_assignment_ref = db.collection('ProcedureAssignment').add(procedure_assignment_data)[1]
-                        procedure_assignment_refs.append(procedure_assignment_ref)
+            else:
+                # B2C Workflow: Original logic
+                if batch_ids != []:
+                    created_tests_refs = []
+                    created_procassign_refs = []
+                    created_examassign_refs = []
+                    try:
+                        for batch_id in batch_ids:
+                            # Fetch cohort document
+                            cohort_ref = db.collection('Cohort').document(batch_id)
+                            cohort_doc = cohort_ref.get()
+                            if not cohort_doc.exists:
+                                return JsonResponse({'error': f'Cohort with ID {batch_id} does not exist.'}, status=404)
 
-                        users = db.collection('Users').where("role", "in", ["student", "nurse"]).where("skillathon_event", "==", skillathon_name)
+                            cohort_data = cohort_doc.to_dict()
+                            users = cohort_data.get('users', [])
 
-                        exam_assignment_refs = []
-                        # for user_snapshot in users.stream():
-                        #     exam_meta_data = procedure_data.get('examMetaData', {})
-                        #     notes = procedure_data.get('notes', '')
-                        #     procedure_name = procedure_data.get('procedureName', '')
+                            # Create Test document
+                            test_data = {
+                                'createdBy': None if current_user is None else current_user,  # Supervisor user reference
+                                'cohort': cohort_ref,
+                                'procedureAssignments': [],
+                                'creationDate': datetime.now(),
+                                'testdate': test_date_obj,
+                                'batchname': cohort_data.get('cohortName', ''),
+                                'status': 'Not Completed',
+                            }
+                            test_ref = db.collection('Test').add(test_data)[1]
+                            created_tests.append(test_ref.id)
+                            created_tests_refs.append(test_ref)
 
-                        #     exam_assignment_data = {
-                        #         'user': user_snapshot.reference,  # Use the document reference instead of snapshot
-                        #         'examMetaData': exam_meta_data,
-                        #         'status': 'Pending',
-                        #         'notes': notes,
-                        #         'procedure_name': procedure_name,
-                        #     }
+                            # Create ProcedureAssignments
+                            procedure_assignment_refs = []
+                            for procedure_id in procedure_ids:
+                                procedure_ref = db.collection('ProcedureTable').document(procedure_id)
+                                procedure_data = procedure_ref.get().to_dict()
 
-                        #     try:
-                        #         user_data = user_snapshot.to_dict()
-                        #         exam_assignment_data['institute'] = user_data.get('institution', '')
-                        #     except (AttributeError, TypeError) as e:
-                        #         print(f"Failed to get institution for user {user_snapshot.id}: {str(e)}")
-                            
-                        #     exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
-                        #     exam_assignment_refs.append(exam_assignment_ref)
+                                if not procedure_data:
+                                    continue
 
-                        # # Update ProcedureAssignment with exam assignments
-                        # procedure_assignment_ref.update({'examAssignmentArray': firestore.ArrayUnion(exam_assignment_refs)})
+                                # Create ProcedureAssignment for each assessor
+                                for assessor_id in assessor_ids:
+                                    if not assessor_id:
+                                        continue
+                                    procedure_assignment_data = {
+                                        'assignmentToBeDoneDate': test_date_obj,
+                                        'cohort': cohort_ref,
+                                        'cohortStudentExamTaken': 0,
+                                        'creationDate': datetime.now(),
+                                        'procedure': procedure_ref,
+                                        'status': 'Pending',
+                                        'typeOfTest': 'Classroom',
+                                        'supervisor': db.collection('Users').document(str(assessor_id)),  # Now using current assessor
+                                        'examAssignmentArray': [],
+                                        'cohortStudentExamStarted': 0,
+                                        'test': test_ref,
+                                    }
+                                    
+                                    procedure_assignment_ref = db.collection('ProcedureAssignment').add(procedure_assignment_data)[1]
+                                    procedure_assignment_refs.append(procedure_assignment_ref)
+                                    created_procassign_refs.append(procedure_assignment_ref)
 
-                        # Update Test document with all procedure assignments
-                        test_ref.update({'procedureAssignments': firestore.ArrayUnion(procedure_assignment_refs)})
+                                    # Create ExamAssignments for this procedure assignment
+                                    exam_assignment_refs = []
+                                    for user_snapshot in users:
+                                        exam_meta_data = procedure_data.get('examMetaData', {})
+                                        notes = procedure_data.get('notes', '')
+                                        procedure_name = procedure_data.get('procedureName', '')
+
+                                        exam_assignment_data = {
+                                            'user': user_snapshot.reference,  # Use the document reference instead of snapshot
+                                            'examMetaData': exam_meta_data,
+                                            'status': 'Pending',
+                                            'notes': notes,
+                                            'procedure_name': procedure_name,
+                                        }
+
+                                        try:
+                                            user_data = user_snapshot.to_dict()
+                                            exam_assignment_data['institute'] = user_data.get('institution', '')
+                                        except (AttributeError, TypeError) as e:
+                                            logger.warning(f"Failed to get institution for user {user_snapshot.id}: {str(e)}")
+                                        
+                                        exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
+                                        exam_assignment_refs.append(exam_assignment_ref)
+                                        created_examassign_refs.append(exam_assignment_ref)
+
+                                # Update ProcedureAssignment with exam assignments (avoid ArrayUnion on empty list)
+                                if exam_assignment_refs:
+                                    procedure_assignment_ref.update({'examAssignmentArray': firestore.ArrayUnion(exam_assignment_refs)})
+                                else:
+                                    procedure_assignment_ref.update({'examAssignmentArray': []})
+
+                        # Update Test document with all procedure assignments (avoid ArrayUnion on empty list)
+                        if procedure_assignment_refs:
+                            test_ref.update({'procedureAssignments': firestore.ArrayUnion(procedure_assignment_refs)})
+                        else:
+                            test_ref.update({'procedureAssignments': []})
+
+                            # Create CohortProcedureAssignments
+                            for assessor_id in assessor_ids:
+                                db.collection('CohortProcedureAssignments').add({
+                                    'test': test_ref,
+                                    'user': db.collection('Users').document(assessor_id),
+                                    'typeOfTest': 'Classroom',
+                                })
                     except Exception as e:
-                        logger.error("ERROR IN ELSE", traceback.format_exc())
-                        logger.error("ERROR IN ELSE", str(e))
-                        pass
-                
-                    
+                        # Rollback created docs
+                        try:
+                            for ref in created_examassign_refs:
+                                try:
+                                    ref.delete()
+                                except Exception:
+                                    pass
+                            for ref in created_procassign_refs:
+                                try:
+                                    ref.delete()
+                                except Exception:
+                                    pass
+                            for ref in created_tests_refs:
+                                try:
+                                    ref.delete()
+                                except Exception:
+                                    pass
+                        finally:
+                            return JsonResponse({'error': str(e)}, status=500)
+                else:
+                    logger.info("Here in else")
+                    skillathon_ref = db.collection('Skillathon').document(skillathon_id)
+                    skillathon_name = skillathon_ref.get().to_dict()["skillathonName"]
+
+                    # Check if an assignment already exists for this skillathon
+                    existing_tests = db.collection('Test').where('skillathon', '==', skillathon_name).where('status', '!=', 'Completed').limit(1).stream()
+                    if any(existing_tests):
+                        return JsonResponse({
+                            'error': f'An assignment already exists for the skillathon "{skillathon_name}". Please edit the existing assignment instead of creating a new one.'
+                        }, status=400)
+
+                    test_data = {
+                            'createdBy': None if current_user is None else current_user,  # Supervisor user reference
+                            'procedureAssignments': [],
+                            'creationDate': datetime.now(),
+                            'testdate': test_date_obj,
+                            'status': 'Not Completed',
+                            'skillathon': skillathon_name,
+                        }
+                    logger.info(test_data)
+                    # Safe create with rollback
+                    test_ref = None
+                    single_created_procassign_refs = []
+                    single_created_examassign_refs = []
+                    try:
+                        test_ref = db.collection('Test').add(test_data)[1]
+                        created_tests.append(test_ref.id)
+
+                        procedure_assignment_refs = []
+                        for procedure_id in procedure_ids:
+                            try:
+                                procedure_ref = db.collection('ProcedureTable').document(procedure_id)
+                                procedure_data = procedure_ref.get().to_dict()
+
+                                logger.info("PROCEDURE DATA", procedure_data)
+
+                                if not procedure_data:
+                                    logger.info("NO PROCEDURE DATA")
+                                    continue
+                                
+                                procedure_assignment_data = {
+                                    'assignmentToBeDoneDate': test_date_obj,
+                                    'creationDate': datetime.now(),
+                                    'procedure': procedure_ref,
+                                    'status': 'Pending',
+                                    'typeOfTest': 'Classroom',
+                                    'supervisors': [db.collection('Users').document(aid) for aid in assessor_ids],
+                                    'examAssignmentArray': [],
+                                    'cohortStudentExamStarted': 0,
+                                    'test': test_ref,
+                                }
+
+                                procedure_assignment_ref = db.collection('ProcedureAssignment').add(procedure_assignment_data)[1]
+                                procedure_assignment_refs.append(procedure_assignment_ref)
+                                single_created_procassign_refs.append(procedure_assignment_ref)
+
+                                users = db.collection('Users').where("role", "in", ["student", "nurse"]).where("skillathon_event", "==", skillathon_name)
+
+                                exam_assignment_refs = []
+                                # for user_snapshot in users.stream():
+                                #     exam_meta_data = procedure_data.get('examMetaData', {})
+                                #     notes = procedure_data.get('notes', '')
+                                #     procedure_name = procedure_data.get('procedureName', '')
+
+                                #     exam_assignment_data = {
+                                #         'user': user_snapshot.reference,  # Use the document reference instead of snapshot
+                                #         'examMetaData': exam_meta_data,
+                                #         'status': 'Pending',
+                                #         'notes': notes,
+                                #         'procedure_name': procedure_name,
+                                #     }
+
+                                #     try:
+                                #         user_data = user_snapshot.to_dict()
+                                #         exam_assignment_data['institute'] = user_data.get('institution', '')
+                                #     except (AttributeError, TypeError) as e:
+                                #         print(f"Failed to get institution for user {user_snapshot.id}: {str(e)}")
+                                
+                                #     exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
+                                #     exam_assignment_refs.append(exam_assignment_ref)
+
+                                # # Update ProcedureAssignment with exam assignments
+                                # procedure_assignment_ref.update({'examAssignmentArray': firestore.ArrayUnion(exam_assignment_refs)})
+
+                            except Exception as e:
+                                logger.error("ERROR IN ELSE", traceback.format_exc())
+                                logger.error("ERROR IN ELSE", str(e))
+                                # rollback
+                                try:
+                                    for ref in single_created_examassign_refs:
+                                        try:
+                                            ref.delete()
+                                        except Exception:
+                                            pass
+                                    for ref in single_created_procassign_refs:
+                                        try:
+                                            ref.delete()
+                                        except Exception:
+                                            pass
+                                    if test_ref:
+                                        try:
+                                            test_ref.delete()
+                                        except Exception:
+                                            pass
+                                finally:
+                                    return JsonResponse({'error': str(e)}, status=500)
+                        # After processing all procedures, update Test with procedure assignments
+                        if procedure_assignment_refs:
+                            test_ref.update({'procedureAssignments': firestore.ArrayUnion(procedure_assignment_refs)})
+                        else:
+                            test_ref.update({'procedureAssignments': []})
+                    except Exception as e:
+                        # If creating the Test itself fails, return immediately
+                        return JsonResponse({'error': str(e)}, status=500)
 
             return JsonResponse({'success': True, 'created_tests': created_tests})
 
         except Exception as e:
+            print(str(e))
             logger.error(str(e))
             logger.error(traceback.format_exc())
             logger.error("HEEEREEEEEE")
@@ -609,48 +1005,230 @@ def create_procedure_assignment_and_test(request):
     return JsonResponse({'error': 'Invalid request method.'}, status=405)
 
 def assign_assessment(request):
-    # Initialize Firestore client
 
-    # Fetch data from the 'Test' collection
     test_data = []
-    tests_ref = db.collection('Test')
-    tests = tests_ref.stream()
-
-    for test in tests:
-        test_doc = test.to_dict()
-        skillathon = test_doc.get('skillathon', None)
-        procedure_assignments = []
-        for proc_ref in test_doc.get('procedureAssignments', []):
-            proc_doc = proc_ref.get()
-            if proc_doc.exists:
-                proc_data = proc_doc.to_dict()
-                procedure_ref = proc_data.get('procedure')
-                procedure_name = "Unknown"
-                if procedure_ref:
-                    procedure_doc = procedure_ref.get()
-                    if procedure_doc.exists:
-                        procedure_name = procedure_doc.to_dict().get('procedureName', 'Unknown')
-                procedure_assignments.append({
-                    'id': proc_ref.id,
-                    'procedure_name': procedure_name,
-                    'status': proc_data.get('status', 'Unknown'),
+    
+    # FETCH B2C ASSESSMENTS FROM 'Test' 
+    try:
+        tests_ref = db.collection('Test')
+        tests = tests_ref.limit(100).stream()
+        
+        for test in tests:
+            try:
+                test_doc = test.to_dict()
+                test_type = test_doc.get('type', 'B2C')
+                skillathon = test_doc.get('skillathon', None)
+                batch_name = test_doc.get('batchname', '')
+                
+                # Get procedures
+                procedure_assignments = []
+                assessors_list = []
+                
+                for proc_ref in test_doc.get('procedureAssignments', [])[:10]:
+                    try:
+                        proc_doc = proc_ref.get()
+                        if proc_doc.exists:
+                            proc_data = proc_doc.to_dict()
+                            procedure_ref = proc_data.get('procedure')
+                            procedure_name = "Unknown"
+                            if procedure_ref:
+                                try:
+                                    procedure_doc = procedure_ref.get()
+                                    if procedure_doc.exists:
+                                        procedure_name = procedure_doc.to_dict().get('procedureName', 'Unknown')
+                                except Exception:
+                                    pass
+                            
+                            procedure_assignments.append({
+                                'id': proc_ref.id,
+                                'procedure_name': procedure_name,
+                                'status': proc_data.get('status', 'Unknown'),
+                            })
+                            
+                            # Get assessors for this procedure
+                            if 'supervisors' in proc_data and isinstance(proc_data['supervisors'], list):
+                                for sup_ref in proc_data['supervisors']:
+                                    try:
+                                        sup_doc = sup_ref.get()
+                                        if sup_doc.exists:
+                                            sup_data = sup_doc.to_dict()
+                                            assessor_name = sup_data.get('name', sup_data.get('username', 'Assessor'))
+                                            if assessor_name not in assessors_list:
+                                                assessors_list.append(assessor_name)
+                                    except Exception:
+                                        pass
+                    except Exception as e:
+                        logger.error(f"Error loading procedure: {e}")
+                        continue
+                
+                # Determine entity based on type
+                entity = "-"
+                if test_type == "B2C":
+                    entity = skillathon or "Skillathon"
+                else:
+                    entity = test_doc.get('institution_name', batch_name or 'Institution')
+                
+                # Assessment name
+                assessment_name = (
+                    f"{batch_name or skillathon or 'Unknown'} - "
+                    f"{test_doc.get('testdate').strftime('%d %b %Y') if test_doc.get('testdate') else ''}"
+                )
+                
+                test_data.append({
+                    'id': test.id,
+                    'assessment_name': assessment_name,
+                    'type': test_type,
+                    'mode': test_doc.get('examType', 'Skillathon' if test_type == 'B2C' else 'Final OSCE'),
+                    'entity': entity,
+                    'batch': batch_name or '-',
+                    'skillathon': skillathon,
+                    'procedure_assignments': procedure_assignments,
+                    'assessors': ', '.join(assessors_list) if assessors_list else '-',
+                    'status': test_doc.get('status', 'Not Available'),
+                    'testdate': test_doc.get('testdate'),
                 })
-        test_data.append({
-            'id': test.id,
-            'assessment_name': (
-                f"{test_doc.get('batchname', skillathon or 'Unknown')} - "
-                f"{test_doc.get('testdate').strftime('%d %b') if test_doc.get('testdate') else ''}"
-            ),
-            'skillathon': skillathon,
-            'procedure_assignments': procedure_assignments,
-            'status': test_doc.get('status', 'Not Available'),
-        })
+            except Exception as e:
+                logger.error(f"Error processing test: {e}")
+                continue
+                
+    except Exception as e:
+        logger.error(f"Error fetching B2C tests: {e}")
+    
+    # FETCH B2B ASSESSMENTS FROM 'BatchAssignmentSummary' (grouped)
+    try:
+        summary_ref = db.collection('BatchAssignmentSummary')
+        summaries = summary_ref.limit(100).stream()
 
-    # Pagination
-    paginator = Paginator(test_data, 10)
-    page_number = request.GET.get("page")
-    page_obj = paginator.get_page(page_number)
+        for summary in summaries:
+            try:
+                summary_doc = summary.to_dict()
 
+                # Get batch information
+                batch_id = summary_doc.get('batch_id')
+                batch_name = '-'
+                if batch_id:
+                    try:
+                        batch_ref = db.collection('Batches').document(batch_id)
+                        batch_doc = batch_ref.get()
+                        if batch_doc.exists:
+                            batch_name = batch_doc.to_dict().get('batchName', '-')
+                    except Exception:
+                        pass
+
+                # Get unit (institution/hospital) information
+                entity = summary_doc.get('unit_name', '-')
+                unit_type = summary_doc.get('unitType', 'institution')
+
+                # Get procedure and assessor information from mappings
+                procedure_assessor_mappings = summary_doc.get('procedure_assessor_mappings', [])
+
+                # Collect all procedures from the summary
+                procedure_assignments = []
+                all_assessors = set()
+
+                for mapping in procedure_assessor_mappings:
+                    procedure_name = mapping.get('procedure_name', 'Unknown')
+                    batchassignment_id = mapping.get('batchassignment_id')
+
+                    # Add procedure to list
+                    if batchassignment_id:
+                        # Check status from actual BatchAssignment
+                        status = 'Pending'
+                        try:
+                            ba_ref = db.collection('BatchAssignment').document(batchassignment_id)
+                            ba_doc = ba_ref.get()
+                            if ba_doc.exists:
+                                status = ba_doc.to_dict().get('status', 'Pending')
+                        except Exception:
+                            pass
+
+                        procedure_assignments.append({
+                            'id': batchassignment_id,
+                            'procedure_name': procedure_name,
+                            'status': status,
+                        })
+
+                    # Collect assessors for this procedure
+                    assessor_ids = mapping.get('assessor_ids', [])
+                    for assessor_id in assessor_ids:
+                        try:
+                            assessor_ref = db.collection('Users').document(str(assessor_id))
+                            assessor_doc = assessor_ref.get()
+                            if assessor_doc.exists:
+                                assessor_data = assessor_doc.to_dict()
+                                assessor_name = (
+                                    assessor_data.get('full_name') or
+                                    assessor_data.get('name') or
+                                    assessor_data.get('username', 'Assessor')
+                                )
+                                all_assessors.add(assessor_name)
+                        except Exception as e:
+                            logger.error(f"Error fetching assessor: {e}")
+                            pass
+
+                # Get exam type and test date from summary
+                exam_type = summary_doc.get('exam_type', 'Final')
+                test_date = summary_doc.get('test_date')
+
+                # Assessment name
+                assessment_name = (
+                    f"{batch_name} - "
+                    f"{test_date.strftime('%d %b %Y') if test_date else ''}"
+                )
+
+                # Determine overall status
+                status = summary_doc.get('status', 'Active')
+
+                test_data.append({
+                    'id': summary.id,
+                    'assessment_name': assessment_name,
+                    'type': 'B2B',
+                    'mode': exam_type,
+                    'entity': entity,
+                    'batch': batch_name,
+                    'skillathon': None,
+                    'procedure_assignments': procedure_assignments,
+                    'assessors': ', '.join(sorted(all_assessors)) if all_assessors else '-',
+                    'status': status,
+                    'testdate': test_date,
+                    'is_summary': True,  # Flag to indicate this is a summary entry
+                })
+            except Exception as e:
+                logger.error(f"Error processing batch assignment summary: {e}")
+                continue
+
+    except Exception as e:
+        logger.error(f"Error fetching B2B batch assignment summaries: {e}")
+    
+    # Sort by test date (most recent first)
+    # Handle timezone-aware and timezone-naive datetime comparison
+    def get_comparable_date(test_item):
+        test_date = test_item.get('testdate')
+        if test_date is None:
+            return datetime.min
+        # Convert timezone-aware datetime to naive for comparison
+        if hasattr(test_date, 'tzinfo') and test_date.tzinfo is not None:
+            return test_date.replace(tzinfo=None)
+        return test_date
+    
+    try:
+        test_data.sort(key=get_comparable_date, reverse=True)
+    except Exception as e:
+        logger.error(f"Error sorting test data: {e}")
+        # If sorting fails, just keep the original order
+        pass
+    
+    # No pagination: show all, newest first
+    page_obj = test_data
+    
+    return render(request, 'assessments/assign_assessment.html', {
+        "page_obj": page_obj,
+        "query": request.GET.get("query", ""),
+    })
+    
+    # No pagination: show all, newest first
+    page_obj = test_data
+    
     return render(request, 'assessments/assign_assessment.html', {
         "page_obj": page_obj,
         "query": request.GET.get("query", ""),
@@ -662,55 +1240,266 @@ def get_test(request, test_id):
     if request.method != 'GET':
         return JsonResponse({'error': 'Only GET method allowed'}, status=405)
     try:
+        if not test_id:
+            print(test_id)
+            return JsonResponse({'error': 'Test ID is required'}, status=400)
+        
         test_ref = db.collection('Test').document(test_id)
         test_doc = test_ref.get()
         if not test_doc.exists:
             return JsonResponse({'error': 'Test not found'}, status=404)
+        
         test_data = test_doc.to_dict()
+        if not test_data:
+            return JsonResponse({'error': 'Test data is empty'}, status=404)
 
-        # Procedures
-        procedures = []
-        assessors_map = {}
-        for proc_ref in test_data.get('procedureAssignments', []) or []:
+        # Process procedure-assessor mappings
+        procedure_assessor_mappings = []
+        all_assessors_map = {}
+
+        # Safely get procedureAssignments
+        procedure_assignments = test_data.get('procedureAssignments', []) or []
+        if not isinstance(procedure_assignments, list):
+            procedure_assignments = []
+
+        for proc_ref in procedure_assignments:
+            if not proc_ref:
+                continue
             try:
                 proc_doc = proc_ref.get()
                 if not proc_doc.exists:
                     continue
                 proc_data = proc_doc.to_dict()
+                if not proc_data:
+                    continue
+
+                # Get procedure details
                 procedure_ref = proc_data.get('procedure')
+                procedure_id = None
+                procedure_name = 'Unknown'
+
                 if procedure_ref:
-                    pdoc = procedure_ref.get()
-                    if pdoc.exists:
-                        procedures.append({'id': procedure_ref.id, 'name': pdoc.to_dict().get('procedureName', 'Unknown')})
+                    try:
+                        pdoc = procedure_ref.get()
+                        if pdoc.exists:
+                            pdata = pdoc.to_dict()
+                            if pdata:
+                                procedure_id = procedure_ref.id
+                                procedure_name = pdata.get('procedureName', 'Unknown')
+                    except Exception as e:
+                        # If procedure fetch fails, continue without it
+                        continue
+
                 # Supervisors can be single 'supervisor' or list 'supervisors'
+                sup_list = []
                 if 'supervisors' in proc_data and isinstance(proc_data['supervisors'], list):
-                    sup_list = proc_data['supervisors']
-                else:
+                    sup_list = [s for s in proc_data['supervisors'] if s]  # Filter out None values
+                elif 'supervisor' in proc_data:
                     sup = proc_data.get('supervisor')
-                    sup_list = [sup] if sup else []
+                    if sup:
+                        sup_list = [sup]
+
+                # Get assessors for this procedure
+                procedure_assessors = []
+                assessor_ids = []
                 for sref in sup_list:
+                    if not sref:
+                        continue
                     try:
                         sdoc = sref.get()
                         if sdoc.exists:
                             sdata = sdoc.to_dict()
-                            assessors_map[sref.id] = {'id': sref.id, 'name': sdata.get('name', sdata.get('username', 'Assessor'))}
-                    except Exception:
+                            if sdata:
+                                assessor_id = sref.id
+                                assessor_name = (
+                                    sdata.get('full_name') or
+                                    sdata.get('name') or
+                                    sdata.get('username', 'Assessor')
+                                )
+                                procedure_assessors.append({
+                                    'id': assessor_id,
+                                    'name': assessor_name
+                                })
+                                assessor_ids.append(assessor_id)
+                                all_assessors_map[assessor_id] = {
+                                    'id': assessor_id,
+                                    'name': assessor_name
+                                }
+                    except Exception as e:
+                        # If assessor fetch fails, continue without it
                         continue
-            except Exception:
+
+                # Add to procedure-assessor mappings
+                if procedure_id:
+                    procedure_assessor_mappings.append({
+                        'procedure_id': procedure_id,
+                        'procedure_name': procedure_name,
+                        'procedureassignment_id': proc_ref.id,
+                        'assessor_ids': assessor_ids,
+                        'assessors': procedure_assessors
+                    })
+
+            except Exception as e:
+                # If procedure assignment processing fails, continue to next one
                 continue
+
+        # Safely format date
+        testdate_str = None
+        try:
+            testdate = test_data.get('testdate')
+            if testdate:
+                if hasattr(testdate, 'strftime'):
+                    testdate_str = testdate.strftime('%Y-%m-%d')
+                elif isinstance(testdate, str):
+                    testdate_str = testdate
+        except Exception as e:
+            # If date formatting fails, leave it as None
+            testdate_str = None
 
         response = {
             'id': test_id,
             'assessment_name': test_data.get('batchname') or test_data.get('skillathon') or '',
             'status': test_data.get('status', 'Not Completed'),
-            'testdate': (test_data.get('testdate').strftime('%Y-%m-%d') if test_data.get('testdate') else None),
-            'procedures': procedures,
-            'assessors': list(assessors_map.values()),
-            'skillathon': test_data.get('skillathon')
+            'testdate': testdate_str,
+            'procedure_assessor_mappings': procedure_assessor_mappings,
+            'assessors': list(all_assessors_map.values()),
+            'skillathon': test_data.get('skillathon') or '',
+            'examType': test_data.get('examType', 'Classroom')
         }
-        return JsonResponse({'success': True, 'test': response})
+        return JsonResponse({'success': True, 'data': response})
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Error in get_test: {str(e)}\n{error_trace}")
+        return JsonResponse({'error': 'Failed to retrieve test data. Please try again.'}, status=500)
+
+@csrf_exempt
+def get_batch_assignment_summary(request, summary_id):
+    """Return consolidated details for a BatchAssignmentSummary including procedures and assessors."""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Only GET method allowed'}, status=405)
+    try:
+        if not summary_id:
+            return JsonResponse({'error': 'Summary ID is required'}, status=400)
+
+        summary_ref = db.collection('BatchAssignmentSummary').document(summary_id)
+        summary_doc = summary_ref.get()
+        if not summary_doc.exists:
+            return JsonResponse({'error': 'Batch assignment summary not found'}, status=404)
+
+        summary_data = summary_doc.to_dict()
+        if not summary_data:
+            return JsonResponse({'error': 'Summary data is empty'}, status=404)
+
+        # Get batch information
+        batch_id = summary_data.get('batch_id')
+        batch_name = ''
+        if batch_id:
+            try:
+                batch_ref = db.collection('Batches').document(batch_id)
+                batch_doc = batch_ref.get()
+                if batch_doc.exists:
+                    batch_name = batch_doc.to_dict().get('batchName', '')
+            except Exception:
+                pass
+
+        # Get unit information
+        unit_name = summary_data.get('unit_name', '')
+        unit_type = summary_data.get('unitType', 'institution')
+        unit_id = summary_data.get('unit_id','')
+
+        # Get course information
+        course_id = summary_data.get('course_id')
+        course_name = ''
+        if course_id:
+            try:
+                course_ref = db.collection('Courses').document(course_id)
+                course_doc = course_ref.get()
+                if course_doc.exists:
+                    course_name = course_doc.to_dict().get('courseName', '')
+            except Exception:
+                pass
+
+        # Process procedure-assessor mappings
+        procedure_assessor_mappings = summary_data.get('procedure_assessor_mappings', []) or []
+
+        procedures_with_assessors = []
+        all_assessors_map = {}
+
+        for mapping in procedure_assessor_mappings:
+            procedure_id = mapping.get('procedure_id')
+            procedure_name = mapping.get('procedure_name', 'Unknown')
+            assessor_ids = mapping.get('assessor_ids', [])
+            batchassignment_id = mapping.get('batchassignment_id')
+
+            # Collect assessors for this procedure
+            procedure_assessors = []
+            for assessor_id in assessor_ids:
+                try:
+                    assessor_ref = db.collection('Users').document(str(assessor_id))
+                    assessor_doc = assessor_ref.get()
+                    if assessor_doc.exists:
+                        assessor_data = assessor_doc.to_dict()
+                        assessor_name = (
+                            assessor_data.get('full_name') or
+                            assessor_data.get('name') or
+                            assessor_data.get('username', 'Assessor')
+                        )
+                        procedure_assessors.append({
+                            'id': str(assessor_id),
+                            'name': assessor_name
+                        })
+                        # Add to global assessors map
+                        all_assessors_map[str(assessor_id)] = {
+                            'id': str(assessor_id),
+                            'name': assessor_name
+                        }
+                except Exception as e:
+                    logger.error(f"Error fetching assessor {assessor_id}: {e}")
+                    continue
+
+            procedures_with_assessors.append({
+                'procedure_id': procedure_id,
+                'procedure_name': procedure_name,
+                'batchassignment_id': batchassignment_id,
+                'assessors': procedure_assessors
+            })
+
+        # Format date
+        testdate_str = None
+        try:
+            testdate = summary_data.get('test_date')
+            if testdate:
+                if hasattr(testdate, 'strftime'):
+                    testdate_str = testdate.strftime('%Y-%m-%d')
+                elif isinstance(testdate, str):
+                    testdate_str = testdate
+        except Exception:
+            testdate_str = None
+
+        response = {
+            'id': summary_id,
+            'batch_id': batch_id,
+            'batch_name': batch_name,
+            'course_id': course_id,
+            'course_name': course_name,
+            'unit_id': unit_id,
+            'unit_name': unit_name,
+            'unit_type': unit_type,
+            'exam_type': summary_data.get('exam_type', 'Final'),
+            'status': summary_data.get('status', 'Active'),
+            'testdate': testdate_str,
+            'semester': summary_data.get('semester', ''),
+            'yearOfBatch': summary_data.get('yearOfBatch', ''),
+            'procedure_assessor_mappings': procedures_with_assessors,
+            'assessors': list(all_assessors_map.values()),
+        }
+        return JsonResponse({'success': True, 'summary': response})
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Error in get_batch_assignment_summary: {str(e)}\n{error_trace}")
+        return JsonResponse({'error': 'Failed to retrieve batch assignment summary. Please try again.'}, status=500)
 
 @csrf_exempt
 def delete_test(request, test_id):
@@ -748,75 +1537,474 @@ def delete_test(request, test_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
+def delete_batch_assignment(request, ba_id):
+    """Delete a BatchAssignment document (B2B assessment)."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+    try:
+        ba_ref = db.collection('BatchAssignment').document(ba_id)
+        ba_doc = ba_ref.get()
+        if not ba_doc.exists:
+            return JsonResponse({'error': 'Batch assignment not found'}, status=404)
+
+        # If BatchAssignment contains nested references you want to clean up,
+        # do it here. For now, delete the document.
+        ba_ref.delete()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+def delete_batch_assignment_summary(request, summary_id):
+    """Delete a BatchAssignmentSummary and all associated BatchAssignments and ExamAssignments."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+    try:
+        summary_ref = db.collection('BatchAssignmentSummary').document(summary_id)
+        summary_doc = summary_ref.get()
+        if not summary_doc.exists:
+            return JsonResponse({'error': 'Batch assignment summary not found'}, status=404)
+
+        summary_data = summary_doc.to_dict()
+
+        # Get all BatchAssignment IDs from procedure_assessor_mappings
+        procedure_assessor_mappings = summary_data.get('procedure_assessor_mappings', [])
+
+        # Delete all associated BatchAssignments and their ExamAssignments
+        for mapping in procedure_assessor_mappings:
+            ba_id = mapping.get('batchassignment_id')
+            if ba_id:
+                try:
+                    ba_ref = db.collection('BatchAssignment').document(ba_id)
+                    ba_doc = ba_ref.get()
+                    if ba_doc.exists:
+                        ba_data = ba_doc.to_dict()
+
+                        # Delete ExamAssignments first
+                        exam_refs = ba_data.get('examassignment', []) or []
+                        for exam_ref in exam_refs:
+                            try:
+                                exam_ref.delete()
+                            except Exception:
+                                pass
+
+                        # Delete BatchAssignment
+                        ba_ref.delete()
+                except Exception as e:
+                    logger.error(f"Error deleting BatchAssignment {ba_id}: {e}")
+                    pass
+
+        # Note: We intentionally do NOT delete UnitMetrics or SemesterMetrics here.
+        # Multiple exam types (Mock, Final, etc.) for the same batch/semester share the same metrics.
+        # Deleting metrics when removing one exam type would incorrectly remove data for other exams.
+
+        # Finally delete the summary document
+        summary_ref.delete()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Error in delete_batch_assignment_summary: {str(e)}\n{error_trace}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
 def update_test(request, test_id):
-    """Update Test fields: testdate and status."""
+    """Update Test fields: testdate, status, procedures, and assessors (B2C)."""
     if request.method != 'POST':
         return JsonResponse({'error': 'Only POST method allowed'}, status=405)
     try:
         body = json.loads(request.body or '{}')
         testdate_str = body.get('testdate')
         status_val = body.get('status')
-        procedure_ids = body.get('procedure_ids') or []
-        assessor_ids = body.get('assessor_ids') or []
+        procedure_ids = body.get('procedure_ids', [])
+        assessor_ids = body.get('assessor_ids', [])
 
         test_ref = db.collection('Test').document(test_id)
         test_doc = test_ref.get()
         if not test_doc.exists:
             return JsonResponse({'error': 'Test not found'}, status=404)
 
+        test_data = test_doc.to_dict()
         update_payload = {}
+
+        # Update test date
         if testdate_str:
             try:
-                # Accept YYYY-MM-DD
-                new_date = datetime.datetime.strptime(testdate_str, '%Y-%m-%d')
+                new_date = datetime.strptime(testdate_str, '%Y-%m-%d')
                 update_payload['testdate'] = new_date
             except Exception:
                 return JsonResponse({'error': 'Invalid date format, expected YYYY-MM-DD'}, status=400)
+
+        # Update status
         if status_val:
             update_payload['status'] = status_val
 
         if update_payload:
             test_ref.update(update_payload)
 
-        # If procedures/assessors provided, rebuild procedureAssignments
-        if procedure_ids or assessor_ids:
-            test_data = test_doc.to_dict()
-            # Delete existing children
-            for proc_ref in test_data.get('procedureAssignments', []) or []:
+        # Handle procedure and assessor updates if provided
+        if procedure_ids is not None:
+            logger.info(f"[B2C Update] Received procedure_ids: {procedure_ids}, assessor_ids: {assessor_ids}")
+
+            # Get test date for ProcedureAssignments
+            test_date_obj = test_data.get('testdate')
+            if testdate_str:
+                try:
+                    test_date_obj = datetime.strptime(testdate_str, '%Y-%m-%d')
+                except Exception:
+                    pass
+
+            # Get learners for this skillathon event
+            skillathon_name = test_data.get('skillathon')
+            learner_refs = []
+            logger.info(f"[B2C Update] Skillathon name: {skillathon_name}")
+
+            if skillathon_name:
+                try:
+                    learners_query = db.collection('Users').where('skillathon_event', '==', skillathon_name).stream()
+                    for learner_doc in learners_query:
+                        learner_refs.append(learner_doc.reference)
+                    logger.info(f"[B2C Update] Found {len(learner_refs)} learners for skillathon")
+                except Exception as e:
+                    logger.error(f"Error fetching learners for skillathon {skillathon_name}: {e}")
+
+            # Get existing ProcedureAssignments and build a map
+            existing_proc_refs = test_data.get('procedureAssignments', []) or []
+            existing_proc_map = {}  # Maps procedure_id to ProcedureAssignment ref
+
+            for proc_ref in existing_proc_refs:
                 try:
                     proc_doc = proc_ref.get()
                     if proc_doc.exists:
                         proc_data = proc_doc.to_dict()
+                        procedure_ref = proc_data.get('procedure')
+                        if procedure_ref:
+                            existing_proc_map[procedure_ref.id] = proc_ref
+                except Exception:
+                    continue
+
+            # Determine which procedures to add and which to remove
+            new_procedure_ids = set(str(pid) for pid in procedure_ids)
+            existing_procedure_ids = set(existing_proc_map.keys())
+
+            procedures_to_add = new_procedure_ids - existing_procedure_ids
+            procedures_to_remove = existing_procedure_ids - new_procedure_ids
+            procedures_to_keep = new_procedure_ids & existing_procedure_ids
+
+            logger.info(f"[B2C Update] Procedures - Add: {procedures_to_add}, Remove: {procedures_to_remove}, Keep: {procedures_to_keep}")
+
+            new_proc_refs = []
+
+            # Update assessors for existing procedures that are kept
+            for proc_id in procedures_to_keep:
+                proc_ref = existing_proc_map[proc_id]
+                try:
+                    proc_ref.update({
+                        'supervisors': [db.collection('Users').document(str(aid)) for aid in assessor_ids]
+                    })
+                    new_proc_refs.append(proc_ref)
+                except Exception as e:
+                    logger.error(f"Error updating ProcedureAssignment: {e}")
+
+            # Add new procedures
+            for proc_id in procedures_to_add:
+                try:
+                    logger.info(f"[B2C Update] Adding procedure with ID: {proc_id}")
+                    procedure_ref = db.collection('ProcedureTable').document(proc_id)
+                    procedure_doc = procedure_ref.get()
+                    if not procedure_doc.exists:
+                        logger.warning(f"[B2C Update] Procedure {proc_id} does not exist in ProcedureTable")
+                        continue
+
+                    procedure_data = procedure_doc.to_dict()
+                    if not procedure_data:
+                        logger.warning(f"[B2C Update] Procedure {proc_id} has no data")
+                        continue
+
+                    logger.info(f"[B2C Update] Found procedure: {procedure_data.get('procedureName', 'Unknown')}")
+
+                    # Create new ProcedureAssignment
+                    proc_assignment_data = {
+                        'assignmentToBeDoneDate': test_date_obj,
+                        'creationDate': datetime.now(),
+                        'procedure': procedure_ref,
+                        'status': 'Pending',
+                        'typeOfTest': test_data.get('examType', 'Classroom'),
+                        'supervisors': [db.collection('Users').document(str(aid)) for aid in assessor_ids],
+                        'examAssignmentArray': [],
+                        'cohortStudentExamStarted': 0,
+                        'test': test_ref,
+                    }
+                    proc_assignment_ref = db.collection('ProcedureAssignment').add(proc_assignment_data)[1]
+                    logger.info(f"[B2C Update] Created ProcedureAssignment: {proc_assignment_ref.id}")
+
+                    # Create ExamAssignments for each learner
+                    exam_assignment_refs = []
+                    logger.info(f"[B2C Update] Creating ExamAssignments for {len(learner_refs)} learners")
+                    for learner_ref in learner_refs:
+                        try:
+                            learner_doc = learner_ref.get()
+                            if not learner_doc.exists:
+                                continue
+
+                            learner_data = learner_doc.to_dict()
+
+                            exam_assignment_data = {
+                                'user': learner_ref,  # learner_ref is already a user reference
+                                'examMetaData': procedure_data.get('examMetaData', {}),
+                                'status': 'Pending',
+                                'notes': procedure_data.get('notes', ''),
+                                'procedure_name': procedure_data.get('procedureName', ''),
+                            }
+
+                            # Get institution from learner (user document)
+                            institution = learner_data.get('institute') or learner_data.get('hospital') or learner_data.get('institution')
+                            exam_assignment_data['institute'] = institution
+                            exam_assignment_data['institution'] = institution
+
+                            exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
+                            exam_assignment_refs.append(exam_assignment_ref)
+                            print("exam assignments refs appended")
+                            print("HEREEEE")
+                        except Exception as e:
+                            print(f"Error creating ExamAssignment: {e}")
+                            logger.error(f"Error creating ExamAssignment: {e}")
+                            continue
+
+                    # Update ProcedureAssignment with exam assignments
+                    if exam_assignment_refs:
+                        proc_assignment_ref.update({'examAssignmentArray': firestore.ArrayUnion(exam_assignment_refs)})
+                        logger.info(f"[B2C Update] Created {len(exam_assignment_refs)} ExamAssignments for procedure {proc_id}")
+                    else:
+                        logger.warning(f"[B2C Update] No ExamAssignments created for procedure {proc_id}")
+
+                    new_proc_refs.append(proc_assignment_ref)
+                except Exception as e:
+                    logger.error(f"Error adding procedure {proc_id}: {e}")
+                    continue
+
+            # Delete removed procedures
+            for proc_id in procedures_to_remove:
+                proc_ref = existing_proc_map[proc_id]
+                try:
+                    proc_doc = proc_ref.get()
+                    if proc_doc.exists:
+                        proc_data = proc_doc.to_dict()
+                        # Delete associated ExamAssignments
                         for exam_ref in proc_data.get('examAssignmentArray', []) or []:
                             try:
                                 exam_ref.delete()
                             except Exception:
                                 pass
                     proc_ref.delete()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.error(f"Error deleting ProcedureAssignment: {e}")
 
-            new_proc_refs = []
-            for procedure_id in procedure_ids:
-                procedure_ref = db.collection('ProcedureTable').document(procedure_id)
-                proc_assignment_data = {
-                    'creationDate': datetime.datetime.now(),
-                    'procedure': procedure_ref,
-                    'status': 'Pending',
-                    'typeOfTest': 'Classroom',
-                    'supervisors': [db.collection('Users').document(aid) for aid in assessor_ids],
-                    'examAssignmentArray': [],
-                    'cohortStudentExamStarted': 0,
-                    'test': test_ref,
-                }
-                proc_assignment_ref = db.collection('ProcedureAssignment').add(proc_assignment_data)[1]
-                new_proc_refs.append(proc_assignment_ref)
-
+            # Update Test with new procedure list
             if new_proc_refs:
                 test_ref.update({'procedureAssignments': new_proc_refs})
 
         return JsonResponse({'success': True})
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Error in update_test: {str(e)}\n{error_trace}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+def update_batch_assignment_summary(request, summary_id):
+    """Update BatchAssignmentSummary fields: test_date, status, and procedure-assessor mappings."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+    try:
+        body = json.loads(request.body or '{}')
+        testdate_str = body.get('testdate')
+        status_val = body.get('status')
+        procedure_assessor_mappings = body.get('procedure_assessor_mappings', [])
+
+        summary_ref = db.collection('BatchAssignmentSummary').document(summary_id)
+        summary_doc = summary_ref.get()
+        if not summary_doc.exists:
+            return JsonResponse({'error': 'Batch assignment summary not found'}, status=404)
+
+        summary_data = summary_doc.to_dict()
+        update_payload = {}
+
+        # Update test date
+        if testdate_str:
+            try:
+                new_date = datetime.strptime(testdate_str, '%Y-%m-%d')
+                update_payload['test_date'] = new_date
+            except Exception:
+                return JsonResponse({'error': 'Invalid date format, expected YYYY-MM-DD'}, status=400)
+
+        # Update status
+        if status_val:
+            update_payload['status'] = status_val
+
+        # Apply basic updates
+        if update_payload:
+            summary_ref.update(update_payload)
+
+        # Handle procedure-assessor mappings updates
+        if procedure_assessor_mappings:
+            old_mappings = summary_data.get('procedure_assessor_mappings', [])
+
+            # Create a map of old batchassignments to potentially delete
+            old_ba_ids = {m.get('batchassignment_id') for m in old_mappings if m.get('batchassignment_id')}
+
+            # Process new mappings
+            new_processed_mappings = []
+            batch_id = summary_data.get('batch_id')
+            course_id = summary_data.get('course_id')
+            unit_id = summary_data.get('unit_id')
+            unit_type = summary_data.get('unitType', 'institution')
+            unit_name = summary_data.get('unit_name', '')
+            exam_type = summary_data.get('exam_type', 'Final')
+            year_of_batch = summary_data.get('yearOfBatch', '')
+            semester = summary_data.get('semester', '')
+
+            # Get references
+            batch_ref = db.collection('Batches').document(batch_id)
+            course_ref = db.collection('Courses').document(course_id)
+
+            # Determine unit reference based on type
+            if unit_type == 'hospital':
+                unit_ref = db.collection('Hospitals').document(unit_id)
+            else:
+                unit_ref = db.collection('Institutions').document(unit_id)
+
+            # Get test date for BatchAssignments
+            test_date_obj = summary_data.get('test_date')
+            if testdate_str:
+                try:
+                    test_date_obj = datetime.strptime(testdate_str, '%Y-%m-%d')
+                except Exception:
+                    pass
+
+            # Get learners from batch
+            batch_doc = batch_ref.get()
+            learners = []
+            if batch_doc.exists:
+                learners = batch_doc.to_dict().get('learners', [])
+
+            logger.info(f"[B2B Edit] Batch ID: {batch_id}, Learners count: {len(learners)}")
+
+            # For each procedure-assessor mapping
+            logger.info(f"[B2B Edit] Processing {len(procedure_assessor_mappings)} procedure-assessor mappings")
+            for mapping in procedure_assessor_mappings:
+                procedure_id = mapping.get('procedure_id')
+                assessor_ids = mapping.get('assessor_ids', [])
+                old_ba_id = mapping.get('batchassignment_id') or None  # Convert empty string to None
+                logger.info(f"[B2B Edit] Processing mapping - procedure_id: {procedure_id}, old_ba_id: {old_ba_id}, assessor_ids: {assessor_ids}")
+
+                # Get procedure data
+                procedure_ref = db.collection('ProcedureTable').document(procedure_id)
+                procedure_doc = procedure_ref.get()
+                procedure_data = procedure_doc.to_dict() if procedure_doc.exists else {}
+
+                # Check if we can reuse existing BatchAssignment
+                batchassignment_ref = None
+                if old_ba_id:
+                    # Try to update existing BatchAssignment
+                    try:
+                        ba_ref = db.collection('BatchAssignment').document(old_ba_id)
+                        ba_doc = ba_ref.get()
+                        if ba_doc.exists:
+                            # Update assessorlist and testDate
+                            ba_ref.update({
+                                'assessorlist': [db.collection('Users').document(str(aid)) for aid in assessor_ids],
+                                'testDate': test_date_obj,
+                            })
+                            batchassignment_ref = ba_ref
+                            # Remove from deletion list
+                            old_ba_ids.discard(old_ba_id)
+                    except Exception as e:
+                        logger.error(f"Error updating existing BatchAssignment: {e}")
+
+                # If no existing BA or update failed, create new one
+                if not batchassignment_ref:
+                    logger.info(f"[B2B Edit] Creating new BatchAssignment for procedure_id: {procedure_id}, assessor count: {len(assessor_ids)}")
+
+                    # Create new BatchAssignment
+                    batchassignment_data = {
+                        'batch': batch_ref,
+                        'course': course_ref,
+                        'assessorlist': [db.collection('Users').document(str(aid)) for aid in assessor_ids],
+                        'procedure': procedure_ref,
+                        'examassignment': [],
+                        'examType': exam_type,
+                        'testDate': test_date_obj,
+                        'createdAt': datetime.now(),
+                        'status': 'Pending',
+                        'unitType': unit_type,
+                        'unit': unit_ref,
+                        'unit_name': unit_name,
+                        'yearOfBatch': year_of_batch,
+                        'semester': semester,
+                    }
+                    batchassignment_ref = db.collection('BatchAssignment').add(batchassignment_data)[1]
+                    logger.info(f"[B2B Edit] Created BatchAssignment: {batchassignment_ref.id}")
+
+                    # Create ExamAssignments for each learner
+                    exam_assignment_refs = []
+                    logger.info(f"[B2B Edit] Creating ExamAssignments for {len(learners)} learners")
+                    for learner_ref in learners:
+                        exam_assignment_data = {
+                            'user': learner_ref,
+                            'examMetaData': procedure_data.get('examMetaData', {}),
+                            'status': 'Pending',
+                            'procedure_name': procedure_data.get('procedureName', ''),
+                            'unitType': unit_type,
+                            'unit': unit_ref,
+                            'unit_name': unit_name,
+                            'examType': exam_type,
+                            'batchassignment': batchassignment_ref,
+                            'createdAt': datetime.now()
+                        }
+                        exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
+                        exam_assignment_refs.append(exam_assignment_ref)
+
+                    logger.info(f"[B2B Edit] Created {len(exam_assignment_refs)} ExamAssignments")
+
+                    # Update BatchAssignment with ExamAssignments
+                    if exam_assignment_refs:
+                        batchassignment_ref.update({'examassignment': firestore.ArrayUnion(exam_assignment_refs)})
+                        logger.info(f"[B2B Edit] Updated BatchAssignment with {len(exam_assignment_refs)} ExamAssignment references")
+
+                # Add to new mappings
+                new_processed_mappings.append({
+                    'procedure_id': procedure_id,
+                    'procedure_name': procedure_data.get('procedureName', 'Unknown'),
+                    'assessor_ids': assessor_ids,
+                    'batchassignment_id': batchassignment_ref.id
+                })
+
+            # Delete orphaned BatchAssignments
+            for old_ba_id in old_ba_ids:
+                try:
+                    ba_ref = db.collection('BatchAssignment').document(old_ba_id)
+                    ba_doc = ba_ref.get()
+                    if ba_doc.exists:
+                        # Delete associated ExamAssignments
+                        ba_data = ba_doc.to_dict()
+                        for exam_ref in ba_data.get('examassignment', []) or []:
+                            try:
+                                exam_ref.delete()
+                            except Exception:
+                                pass
+                        ba_ref.delete()
+                except Exception as e:
+                    logger.error(f"Error deleting orphaned BatchAssignment {old_ba_id}: {e}")
+
+            # Update summary with new mappings
+            summary_ref.update({'procedure_assessor_mappings': new_processed_mappings})
+
+        return JsonResponse({'success': True})
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Error in update_batch_assignment_summary: {str(e)}\n{error_trace}")
         return JsonResponse({'error': str(e)}, status=500)
 
 def render_exam_reports_page(request):
@@ -847,7 +2035,7 @@ def fetch_exam_reports(request):
             base_query = base_query.where("institute", "==", institute_ref)
 
         if auto_fetch:
-            one_minute_ago = datetime.datetime.utcnow() - datetime.timedelta(minutes=1)
+            one_minute_ago = datetime.now() - timedelta(minutes=1)
             exam_assignments_ref = base_query.where("completed_date", ">=", one_minute_ago)
             exam_assignments_ref = exam_assignments_ref.order_by("completed_date", direction=firestore.Query.DESCENDING)
             exam_assignments = exam_assignments_ref.stream()
@@ -947,9 +2135,12 @@ def fetch_exam_metrics(request):
            }
        }
        skill_wise_metrics = {}
-      
+
        # Track completed procedures per student
        student_completed_procedures = defaultdict(set)
+
+       # Track student-level marks for student-level grade distribution (Total Marks Method)
+       student_marks = {}  # {email: {'obtained': total, 'max': total}}
 
        for exam in exam_assignments:
            exam_doc = exam.to_dict()
@@ -976,13 +2167,16 @@ def fetch_exam_metrics(request):
                percentage = round((total_score / max_marks) * 100, 2)
            grade = get_grade_letter(percentage)
 
+           # Track student-level marks using Total Marks Method
+           if email not in student_marks:
+               student_marks[email] = {'obtained': 0, 'max': 0}
+           student_marks[email]['obtained'] += total_score
+           student_marks[email]['max'] += max_marks
+
            # Procedure counts
            procedure_counts[procedure_name] += 1
 
-           # Grade distribution
-           grade_distribution[grade] += 1
-
-           # Gender metrics
+           # Gender metrics (keep exam-level breakdown for gender analysis)
            gender_metrics["total"][gender] += 1
            gender_metrics["grade_wise"][grade][gender] += 1
 
@@ -1024,6 +2218,18 @@ def fetch_exam_metrics(request):
            1 for student_procedures in student_completed_procedures.values()
            if student_procedures == all_procedures
        )
+
+       # Calculate STUDENT-LEVEL grade distribution using Total Marks Method
+       # Reset grade_distribution to recalculate at student-level (not exam-level)
+       grade_distribution = {"A": 0, "B": 0, "C": 0, "D": 0, "E": 0}
+
+       for email, marks in student_marks.items():
+           if marks['max'] > 0:
+               # Calculate this student's overall percentage using Total Marks Method
+               student_overall_pct = round((marks['obtained'] / marks['max']) * 100, 2)
+               student_grade = get_grade_letter(student_overall_pct)
+               # Increment grade count for this STUDENT (not exam)
+               grade_distribution[student_grade] += 1
 
        # Finalize all missed critical steps for each procedure
        for proc_name in skill_wise_metrics:
@@ -1255,126 +2461,6 @@ def exam_to_score_info(exam_doc):
     }
 
 @csrf_exempt
-def fetch_student_metrics(request):
-    try:
-        skillathon_name = request.GET.get("skillathon_name")
-        institution_name = request.GET.get("institution_name")  # Now using name, not ID
-
-        if not skillathon_name:
-            return JsonResponse({"error": "skillathon_name is required"}, status=400)
-
-        # Build query
-        base_query = db.collection('ExamAssignment') \
-            .where('status', '==', 'Completed') \
-            .where('skillathon', '==', skillathon_name)
-
-        if institution_name:
-            base_query = base_query.where('institution', '==', institution_name)
-
-        exam_assignments = list(base_query.stream())
-
-        # Group by emailID
-        students = defaultdict(lambda: {
-            'name': None,
-            'institute': None,
-            'grades': {},
-            'missed_critical_steps': {},
-            'exam_data': {}
-        })
-        all_procedures = set()
-
-        for exam in exam_assignments:
-            exam_doc = exam.to_dict()
-            email = exam_doc.get('emailID')
-            if not email:
-                continue
-            procedure_name = exam_doc.get('procedureName', 'Unknown')
-            if procedure_name == "Unknown":
-                procedure_name = exam_doc.get('procedure_name', 'Unknown')
-            all_procedures.add(procedure_name)
-
-            # Student info
-            students[email]['name'] = exam_doc.get('name') or exam_doc.get('username') or email
-            students[email]['institute'] = exam_doc.get('institution', 'Unknown')
-
-            # Grade calculation
-            total_score = exam_doc.get("marks", 0)
-            max_marks = sum(
-                question.get('right_marks_for_question', 0)
-                for section in exam_doc.get('examMetaData', [])
-                for question in section.get("section_questions", [])
-            )
-            percentage = round((total_score / max_marks) * 100, 2) if max_marks else 0
-            grade = get_grade_letter(percentage)
-
-            # Missed critical steps and steps info
-            missed_critical = []
-            steps = []
-            critical_missed = 0
-            for section in exam_doc.get("examMetaData", []):
-                for question in section.get("section_questions", []):
-                    step_info = {
-                        'description': question.get('question', ''),
-                        'completed': question.get('answer_scored', 0) > 0,
-                        'critical': question.get('critical', False)
-                    }
-                    steps.append(step_info)
-                    if question.get("critical") and question.get("answer_scored", 0) == 0:
-                        missed_critical.append(question.get('question'))
-                        critical_missed += 1
-
-            # Store per procedure
-            students[email]['grades'][procedure_name] = {
-                'grade': grade,
-                'percentage': percentage
-            }
-            students[email]['missed_critical_steps'][procedure_name] = missed_critical
-            students[email]['exam_data'][procedure_name] = {
-                'steps': steps,
-                'critical_missed': critical_missed
-            }
-
-        # Prepare students list
-        students_list = list(students.values())
-        all_procedures = list(all_procedures)
-
-        # Highest/lowest scorecards
-        highest_score = -1
-        highest_score_student = "-"
-        highest_score_institute = "-"
-        lowest_score = 101
-        lowest_score_student = "-"
-        lowest_score_institute = "-"
-        for student in students_list:
-            for proc in all_procedures:
-                grade_info = student['grades'].get(proc)
-                if grade_info:
-                    pct = grade_info['percentage']
-                    if pct > highest_score:
-                        highest_score = pct
-                        highest_score_student = student['name']
-                        highest_score_institute = student['institute']
-                    if pct < lowest_score:
-                        lowest_score = pct
-                        lowest_score_student = student['name']
-                        lowest_score_institute = student['institute']
-
-        # Response
-        return JsonResponse({
-            'students': students_list,
-            'procedures': all_procedures,
-            'highest_score': highest_score if highest_score != -1 else 0,
-            'highest_score_student': highest_score_student,
-            'highest_score_institute': highest_score_institute,
-            'lowest_score': lowest_score if lowest_score != 101 else 0,
-            'lowest_score_student': lowest_score_student,
-            'lowest_score_institute': lowest_score_institute
-        })
-    except Exception as e:
-        print(f"Error in fetch_student_metrics: {str(e)}")
-        return JsonResponse({"error": str(e)}, status=500)
-
-@csrf_exempt
 def fetch_particular_student(request):
     try:
         exam_reports = []
@@ -1470,7 +2556,8 @@ def fetch_student_metrics(request):
             'institute': None,
             'grades': {},
             'missed_critical_steps': {},
-            'exam_data': {}
+            'exam_data': {},
+            'assessed_by': {}
         })
         all_procedures = set()
 
@@ -1524,6 +2611,14 @@ def fetch_student_metrics(request):
                 'steps': steps,
                 'critical_missed': critical_missed
             }
+            assessed_by = exam_doc.get('assessed_by', '')
+            print(assessed_by)
+            if assessed_by != "":
+                students[email]['assessed_by'][procedure_name] = EbekUser.objects.get(email=assessed_by.strip()).full_name
+            else:
+                students[email]['assessed_by'][procedure_name] = ""
+            print("Assessed BY")
+            print(assessed_by)
 
         # Prepare students list
         students_list = list(students.values())
@@ -2515,7 +3610,15 @@ def course_management(request):
     """
     if not request.user.check_icon_navigation_permissions('courses'):
         return HttpResponse('You are not authorized to access this page')
-    return render(request, 'assessments/course_management.html')
+    
+    # Get user's permissions
+    user_permissions = request.user.get_all_permissions if hasattr(request.user, 'get_all_permissions') else []
+    
+    context = {
+        'user_permissions': user_permissions,
+    }
+    
+    return render(request, 'assessments/course_management.html', context)
 
 def course_detail(request, course_id):
     """
@@ -2655,7 +3758,9 @@ def batch_detail(request, batch_id):
             'courses': courses,
             'course_count': len(courses),
             'status': batch_data.get('status', 'active'),
-            'created_at': batch_data.get('createdAt')
+            'created_at': batch_data.get('createdAt'),
+            'year_of_batch': batch_data.get('yearOfBatch', ''),
+            'semester': batch_data.get('semester', '')
         }
         
         return render(request, 'assessments/batch_detail.html', {'batch': batch_context})
@@ -2674,7 +3779,6 @@ def create_course(request):
             course_name = data.get('courseName', '').strip()
             description = data.get('description', '').strip()
             procedure_ids = data.get('procedures', [])
-            osce_types = data.get('osceTypes', [])
             verification_required = data.get('verificationRequired', False)
             
             if not course_name:
@@ -2683,8 +3787,6 @@ def create_course(request):
             if not procedure_ids:
                 return JsonResponse({'error': 'At least one procedure is required'}, status=400)
             
-            if not osce_types:
-                return JsonResponse({'error': 'At least one OSCE type is required'}, status=400)
             
             # Check if course already exists
             existing_course = db.collection('Courses')\
@@ -2703,11 +3805,10 @@ def create_course(request):
                 'courseName': course_name,
                 'description': description,
                 'procedures': procedure_refs,
-                'osceTypes': osce_types,
-                'verificationRequired': verification_required,
                 'status': 'active',
                 'createdAt': firestore.SERVER_TIMESTAMP,
-                'updatedAt': firestore.SERVER_TIMESTAMP
+                'updatedAt': firestore.SERVER_TIMESTAMP,
+                'verificationRequired': verification_required,
             }
             
             # Add to Firebase
@@ -2807,28 +3908,59 @@ def toggle_course_status(request, course_id):
         try:
             data = json.loads(request.body)
             new_status = data.get('status', 'active')
-            
+
             course_ref = db.collection('Courses').document(course_id)
             course_doc = course_ref.get()
-            
+
             if not course_doc.exists:
                 return JsonResponse({'error': 'Course not found'}, status=404)
-            
+
             # Update the course status
             course_ref.update({
                 'status': new_status,
                 'updatedAt': firestore.SERVER_TIMESTAMP
             })
-            
+
+            # If course is being marked as inactive, remove it from all batches
+            if new_status == 'inactive':
+                print(f"[COURSE STATUS] Course {course_id} marked as inactive, removing from all batches")
+
+                # Query all batches that have this course
+                batches_query = db.collection('Batches').where('courses', 'array_contains', course_ref).stream()
+                removed_from_batches = 0
+
+                for batch_doc in batches_query:
+                    batch_id = batch_doc.id
+                    batch_ref = db.collection('Batches').document(batch_id)
+                    batch_data = batch_doc.to_dict()
+
+                    # Remove the course reference from the batch
+                    batch_ref.update({
+                        'courses': firestore.ArrayRemove([course_ref])
+                    })
+                    removed_from_batches += 1
+                    print(f"[COURSE STATUS] Removed course {course_id} from batch: {batch_id} ({batch_data.get('batchName', 'Unknown')})")
+
+                print(f"[COURSE STATUS] Removed course from {removed_from_batches} batch(es)")
+
+                return JsonResponse({
+                    'success': True,
+                    'status': new_status,
+                    'message': f'Course status updated to inactive and removed from {removed_from_batches} batch(es)'
+                }, status=200)
+
             return JsonResponse({
                 'success': True,
                 'status': new_status,
                 'message': 'Course status updated successfully'
             }, status=200)
-            
+
         except Exception as e:
+            print(f"[COURSE STATUS] Error: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return JsonResponse({'error': str(e)}, status=500)
-    
+
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 @csrf_exempt
@@ -2840,17 +3972,13 @@ def update_course(request, course_id):
             course_name = data.get('courseName', '').strip()
             description = data.get('description', '').strip()
             procedure_ids = data.get('procedures', [])
-            osce_types = data.get('osceTypes', [])
             verification_required = data.get('verificationRequired', False)
-            
             if not course_name:
                 return JsonResponse({'error': 'Course name is required'}, status=400)
             
             if not procedure_ids:
                 return JsonResponse({'error': 'At least one procedure is required'}, status=400)
             
-            if not osce_types:
-                return JsonResponse({'error': 'At least one OSCE type is required'}, status=400)
             
             # Check if course exists
             course_ref = db.collection('Courses').document(course_id)
@@ -2876,9 +4004,8 @@ def update_course(request, course_id):
                 'courseName': course_name,
                 'description': description,
                 'procedures': procedure_refs,
-                'osceTypes': osce_types,
+                'updatedAt': firestore.SERVER_TIMESTAMP,
                 'verificationRequired': verification_required,
-                'updatedAt': firestore.SERVER_TIMESTAMP
             })
             
             return JsonResponse({
@@ -3005,9 +4132,16 @@ def fetch_batches(request):
         search = request.GET.get('search', '').strip().lower()
         page = int(request.GET.get('page', 1))
         page_size = int(request.GET.get('page_size', 10))
-        
+        include_inactive = request.GET.get('include_inactive', '').lower() == 'true'
+
         unit_types = [u.strip().lower() for u in unit_type_param.split(',') if u.strip()] if unit_type_param else []
-        statuses = [s.strip().lower() for s in status_param.split(',') if s.strip()] if status_param else []
+        # Default to active batches only unless status is explicitly provided or include_inactive is true
+        if status_param:
+            statuses = [s.strip().lower() for s in status_param.split(',') if s.strip()]
+        elif include_inactive:
+            statuses = []  # No status filter, show all
+        else:
+            statuses = ['active']  # Default to active batches only
 
 
         # Limit batches to units assigned to current user (by reference)
@@ -3049,10 +4183,46 @@ def fetch_batches(request):
                     batches.append((doc.id, doc.to_dict()))
 
 
+        # Filter batches by unitName if provided
+        unit_name_param = request.GET.get('unitName', '').strip()
+        if unit_name_param:
+            print(f"Filtering batches by unitName: {unit_name_param}")
+            filtered_batches = []
+            
+            for doc_id, batch_data in batches:
+                # Get the unit reference and fetch its names
+                batch_unit_ref = batch_data.get('unit')
+                if batch_unit_ref:
+                    try:
+                        batch_unit_doc = batch_unit_ref.get()
+                        if batch_unit_doc.exists:
+                            batch_unit_data = batch_unit_doc.to_dict()
+                            
+                            # Get the unit name based on unit type
+                            batch_unit_type = batch_data.get('unitType', '')
+                            if batch_unit_type == 'institution':
+                                batch_unit_name = batch_unit_data.get('instituteName', '')
+                            else:  # hospital
+                                batch_unit_name = batch_unit_data.get('hospitalName', '')
+                            
+                            print(f"Batch '{batch_data.get('batchName')}' belongs to: {batch_unit_name}")
+                            
+                            # Compare names (case-insensitive)
+                            if batch_unit_name.lower() == unit_name_param.lower():
+                                filtered_batches.append((doc_id, batch_data))
+                                print(f"  ✓ Match! Including this batch")
+                            else:
+                                print(f"  ✗ No match (expected: {unit_name_param})")
+                    except Exception as e:
+                        print(f"Error checking batch unit: {e}")
+            
+            print(f"Batches before filter: {len(batches)}, after filter: {len(filtered_batches)}")
+            batches = filtered_batches
+
         # Transform and filter
         formatted_batches = []
+        print(batches)
         for doc_id, batch_data in batches:
-            batch_data = doc.to_dict()
 
             # Filtering logic
             batch_unit_type = batch_data.get('unitType', '').lower()
@@ -3089,9 +4259,12 @@ def fetch_batches(request):
                 'unitName': unit_name,
                 'learnerCount': learner_count,
                 'status': batch_data.get('status', 'active'),
-                'createdAt': batch_data.get('createdAt')
+                'createdAt': batch_data.get('createdAt'),
+                'yearOfBatch': batch_data.get('yearOfBatch', ''),
+                'semester': batch_data.get('semester', '')
             })
 
+        print(formatted_batches)
         # Apply pagination
         total_count = len(formatted_batches)
         start_index = (page - 1) * page_size
@@ -3123,6 +4296,8 @@ def create_batch(request):
             unit_type = data.get('unitType')
             unit_id = data.get('unitId')
             learner_ids = data.get('learnerIds', [])
+            year_of_batch = data.get('yearOfBatch', '').strip()
+            semester = data.get('semester', '').strip()
             
             if not batch_name:
                 return JsonResponse({'error': 'Batch name is required'}, status=400)
@@ -3175,6 +4350,12 @@ def create_batch(request):
                 'createdAt': firestore.SERVER_TIMESTAMP
             }
             
+            # Add year and semester if provided
+            if year_of_batch:
+                new_batch['yearOfBatch'] = year_of_batch
+            if semester:
+                new_batch['semester'] = semester
+            
             # Add to Firebase
             batch_ref = db.collection('Batches').add(new_batch)
             
@@ -3194,23 +4375,41 @@ def create_batch(request):
 
 @csrf_exempt
 def fetch_hospitals(request):
-    """API endpoint to fetch all hospitals."""
+    """API endpoint to fetch hospitals with optional B2B filtering."""
     try:
-        hospitals_ref = db.collection('HospitalNames')
+        hospitals_ref = db.collection('HospitalNames').where('is_active', '==', True)
+        # Check if we need B2B filtering
+        onboarding_type = request.GET.get('onboarding_type', '').lower()
         hospitals = []
-        
-        for doc in hospitals_ref.stream():
-            hospital_data = doc.to_dict()
-            hospitals.append({
-                'id': doc.id,
-                'name': hospital_data.get('hospitalName', 'N/A')
-            })
-        
+
+        if onboarding_type == 'b2b':
+            # For B2B, fetch from Django Hospital model with B2B filtering
+            django_hospitals = Hospital.objects.filter(
+                is_active=True,
+                onboarding_type='b2b'
+            )
+
+            for hosp in django_hospitals:
+                hospitals.append({
+                    'id': str(hosp.id),
+                    'name': hosp.name
+                })
+        else:
+            # Default behavior: fetch from Firebase HospitalNames collection
+            hospitals_ref = db.collection('HospitalNames')
+
+            for doc in hospitals_ref.stream():
+                hospital_data = doc.to_dict()
+                hospitals.append({
+                    'id': doc.id,
+                    'name': hospital_data.get('hospitalName', 'N/A')
+                })
+
         return JsonResponse({
             'success': True,
             'units': hospitals
         }, status=200)
-        
+
     except Exception as e:
         return JsonResponse({
             'success': False,
@@ -3242,7 +4441,7 @@ def fetch_learners(request, unit_type, unit_id):
             return JsonResponse({'success': False, 'error': 'Invalid unit type'}, status=400)
 
         # Query users by string field
-        learners_ref = db.collection('Users').where(user_field, '==', unit_name).where('role', 'in', ['student', 'nurse'])
+        learners_ref = db.collection('Users').where(user_field, '==', unit_name).where('role', 'in', ['student', 'nurse']).where('is_active','==',True)
         learners = []
         for doc in learners_ref.stream():
             learner_data = doc.to_dict()
@@ -3302,7 +4501,9 @@ def fetch_batch_details(request, batch_id):
             'learners': learners,
             'learnerCount': len(learners),
             'status': batch_data.get('status', 'active'),
-            'createdAt': batch_data.get('createdAt')
+            'createdAt': batch_data.get('createdAt'),
+            'yearOfBatch': batch_data.get('yearOfBatch', ''),
+            'semester': batch_data.get('semester', '')
         }
         
         return JsonResponse({'success': True, 'batch': batch_details}, status=200)
@@ -3321,14 +4522,20 @@ def update_batch(request, batch_id):
             unit_id = data.get('unitId', None)
             learner_ids = data.get('learnerIds', [])
 
-            if data.get('updateOnlyBatchName', True):
+            # Check if only updating batch name, year, or semester
+            if data.get('updateOnlyBatchName', False):
                 batch_ref = db.collection('Batches').document(batch_id)
-                batch_ref.update({
-                    'batchName': batch_name
-                })
+                update_data = {'batchName': batch_name}
+                year_of_batch = data.get('yearOfBatch', '').strip()
+                semester = data.get('semester', '').strip()
+                if year_of_batch:
+                    update_data['yearOfBatch'] = year_of_batch
+                if semester:
+                    update_data['semester'] = semester
+                batch_ref.update(update_data)
                 return JsonResponse({
                     'success': True,
-                    'message': 'Batch name updated successfully'
+                    'message': 'Batch updated successfully'
                 }, status=200)
             
             
@@ -3390,6 +4597,14 @@ def update_batch(request, batch_id):
                 'updatedAt': firestore.SERVER_TIMESTAMP
             }
             
+            # Add year and semester if provided
+            year_of_batch = data.get('yearOfBatch', '').strip()
+            semester = data.get('semester', '').strip()
+            if year_of_batch:
+                update_data['yearOfBatch'] = year_of_batch
+            if semester:
+                update_data['semester'] = semester
+            
             batch_ref.update(update_data)
             
             return JsonResponse({
@@ -3427,6 +4642,62 @@ def delete_batch(request, batch_id):
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
     
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@csrf_exempt
+def toggle_batch_status(request, batch_id):
+    """API endpoint to toggle batch status between active and inactive."""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            new_status = data.get('status', '').strip().lower()
+
+            if new_status not in ['active', 'inactive']:
+                return JsonResponse({'error': 'Invalid status. Must be "active" or "inactive"'}, status=400)
+
+            batch_ref = db.collection('Batches').document(batch_id)
+            batch_doc = batch_ref.get()
+
+            if not batch_doc.exists:
+                return JsonResponse({'error': 'Batch not found'}, status=404)
+
+            # Get batch data to check the unit
+            batch_data = batch_doc.to_dict()
+            unit_ref = batch_data.get('unit')
+            unit_type = batch_data.get('unitType')
+            print("UNIT TYPE")
+            print(unit_ref)
+            print("Unit REF")
+            print(unit_type)
+
+            # Check if the associated institution/hospital is active
+            if unit_ref and unit_type:
+                unit_doc = unit_ref.get()
+                if unit_doc.exists:
+                    unit_data = unit_doc.to_dict()
+                    unit_is_active = unit_data.get('is_active', True)
+
+                    if not unit_is_active:
+                        unit_name = unit_data.get('name', 'Unknown')
+                        return JsonResponse({
+                            'error': f'Cannot modify batch status. The associated {unit_type} is currently inactive.'
+                        }, status=400)
+
+            # Update the batch status
+            batch_ref.update({'status': new_status})
+
+            message = f'Batch marked as {new_status} successfully'
+            if new_status == 'inactive':
+                message += '. This batch will no longer appear in the create assessment dropdown.'
+
+            return JsonResponse({
+                'success': True,
+                'message': message
+            }, status=200)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 @csrf_exempt
@@ -3574,7 +4845,7 @@ def fetch_available_learners_for_batch(request, batch_id):
             user_field = 'hospital'
         
         # Query all learners from the unit
-        learners_ref = db.collection('Users').where(user_field, '==', unit_name).where('role', 'in', ['student', 'nurse'])
+        learners_ref = db.collection('Users').where(user_field, '==', unit_name).where('role', 'in', ['student', 'nurse']).where('is_active', '==', True)
         available_learners = []
         
         for doc in learners_ref.stream():
@@ -3617,6 +4888,8 @@ def fetch_batch_courses(request, batch_id):
             course_doc = course_ref.get()
             if course_doc.exists:
                 course_data = course_doc.to_dict()
+                if course_data.get("status").lower() != "active":
+                    continue
                 procedure_refs = course_data.get('procedures', [])
                 
                 # Get procedure names
@@ -4287,6 +5560,267 @@ def download_student_report(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@login_required
+@csrf_exempt
+def download_metrics_report(request):
+    """Download Student Batch Report as PDF for a specific semester"""
+    try:
+        # Get parameters from request
+        unit_name = request.GET.get('unit_name', '')
+        academic_year = request.GET.get('academic_year', '')
+        semester = request.GET.get('semester', '')
+        osce_level = request.GET.get('osce_level', 'All')
+        show_marks_details = request.GET.get('show_marks_details', 'false').lower() == 'true'
+
+        # Validate required parameters
+        if not unit_name:
+            return JsonResponse({'error': 'Unit name is required'}, status=400)
+        if not academic_year:
+            return JsonResponse({'error': 'Academic year is required'}, status=400)
+        if not semester:
+            return JsonResponse({'error': 'Semester is required'}, status=400)
+
+        # Fetch student data from Firestore
+        students, metadata = fetch_semester_metrics_data(unit_name, academic_year, semester, osce_level)
+
+        if not students:
+            return JsonResponse({'error': 'No student data found for the selected filters'}, status=404)
+
+        # Generate PDF report
+        buffer = generate_semester_metrics_pdf(students, metadata, show_marks_details)
+
+        # Create filename
+        unit_name_clean = unit_name.replace(' ', '_')
+        filename = f"student_batch_report_{unit_name_clean}_AY{academic_year}_Sem{semester}"
+        if osce_level and osce_level != 'All':
+            filename += f"_{osce_level}"
+        filename += ".pdf"
+
+        # Create response
+        response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        return response
+
+    except Exception as e:
+        logger.error(f"Metrics report generation error: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def fetch_semester_metrics_data(unit_name, academic_year, semester, osce_level='All'):
+    """
+    Fetch student batch report data from Firestore SemesterMetrics collection
+    Returns: (students_list, metadata_dict)
+    """
+    try:
+        # Build document ID: {unit_name}_{year}_{semester}
+        doc_id = f"{unit_name}_{academic_year}_{semester}"
+
+        # Query Firestore
+        doc_ref = db.collection('SemesterMetrics').document(doc_id)
+        doc = doc_ref.get()
+
+        if not doc.exists:
+            logger.warning(f"SemesterMetrics document not found: {doc_id}")
+            return [], {}
+
+        data = doc.to_dict()
+
+        # Get student batch report
+        students = []
+
+        # Check if OSCE level filter is applied
+        if osce_level and osce_level != 'All':
+            # Get filtered data from osce_type_breakdown
+            osce_type_breakdown = data.get('osce_type_breakdown', {})
+            if osce_level in osce_type_breakdown:
+                type_data = osce_type_breakdown[osce_level]
+                students = type_data.get('student_batch_report', [])
+            else:
+                logger.warning(f"OSCE level '{osce_level}' not found in osce_type_breakdown")
+        else:
+            # Get all students from main student_batch_report
+            students = data.get('student_batch_report', [])
+
+        # Prepare metadata
+        metadata = {
+            'unit_name': unit_name,
+            'academic_year': academic_year,
+            'semester': semester,
+            'osce_level': osce_level,
+            'total_students': len(students),
+            'avg_score': data.get('avg_score', 0),
+            'pass_rate': data.get('pass_rate', 0)
+        }
+
+        return students, metadata
+
+    except Exception as e:
+        logger.error(f"Error fetching semester metrics data: {str(e)}")
+        traceback.print_exc()
+        return [], {}
+
+
+def generate_semester_metrics_pdf(students, metadata, show_marks_details=False):
+    """Generate PDF report for Student Batch Report"""
+    from reportlab.lib.pagesizes import landscape, A4
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from io import BytesIO
+    from datetime import datetime
+
+    # Create PDF with landscape orientation
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
+                           rightMargin=36, leftMargin=36,
+                           topMargin=72, bottomMargin=18)
+
+    # Get styles
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        spaceAfter=12,
+        alignment=0  # Left alignment
+    )
+    subtitle_style = ParagraphStyle(
+        'CustomSubtitle',
+        parent=styles['Normal'],
+        fontSize=11,
+        spaceAfter=20,
+        textColor=colors.grey
+    )
+
+    # Build content
+    story = []
+
+    # Title
+    title = Paragraph(f"Student Batch Report - {metadata['unit_name']}", title_style)
+    story.append(title)
+
+    # Subtitle with academic info
+    subtitle_text = f"Academic Year {metadata['academic_year']} - Semester {metadata['semester']}"
+    if metadata['osce_level'] != 'All':
+        subtitle_text += f" - {metadata['osce_level']} OSCE"
+    story.append(Paragraph(subtitle_text, subtitle_style))
+
+    # Report info
+    report_info = f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    report_info += f"<br/>Total Students: {metadata['total_students']}"
+    story.append(Paragraph(report_info, styles['Normal']))
+    story.append(Spacer(1, 20))
+
+    # Helper function to get grade color
+    def get_grade_color(grade):
+        grade_colors = {
+            'A': colors.Color(0.30, 0.69, 0.31),  # Green
+            'B': colors.Color(0.55, 0.77, 0.29),  # Light Green
+            'C': colors.Color(1.00, 0.76, 0.03),  # Yellow
+            'D': colors.Color(1.00, 0.60, 0.00),  # Orange
+            'E': colors.Color(0.96, 0.26, 0.21),  # Red
+        }
+        return grade_colors.get(grade, colors.grey)
+
+    # Helper function to format score with grade
+    def format_score_cell(score, grade):
+        if score is None or score == 0:
+            return '-'
+        return f"{grade} ({score}%)"
+
+    # Create table data
+    if show_marks_details:
+        headers = ['Name', 'Overall', 'Marks', 'Classroom', 'Mock', 'Final', 'Details']
+    else:
+        headers = ['Name', 'Overall', 'Classroom', 'Mock', 'Final']
+
+    table_data = [headers]
+
+    # Add student data rows
+    for student in students:
+        row = [
+            student.get('name', 'Unknown'),
+            f"{student.get('overall_grade', '-')} ({student.get('overall_avg', 0)}%)"
+        ]
+
+        if show_marks_details:
+            marks_obtained = student.get('total_marks_obtained', 0)
+            max_marks = student.get('total_max_marks', 0)
+            row.append(f"{marks_obtained}/{max_marks}")
+
+        row.extend([
+            format_score_cell(student.get('classroom_score'), student.get('classroom_grade')),
+            format_score_cell(student.get('mock_score'), student.get('mock_grade')),
+            format_score_cell(student.get('final_score'), student.get('final_grade'))
+        ])
+
+        if show_marks_details:
+            row.append('✓')  # Details indicator
+
+        table_data.append(row)
+
+    # Calculate column widths
+    num_cols = len(headers)
+    available_width = landscape(A4)[0] - 72  # Total width minus margins
+
+    if show_marks_details:
+        # Name=20%, Overall=15%, Marks=12%, Classroom=15%, Mock=15%, Final=15%, Details=8%
+        col_widths = [
+            available_width * 0.20,  # Name
+            available_width * 0.15,  # Overall
+            available_width * 0.12,  # Marks
+            available_width * 0.15,  # Classroom
+            available_width * 0.15,  # Mock
+            available_width * 0.15,  # Final
+            available_width * 0.08   # Details
+        ]
+    else:
+        # Name=25%, Overall=20%, Classroom=18%, Mock=18%, Final=19%
+        col_widths = [
+            available_width * 0.25,  # Name
+            available_width * 0.20,  # Overall
+            available_width * 0.18,  # Classroom
+            available_width * 0.18,  # Mock
+            available_width * 0.19   # Final
+        ]
+
+    table = Table(table_data, colWidths=col_widths, repeatRows=1)
+
+    # Apply table styling
+    table_style = [
+        # Header row styling
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+
+        # Data rows styling
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.beige, colors.white]),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]
+
+    table.setStyle(TableStyle(table_style))
+
+    story.append(table)
+
+    # Build PDF
+    doc.build(story)
+    buffer.seek(0)
+
+    return buffer
+
+
 def create_roles(request):
     import json
     
@@ -4299,13 +5833,6 @@ def create_roles(request):
             
             if not role_name:
                 return JsonResponse({'error': 'Role name is required'}, status=400)
-            
-            # Ensure at least one permission is selected
-            if not permission_codes:
-                return JsonResponse(
-                    {'error': 'At least one permission must be selected for a role'},
-                    status=400
-                )
             
             # Get permission objects
             permissions = Permission.objects.filter(code__in=permission_codes, is_active=True)
@@ -4344,10 +5871,7 @@ def create_roles(request):
             return JsonResponse({'error': str(e)}, status=500)
     
     # GET request - render the form
-    # Exclude all delete permissions
-    permissions = Permission.objects.filter(is_active=True).exclude(
-        code__startswith='delete_'
-    ).order_by('category', 'name')
+    permissions = Permission.objects.filter(is_active=True).order_by('category', 'name')
     return render(request, 'assessments/create_roles.html', {
         'permissions': permissions
     })
@@ -4365,9 +5889,15 @@ def get_roles(request):
                 'permissions_count': role.permissions.count()
             }
             roles.append(role_data)
-        return JsonResponse({'roles': roles})
+        return JsonResponse({
+            'success': True,
+            'roles': roles
+        })
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
 
 def edit_role(request, role_id):
     """API endpoint to edit a role"""
@@ -4745,9 +6275,12 @@ def create_user(request):
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON data'}, status=400)
     except Exception as e:
-        print(exc_info())
+        try:
+            import traceback as _tb
+            _tb.print_exc()
+        except Exception:
+            pass
         print(e)
-        print(traceback.format_exc())
         return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
@@ -4901,14 +6434,41 @@ def toggle_user_active(request, user_id):
         is_active = payload.get('is_active')
         if is_active is None:
             return JsonResponse({'error': 'Missing is_active flag'}, status=400)
-
+        
+        
         try:
             user = EbekUser.objects.get(id=user_id)
         except EbekUser.DoesNotExist:
             return JsonResponse({'error': 'User not found'}, status=404)
 
+        print("User")
+        print(user.is_active)
+        if user.is_active == False:
+            if user.assigned_institutions.count() == 1 and user.assigned_hospitals.count() == 0:
+                if user.assigned_institutions.all().first().is_active == False:
+                    return JsonResponse({'error': 'Assigned institution is inactive'}, status=400)
+            
+            if user.assigned_institutions.count() == 0 and user.assigned_hospitals.count() == 1:
+                if user.assigned_hospitals.all().first().is_active == False:
+                    return JsonResponse({'error': 'Assigned hospital is inactive'}, status=400)
+
+        
+
         user.is_active = bool(is_active)
         user.save(update_fields=['is_active'])
+
+        # Update Firebase Auth to enable/disable the user
+        try:
+            fb_user = firebase_auth.get_user_by_email(user.email)
+            firebase_auth.update_user(
+                fb_user.uid,
+                disabled=not user.is_active
+            )
+            logger.info(f"Firebase Auth {'disabled' if not user.is_active else 'enabled'} for user: {user.email}")
+        except firebase_auth.UserNotFoundError:
+            logger.warning(f"User not found in Firebase Auth: {user.email}")
+        except Exception as fb_exc:
+            logger.error(f"Error updating Firebase Auth for user {user.email}: {str(fb_exc)}")
 
         return JsonResponse({
             'success': True,
@@ -5079,13 +6639,10 @@ def upload_preview(request):
                 except ValueError:
                     errors.append({'row': row_number, 'message': 'Marks must be an integer'})
 
-            # Critical must be strictly "True" or "False" (case-insensitive)
+            # Critical must be boolean
             critical = str(row.get('Critical')).strip().lower()
-            if critical not in ['true', 'false']:
-                errors.append({
-                    'row': row_number,
-                    'message': 'Critical must be either True or False (no other values allowed)'
-                })
+            if critical not in ['true', 'false', '1', '0']:
+                errors.append({'row': row_number, 'message': 'Critical must be boolean (True/False)'})
 
         return JsonResponse({
             'status': 'success',
@@ -5227,7 +6784,7 @@ def upload_excel(request):
         # Now read it via pandas
         df = pd.read_excel(file_path)
 
-        # --- Processing & validation logic ---
+        # --- Your existing processing logic ---
         df.columns = df.columns.str.strip()
         required_columns = [
             'Section', 'Parameters',
@@ -5237,19 +6794,9 @@ def upload_excel(request):
         if missing_cols:
             return JsonResponse({'status': 'error', 'message': f'Missing columns: {", ".join(missing_cols)}'})
 
-        # Validate & convert Critical: only "True"/"False" (case-insensitive) allowed
-        critical_series = df['Critical'].astype(str).str.strip().str.lower()
-        invalid_mask = ~critical_series.isin(['true', 'false'])
-        if invalid_mask.any():
-            bad_rows = (critical_series[invalid_mask].index + 2).tolist()  # Excel row numbers
-            return JsonResponse({
-                'status': 'error',
-                'message': f'Critical column must contain only True or False. Invalid values at rows: {", ".join(map(str, bad_rows))}'
-            })
-        df['Critical'] = critical_series.map({'true': True, 'false': False})
-
-        # Convert Marks
+        # Convert Marks and Critical
         df['Marks'] = pd.to_numeric(df['Marks'], errors='coerce').fillna(0).astype(int)
+        df['Critical'] = df['Critical'].astype(str).str.lower().map({'true': True, 'false': False, '1': True, '0': False}).fillna(False)
 
         # Fill missing strings
         df[['Section', 'Parameters', 'Indicators', 'Category (i.e C for Communication, K for Knowledge and D for Documentation)']] = \
@@ -5265,8 +6812,10 @@ def upload_excel(request):
         updated = 0
         errors = 0
 
-        # Parse and upload to Firebase
-        parsed_json = parse_excel_to_json(df, procedure_name, category)
+        # Note add code to add it to the firebase database
+
+        df_data = pd.read_excel(file_path)
+        parsed_json = parse_excel_to_json(df_data, procedure_name,category)
 
         # Check if procedure with same name already exists
         existing_procedures = db.collection('ProcedureTable').where('procedureName', '==', parsed_json['procedure_name']).limit(1).stream()

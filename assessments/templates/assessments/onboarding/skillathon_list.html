@@ -3,6 +3,88 @@
 {% block content %}
 
 <link href="{% static 'assessments/css/list.css' %}" rel="stylesheet">
+<style>
+.btn-filter {
+    position: relative;
+}
+
+.filter-badge {
+    background: #F16564;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    position: absolute;
+    top: -5px;
+    right: -5px;
+}
+
+.filter-type {
+    position: relative;
+}
+
+.filter-type .filter-type-badge {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    padding: 0 6px;
+    border-radius: 9px;
+    background: #F16564;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    cursor: pointer;
+    width: 100%;
+    user-select: none;
+    margin: 0;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    pointer-events: auto;
+    position: relative;
+}
+
+.option-item:hover {
+    background-color: #f7fafc;
+}
+
+.option-item span {
+    pointer-events: none;
+    flex: 1;
+}
+
+.select-all-item {
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 12px;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.select-all-item span {
+    font-weight: 600;
+    color: #1a202c;
+}
+</style>
 
 <!-- Header -->
 <div class="header">
@@ -29,9 +111,10 @@
                id="skillathonSearchInput"
                oninput="filterSkillathons(this.value)">
     </div>
-    <button class="btn-filter" onclick="toggleFilterPanel()">
+    <button class="btn-filter" onclick="toggleFilterPanel()" id="filterBtn">
         <i class="fas fa-filter"></i>
         <span>Filters</span>
+        <span class="filter-badge" id="filterBadge" style="display: none;">0</span>
     </button>
 </div>
 
@@ -84,14 +167,19 @@
                 <div class="filter-content" id="city-content">
                     <div class="filter-search">
                         <input type="text" placeholder="Search cities" onkeyup="filterOptions('city')">
-                        <div class="selection-count">0 City selected</div>
+                        <div class="selection-count" id="citySelectionCount">0 City selected</div>
                     </div>
                     <div class="options-list" id="city-options">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllCities" onchange="toggleSelectAll('city', this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                         {% for city in all_cities %}
                         <label class="option-item">
                             <input type="checkbox" name="city" value="{{ city }}"
                                    {% if city in selected_cities %}checked{% endif %}
-                                   onchange="updateSelectionCount('city')">
+                                   onchange="updateSelectionCount('city')"
+                                   class="city-checkbox">
                             <span>{{ city }}</span>
                         </label>
                         {% endfor %}
@@ -102,14 +190,19 @@
                 <div class="filter-content" id="state-content">
                     <div class="filter-search">
                         <input type="text" placeholder="Search states" onkeyup="filterOptions('state')">
-                        <div class="selection-count">0 State selected</div>
+                        <div class="selection-count" id="stateSelectionCount">0 State selected</div>
                     </div>
                     <div class="options-list" id="state-options">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllStates" onchange="toggleSelectAll('state', this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                         {% for state in all_states %}
                         <label class="option-item">
                             <input type="checkbox" name="state" value="{{ state }}"
                                    {% if state in selected_states %}checked{% endif %}
-                                   onchange="updateSelectionCount('state')">
+                                   onchange="updateSelectionCount('state')"
+                                   class="state-checkbox">
                             <span>{{ state }}</span>
                         </label>
                         {% endfor %}
@@ -121,6 +214,7 @@
         <!-- Filter Actions -->
         <div class="filter-actions">
             <button type="button" class="btn btn-light" onclick="toggleFilterPanel()">Cancel</button>
+            <button type="button" class="btn btn-light" onclick="clearAllFilters()">Clear All</button>
             <button type="button" class="btn btn-primary" onclick="applyFiltersAndClose()">Apply filter</button>
         </div>
     </form>
@@ -134,7 +228,9 @@
                 <th>Event Name</th>
                 <th>Date</th>
                 <th>Location</th>
+                {% if "edit_skillathon" in request.user.get_all_permissions or "delete_skillathon" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <th>Actions</th>
+                {% endif %}
             </tr>
         </thead>
         <tbody id="skillathonTableBody">
@@ -169,6 +265,33 @@
                 </form>
             </div>
         </div>
+        <script>
+        // Declare variables first
+        var canCreateSkillathon = false;
+        var canEditSkillathon = false;
+        var canDeleteSkillathon = false;
+
+        // Then set them based on permissions
+        {% if "add_skillathon" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canCreateSkillathon = true;
+        {% endif %}
+
+        {% if "edit_skillathon" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canEditSkillathon = true;
+        {% endif %}
+
+        {% if "delete_skillathon" in request.user.get_all_permissions or request.user.has_all_permissions %}
+        canDeleteSkillathon = true;
+        {% endif %}
+
+        var userPermissions = {
+            canCreate: canCreateSkillathon,
+            canEdit: canEditSkillathon,
+            canDelete: canDeleteSkillathon
+        };
+
+        var showActionsColumn = userPermissions.canEdit || userPermissions.canDelete;
+        </script>
     </div>
 </div>
 <div id="skillathonFormPanel" class="side-panel">
@@ -730,10 +853,62 @@ function applyFiltersAndClose() {
 document.addEventListener('DOMContentLoaded', function() {
     switchFilter('date');
     
-    // Initialize selection counts
-    ['date', 'city', 'state'].forEach(category => {
+    // Initialize selection counts (skip 'date' as it doesn't have checkboxes)
+    ['city', 'state'].forEach(category => {
         updateSelectionCount(category);
     });
+    
+    // Initialize filter badge
+    updateFilterBadge();
+});
+
+// Make entire option row clickable to toggle checkbox
+document.addEventListener('click', function(e) {
+    const label = e.target.closest('label.option-item');
+    if (!label) return;
+    
+    if (label.classList.contains('select-all-item')) {
+        return;
+    }
+    
+    const checkbox = label.querySelector('input[type="checkbox"]');
+    if (!checkbox) return;
+    
+    if (e.target === checkbox || e.target.type === 'checkbox') {
+        setTimeout(function() {
+            const container = label.closest('.filter-content');
+            if (container) {
+                const category = container.id.replace('-content', '');
+                if (category) {
+                    updateSelectionCount(category);
+                }
+            }
+        }, 10);
+        return;
+    }
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    checkbox.checked = !checkbox.checked;
+    
+    const changeEvent = new Event('change', { bubbles: true, cancelable: false });
+    checkbox.dispatchEvent(changeEvent);
+    
+    const container = label.closest('.filter-content');
+    if (container) {
+        const category = container.id.replace('-content', '');
+        if (category) {
+            updateSelectionCount(category);
+        }
+    }
+}, true);
+
+// Update filter badge when date inputs change
+document.addEventListener('change', function(e) {
+    if (e.target && (e.target.name === 'date_from' || e.target.name === 'date_to')) {
+        updateFilterBadge();
+    }
 });
 
 function filterOptions(category) {
@@ -742,17 +917,140 @@ function filterOptions(category) {
     const options = document.querySelectorAll(`#${category}-options .option-item`);
     
     options.forEach(option => {
+        if (option.classList.contains('select-all-item')) {
+            option.style.display = '';
+            return;
+        }
         const text = option.querySelector('span')?.textContent.toLowerCase() || '';
         option.style.display = text.includes(searchTerm) ? '' : 'none';
     });
 }
 
+function toggleSelectAll(category, selectAllCheckbox) {
+    let checkboxSelector;
+    if (category === 'city') {
+        checkboxSelector = '.city-checkbox';
+    } else if (category === 'state') {
+        checkboxSelector = '.state-checkbox';
+    } else {
+        checkboxSelector = `input[name="${category}"]`;
+    }
+    
+    const checkboxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}`);
+    const isChecked = selectAllCheckbox.checked;
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = isChecked;
+        const changeEvent = new Event('change', { bubbles: true });
+        checkbox.dispatchEvent(changeEvent);
+    });
+    
+    updateSelectionCount(category);
+}
+
 function updateSelectionCount(category) {
-    const checkboxes = document.querySelectorAll(`#${category}-options input[type="checkbox"]:checked`);
-    const countElement = document.querySelector(`#${category}-content .selection-count`);
-    const count = checkboxes.length;
+    let checkboxSelector;
+    if (category === 'city') {
+        checkboxSelector = '.city-checkbox';
+    } else if (category === 'state') {
+        checkboxSelector = '.state-checkbox';
+    } else {
+        checkboxSelector = `input[name="${category}"]`;
+    }
+    
+    const checkboxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}`);
+    const checkedBoxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}:checked`);
+    const count = checkedBoxes.length;
+    
+    const countElement = document.getElementById(`${category}SelectionCount`) || document.querySelector(`#${category}-content .selection-count`);
     const label = category.charAt(0).toUpperCase() + category.slice(1);
-    countElement.textContent = `${count} ${label} selected`;
+    if (countElement) {
+        countElement.textContent = `${count} ${label} selected`;
+    }
+    
+    let selectAllId;
+    if (category === 'city') {
+        selectAllId = 'selectAllCities';
+    } else if (category === 'state') {
+        selectAllId = 'selectAllStates';
+    }
+    
+    if (selectAllId) {
+        const selectAllCheckbox = document.getElementById(selectAllId);
+        if (selectAllCheckbox && checkboxes.length > 0) {
+            selectAllCheckbox.checked = (count === checkboxes.length);
+            selectAllCheckbox.indeterminate = (count > 0 && count < checkboxes.length);
+        }
+    }
+    
+    updateFilterBadge();
+    setFilterTypeBadge(category, count);
+}
+
+function updateFilterBadge() {
+    let totalFilterCategories = 0;
+    
+    // Check date filter (if either date_from or date_to has a value)
+    const dateFrom = document.querySelector('input[name="date_from"]');
+    const dateTo = document.querySelector('input[name="date_to"]');
+    if (dateFrom && dateFrom.value) {
+        totalFilterCategories++;
+    } else if (dateTo && dateTo.value) {
+        totalFilterCategories++;
+    }
+    
+    if (document.querySelectorAll('input[name="city"]:checked').length > 0) {
+        totalFilterCategories++;
+    }
+    if (document.querySelectorAll('input[name="state"]:checked').length > 0) {
+        totalFilterCategories++;
+    }
+    
+    const badge = document.getElementById('filterBadge');
+    if (badge) {
+        if (totalFilterCategories > 0) {
+            badge.textContent = totalFilterCategories;
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+function setFilterTypeBadge(category, count) {
+    const el = document.querySelector(`.filter-type[data-filter="${category}"]`);
+    if (!el) return;
+    let badge = el.querySelector('.filter-type-badge');
+    if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'filter-type-badge';
+        el.appendChild(badge);
+    }
+    if (count > 0) {
+        badge.textContent = String(count);
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function clearAllFilters() {
+    document.querySelectorAll('.filter-form input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+        cb.indeterminate = false;
+    });
+    
+    // Clear date inputs
+    const dateFrom = document.querySelector('input[name="date_from"]');
+    const dateTo = document.querySelector('input[name="date_to"]');
+    if (dateFrom) dateFrom.value = '';
+    if (dateTo) dateTo.value = '';
+    
+    ['city', 'state'].forEach(category => {
+        updateSelectionCount(category);
+    });
+    
+    updateFilterBadge();
 }
 
 document.addEventListener('submit', function(e) {
@@ -887,33 +1185,39 @@ function resetSkillathonList() {
 }
 
 function renderSkillathonRow(event) {
-    return `
-    <tr>
-        <td><div class="institution"><span>${event.name}</span></div></td>
-        <td>${event.date}</td>
-        <td>${event.city}, ${event.state}</td>
-        <td>
-            <div class="actions">
-                {% if "edit_skillathon" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                <a href="javascript:void(0);" class="btn-icon"
-                   onclick="openSkillathonFormPanel('${event.edit_url}', 'Edit Skillathon')">
-                    <i class="fas fa-edit"></i>
-                </a>
-                {% endif %}
-                {% if "delete_skillathon" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                <button type="button" 
-                        class="btn-icon btn-danger" 
-                        data-name="${event.name}"
-                        data-url="${event.delete_url}"
-                        onclick="confirmDelete(this)"
-                        title="Delete">
-                    <i class="fas fa-trash"></i>
-                </button>
-                {% endif %}
-            </div>
-        </td>
-    </tr>
-    `;
+    var showActions = userPermissions.canEdit || userPermissions.canDelete;
+    
+    var html = '<tr>' +
+               '<td><div class="institution"><span>' + event.name + '</span></div></td>' +
+               '<td>' + event.date + '</td>' +
+               '<td>' + event.city + ', ' + event.state + '</td>';
+    
+    // Actions column - only if user has permission
+    if (showActions) {
+        html += '<td><div class="actions">';
+        
+        if (userPermissions.canEdit) {
+            html += '<a href="javascript:void(0);" class="btn-icon" ' +
+                    'onclick="openSkillathonFormPanel(\'' + event.edit_url + '\', \'Edit Skillathon\')">' +
+                    '<i class="fas fa-edit"></i>' +
+                    '</a>';
+        }
+        
+        if (userPermissions.canDelete) {
+            html += '<button type="button" class="btn-icon btn-danger" ' +
+                    'data-name="' + event.name + '" ' +
+                    'data-url="' + event.delete_url + '" ' +
+                    'onclick="confirmDelete(this)" ' +
+                    'title="Delete">' +
+                    '<i class="fas fa-trash"></i>' +
+                    '</button>';
+        }
+        
+        html += '</div></td>';
+    }
+    
+    html += '</tr>';
+    return html;
 }
 
 function loadMoreSkillathons() {

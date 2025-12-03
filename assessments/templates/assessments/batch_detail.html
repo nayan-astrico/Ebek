@@ -34,7 +34,7 @@
         </div>
         <div class="course-header-right">
             {% if "delete_batch" in request.user.get_all_permissions or request.user.has_all_permissions %}
-            <button class="btn btn-danger" onclick="deleteBatch()" style="background: #F16564; color: white; border-color: #F16564;">
+            <button class="btn btn-danger" onclick="deleteBatch()" style="background: #F16564; color: white; border-color: #F16564; display: none;">
                 <i class="fas fa-trash"></i>
                 Delete Batch
             </button>
@@ -53,6 +53,40 @@
                 <div class="info-item">
                     <label>Unit Name</label>
                     <span class="info-value">{{ batch.unit_name }}</span>
+                </div>
+                <div class="info-item">
+                    <label>Year of Batch</label>
+                    <span class="info-value">{{ batch.year_of_batch|default:"-" }}</span>
+                </div>
+                <div class="info-item">
+                    <label>Semester</label>
+                    <div class="semester-container">
+                        <span class="info-value semester-display" id="semesterDisplay">{% if batch.semester %}Semester {{ batch.semester }}{% else %}-{% endif %}</span>
+                        <button class="edit-semester-btn" onclick="enableSemesterEdit()" title="Edit Semester">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                    </div>
+                    <div class="semester-edit" id="semesterEdit" style="display: none;">
+                        <select class="form-control semester-select" id="semesterSelect">
+                            <option value="">Select Semester</option>
+                            <option value="1" {% if batch.semester == "1" %}selected{% endif %}>Semester 1</option>
+                            <option value="2" {% if batch.semester == "2" %}selected{% endif %}>Semester 2</option>
+                            <option value="3" {% if batch.semester == "3" %}selected{% endif %}>Semester 3</option>
+                            <option value="4" {% if batch.semester == "4" %}selected{% endif %}>Semester 4</option>
+                            <option value="5" {% if batch.semester == "5" %}selected{% endif %}>Semester 5</option>
+                            <option value="6" {% if batch.semester == "6" %}selected{% endif %}>Semester 6</option>
+                            <option value="7" {% if batch.semester == "7" %}selected{% endif %}>Semester 7</option>
+                            <option value="8" {% if batch.semester == "8" %}selected{% endif %}>Semester 8</option>
+                        </select>
+                        <div class="edit-actions">
+                            <button class="save-semester-btn" onclick="saveSemester()">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            <button class="cancel-semester-btn" onclick="cancelSemesterEdit()">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div class="info-item">
                     <label>Learners</label>
@@ -446,6 +480,80 @@
 }
 
 .cancel-name-btn:hover {
+    background: #fff5f5;
+    color: #c53030;
+}
+
+/* Semester Edit Styles */
+.semester-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.semester-display {
+    margin: 0;
+}
+
+.edit-semester-btn {
+    background: none;
+    border: none;
+    color: #718096;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    font-size: 14px;
+}
+
+.edit-semester-btn:hover {
+    background: #f7fafc;
+    color: #F16564;
+}
+
+.semester-edit {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.semester-select {
+    width: 200px;
+    padding: 6px 10px;
+    border: 2px solid #F16564;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+}
+
+.semester-select:focus {
+    box-shadow: 0 0 0 3px rgba(241, 101, 100, 0.1);
+}
+
+.save-semester-btn, .cancel-semester-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    font-size: 14px;
+}
+
+.save-semester-btn {
+    color: #38a169;
+}
+
+.save-semester-btn:hover {
+    background: #f0fff4;
+    color: #2f855a;
+}
+
+.cancel-semester-btn {
+    color: #e53e3e;
+}
+
+.cancel-semester-btn:hover {
     background: #fff5f5;
     color: #c53030;
 }
@@ -1862,6 +1970,94 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Semester Edit Functions
+function enableSemesterEdit() {
+    const displayDiv = document.getElementById('semesterDisplay').parentElement;
+    const editDiv = document.getElementById('semesterEdit');
+    
+    displayDiv.style.display = 'none';
+    editDiv.style.display = 'flex';
+    
+    // Focus the select
+    document.getElementById('semesterSelect').focus();
+}
+
+function cancelSemesterEdit() {
+    const displayDiv = document.getElementById('semesterDisplay').parentElement;
+    const editDiv = document.getElementById('semesterEdit');
+    const select = document.getElementById('semesterSelect');
+    const originalSemester = '{{ batch.semester }}';
+    
+    // Reset select value to original
+    select.value = originalSemester;
+    
+    displayDiv.style.display = 'flex';
+    editDiv.style.display = 'none';
+}
+
+function saveSemester() {
+    const select = document.getElementById('semesterSelect');
+    const newSemester = select.value;
+    const originalSemester = '{{ batch.semester }}';
+    
+    if (newSemester === originalSemester) {
+        cancelSemesterEdit();
+        return;
+    }
+    
+    // Show loading state
+    const saveBtn = document.querySelector('.save-semester-btn');
+    const originalIcon = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    saveBtn.disabled = true;
+    
+    // Prepare form data
+    const formData = {
+        batchName: '{{ batch.name }}',
+        yearOfBatch: '{{ batch.year_of_batch }}',
+        semester: newSemester,
+        updateOnlyBatchName: true
+    };
+    
+    // Submit to API
+    fetch(`/api/batches/{{ batch.id }}/update/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update the display
+            const displayText = newSemester ? 'Semester ' + newSemester : '-';
+            document.getElementById('semesterDisplay').textContent = displayText;
+            
+            // Switch back to display mode
+            cancelSemesterEdit();
+            
+            // Show success message
+            showSuccess('Semester updated successfully!');
+        } else {
+            showError('Error updating semester: ' + data.error);
+            // Reset select to original value
+            select.value = originalSemester;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error updating semester');
+        // Reset select to original value
+        select.value = originalSemester;
+    })
+    .finally(() => {
+        saveBtn.innerHTML = originalIcon;
+        saveBtn.disabled = false;
+    });
+}
 
 // Check for tab query param
 document.addEventListener('DOMContentLoaded', function() {

@@ -1,0 +1,33 @@
+[Unit]
+Description=EBEK OSCE Metrics Queue Processor Service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+# IMPORTANT: Update these paths for your production environment!
+WorkingDirectory=/var/www/ebek_django_app
+Environment=DJANGO_SETTINGS_MODULE=ebek_django_app.settings
+Environment=PYTHONPATH=/var/www/ebek_django_app
+# Use virtual environment Python if available:
+# ExecStart=/var/www/ebek_django_app/venv/bin/python manage.py process_metric_queue
+# Or use system Python:
+ExecStart=/usr/bin/python3 manage.py process_metric_queue
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=metric-queue-processor
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# IMPORTANT: Update this path to match WorkingDirectory
+ReadWritePaths=/var/www/ebek_django_app
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=512M
+

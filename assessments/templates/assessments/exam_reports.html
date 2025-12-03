@@ -6,11 +6,12 @@
 <!-- Add Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<div class="reports-container">
-    <!-- Header Section -->
-    <div class="reports-header">
+<!-- Header -->
+<div class="header">
+    <div class="header-left">
         <h1>Exam Reports</h1>
-        <p class="subtitle">View and analyze candidate performance across different skillathons</p>
+        <p class="text-muted">View and analyze candidate performance across different skillathons</p>
+    </div>
 </div>
 
     <!-- Navigation Tabs -->
@@ -249,7 +250,7 @@
                         </div>
                     </div>
                     <div class="table-wrapper">
-                        <table class="performance-table">
+                        <table class="performance-table" id="studentDetailsTable">
                             <thead id="performanceTableHead">
                                 <tr>
                                     <th class="student-col sticky-col">Candidate Name</th>
@@ -273,8 +274,6 @@
             </div>
     </div>
     {% endif %}
-</div>
-
 
 <div id="procedurePanel" class="procedure-panel">
     <div class="panel-overlay"></div>
@@ -290,8 +289,16 @@
             <div class="student-info" style="margin-bottom: 32px;">
                 <div class="info-group">
                     <div class="info-item">
+                        <label>Procedure Name</label>
+                        <div id="procedurename" class="info-value">-</div>
+                    </div>
+                    <div class="info-item">
                         <label>Candidate Name</label>
                         <div id="panelStudentName" class="info-value">-</div>
+                    </div>
+                    <div class="info-item">
+                        <label>Assessed By</label>
+                        <div id="assessed_by" class="info-value">-</div>
                     </div>
                     <div class="info-item">
                         <label>Institute</label>
@@ -354,27 +361,31 @@
     }
 
 
-    .reports-container {
-        padding: 24px;
-        max-width: 1440px;
-        margin: 0 auto;
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
     }
 
-    .reports-header {
-        margin-bottom: 32px;
-    }
-
-    .reports-header h1 {
-        font-size: 28px;
-        font-weight: 600;
-        color: #1a202c;
-        margin: 0 0 8px;
-    }
-
-    .subtitle {
-        color: #64748b;
-        font-size: 14px;
+    .header-left h1 {
         margin: 0;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1a202c;
+        line-height: 1.2;
+    }
+
+    .header-left p {
+        margin: 2px 0 0;
+        color: #666;
+        font-size: 1rem;
+    }
+
+    .header-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
     }
 
     /* Filters Section */
@@ -393,6 +404,8 @@
         display: flex;
         gap: 16px;
         flex: 1;
+        flex-wrap: wrap; /* prevent overflow and keep row responsive */
+        align-items: center;
     }
 
     .select-filter {
@@ -403,6 +416,7 @@
         color: #1a202c;
         font-size: 14px;
         min-width: 200px;
+        flex: 1 1 220px; /* allow wrapping with sensible default width */
         cursor: pointer;
         transition: all 0.3s ease;
     }
@@ -832,6 +846,149 @@
         margin-bottom: 24px;
         padding-bottom: 12px;
         border-bottom: 2px solid #f1f5f9;
+    }
+
+    .section-subtitle {
+        color: #64748b;
+        font-size: 14px;
+        margin: 0 0 20px 0;
+    }
+
+    .category-grade-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+        margin-top: 16px;
+    }
+
+    .category-performance-half,
+    .grade-chart-half {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .category-performance-container {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        margin-top: 16px;
+    }
+
+    .chart-wrapper {
+        position: relative;
+        height: 400px;
+        margin-top: 16px;
+    }
+
+    .category-performance-item {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 12px;
+        background: #f8fafc;
+        border-radius: 8px;
+    }
+
+    .category-name {
+        font-weight: 500;
+        color: #1a202c;
+        min-width: 150px;
+    }
+
+    .category-value {
+        font-weight: 600;
+        color: #1a202c;
+        min-width: 60px;
+    }
+
+    .category-bars {
+        display: flex;
+        gap: 2px;
+        flex: 1;
+    }
+
+    .category-bar {
+        width: 12px;
+        height: 20px;
+        background: #1a202c;
+        display: inline-block;
+    }
+
+    /* Semester Dashboard KPIs */
+    .semester-dashboard-kpis {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        margin-top: 24px;
+        margin-bottom: 32px;
+    }
+
+    .kpi-card {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e2e8f0;
+        transition: all 0.3s ease;
+    }
+
+    .kpi-card:hover {
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transform: translateY(-2px);
+    }
+
+    .kpi-label {
+        font-size: 14px;
+        color: #64748b;
+        font-weight: 500;
+        margin-bottom: 8px;
+    }
+
+    .kpi-value {
+        font-size: 28px;
+        font-weight: 700;
+        color: #1a202c;
+        margin-bottom: 8px;
+    }
+
+    .kpi-meaning {
+        font-size: 12px;
+        color: #94a3b8;
+        font-style: italic;
+    }
+
+    /* Skills Summary KPIs */
+    .skills-summary-kpis {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        margin-bottom: 24px;
+    }
+
+    .summary-kpi-card {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e2e8f0;
+    }
+
+    .summary-kpi-label {
+        font-size: 14px;
+        color: #64748b;
+        font-weight: 500;
+        margin-bottom: 8px;
+    }
+
+    .summary-kpi-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: #1a202c;
+        margin-bottom: 8px;
+    }
+
+    .summary-kpi-note {
+        font-size: 12px;
+        color: #94a3b8;
+        font-style: italic;
     }
 
     .gender-charts {
@@ -2127,6 +2284,7 @@
     let studentHasMore = true;
     let currentSkillathonId = '';
     let currentInstituteId = '';
+    let sortingInPlace = false;
 
     function showLoading() {
         document.getElementById('loadingState').style.display = 'block';
@@ -2805,6 +2963,56 @@
                     updateScoreCards(data);
                     
                     updateStudentTable(data);
+
+                    const table = document.getElementById('studentDetailsTable');
+                    const headers = table.querySelectorAll('th');
+                    let sortOrder = {}; // track ascending/descending per column
+
+                    headers.forEach((header, index) => {
+                    header.style.cursor = 'pointer';
+                    header.addEventListener('click', () => {
+                        sortingInPlace = true;
+                        const tbody = table.querySelector('tbody');
+                        const rows = Array.from(tbody.querySelectorAll('tr'));
+                        console.log(rows);
+
+                        // toggle sorting order for this column
+                        sortOrder[index] = !sortOrder[index];
+                        const ascending = sortOrder[index];
+
+                        rows.sort((a, b) => {
+                            let A = a.children[index].textContent.trim();
+                            let B = b.children[index].textContent.trim();
+
+                            // Always push "-" to the end regardless of sort direction
+                            if (A === "-" && B === "-") return 0;
+                            if (A === "-") return 1;  // A is "-", move it to the end
+                            if (B === "-") return -1; // B is "-", move it to the end
+
+                            // Extract percentage values if they exist
+                            const percentageA = A.match(/(\d+(\.\d+)?)%/);
+                            const percentageB = B.match(/(\d+(\.\d+)?)%/);
+
+                            // Extract grade and percentage if in format "E (24%)"
+                            const gradePercentA = A.match(/[A-E]\s*\((\d+(\.\d+)?)%\)/);
+                            const gradePercentB = B.match(/[A-E]\s*\((\d+(\.\d+)?)%\)/);
+
+                            if (percentageA || gradePercentA) {
+                                const valueA = parseFloat(percentageA?.[1] || gradePercentA?.[1]) || 0;
+                                const valueB = parseFloat(percentageB?.[1] || gradePercentB?.[1]) || 0;
+                                return ascending ? valueA - valueB : valueB - valueA;
+                            }
+
+                            // Default to string comparison for non-percentage values
+                            return ascending ? A.localeCompare(B) : B.localeCompare(A);
+                        });
+
+                        // Re-append sorted rows
+                        rows.forEach(row => tbody.appendChild(row));
+                    });
+                    });
+
+
                 } else {
                     if (studentMetrics) studentMetrics.style.display = 'none';
                     if (noDataFound) noDataFound.style.display = 'block';
@@ -2857,7 +3065,7 @@
             clearFetchStudentMetricsInterval();
             clearFetchMetricsInterval();
             // Only start fetchMetrics if Go was pressed
-            
+
             // Save current search value and disable search input for overall tab
             const searchInput = document.getElementById('studentSearchInput');
             if (searchInput) {
@@ -2997,62 +3205,6 @@
 
     // Call this to load the first batch (e.g. on filter change)
 
-    // Helper to append student rows (reuse your updateStudentTable logic, but append instead of replace)
-    function appendStudentRows(data) {
-        const tableBody = document.getElementById('performanceTableBody');
-        data.students.forEach(student => {
-            const row = document.createElement('tr');
-            // ... (same as your updateStudentTable logic for each row)
-            // Add student name
-            const nameCell = document.createElement('td');
-            nameCell.className = 'student-col sticky-col';
-            nameCell.textContent = student.name;
-            row.appendChild(nameCell);
-            // Add institute
-            const instituteCell = document.createElement('td');
-            instituteCell.className = 'institute-col sticky-col';
-            instituteCell.textContent = student.institute;
-            row.appendChild(instituteCell);
-            // Add grades for each procedure
-            data.procedures.forEach(procedure => {
-                const cell = document.createElement('td');
-                const grade = student.grades[procedure];
-                const missedSteps = (student.missed_critical_steps && student.missed_critical_steps[procedure]) || [];
-                if (grade) {
-                    cell.textContent = `${grade.grade} (${grade.percentage}%)`;
-                    cell.className = getGradeClass(grade.grade);
-                    if (missedSteps.length > 0) {
-                        const warnIcon = document.createElement('span');
-                        warnIcon.textContent = ' ⚠';
-                        warnIcon.style.color = '#F16564';
-                        warnIcon.style.cursor = 'pointer';
-                        warnIcon.title = `Missed Critical Steps: \n${missedSteps.join('\n')}`;
-                        cell.appendChild(warnIcon);
-                    }
-                    cell.style.cursor = 'pointer';
-                    cell.dataset.student = JSON.stringify({
-                        name: student.name,
-                        institute: student.institute,
-                        procedure: procedure,
-                        grade: grade,
-                        examData: student.exam_data || {}
-                    });
-                    cell.onclick = () => openProcedurePanel(
-                        student.name,
-                        student.institute,
-                        procedure,
-                        grade,
-                        (student.exam_data && student.exam_data[procedure]) ? student.exam_data[procedure] : []
-                    );
-                } else {
-                    cell.textContent = '-';
-                }
-                row.appendChild(cell);
-            });
-            tableBody.appendChild(row);
-        });
-    }
-
     function clearStudentMetrics() {
         const studentMetrics = document.getElementById('studentMetrics');
         const noDataFound = document.getElementById('noDataFound');
@@ -3148,6 +3300,7 @@
             data.procedures.forEach(procedure => {
                 const cell = document.createElement('td');
                 const grade = student.grades[procedure];
+                const assessed_by = student.assessed_by[procedure] || ""
                 const missedSteps = (student.missed_critical_steps && student.missed_critical_steps[procedure]) || [];
                 if (grade) {
                     cell.textContent = `${grade.grade} (${grade.percentage}%)`;
@@ -3168,14 +3321,16 @@
                         institute: student.institute,
                         procedure: procedure,
                         grade: grade,
-                        examData: student.exam_data || {}
+                        examData: student.exam_data || {},
+                        assessed_by: assessed_by
                     });
                     cell.onclick = () => openProcedurePanel(
                         student.name,
                         student.institute,
                         procedure,
                         grade,
-                        (student.exam_data && student.exam_data[procedure]) ? student.exam_data[procedure] : []
+                        (student.exam_data && student.exam_data[procedure]) ? student.exam_data[procedure] : [],
+                        assessed_by
                     );
                 } else {
                     cell.textContent = '-';
@@ -3197,12 +3352,14 @@
         return gradeClasses[grade] || '';
     }
 
-    function openProcedurePanel(studentName, institute, procedure, grade, examData) {
+    function openProcedurePanel(studentName, institute, procedure, grade, examData, assessed_by) {
         // Update panel content
+        document.getElementById('procedurename').textContent = procedure;
         document.getElementById('panelStudentName').textContent = studentName;
+        document.getElementById('assessed_by').textContent = assessed_by
         document.getElementById('panelInstitute').textContent = institute;
         document.getElementById('panelTotalScore').textContent = `${grade.percentage}%`;
-        
+        console.log(procedure)
         // Get procedure steps data
         const steps = examData.steps || [];
         const completedSteps = steps.filter(step => step.completed).length;
@@ -3696,7 +3853,9 @@
         fetchStudentMetrics();
         if (!fetchStudentMetricsInterval) {
             fetchStudentMetricsInterval = setInterval(() => {
-                fetchStudentMetrics();
+                if (!sortingInPlace) {
+                    fetchStudentMetrics();
+                }
             }, 10000); // 10 seconds
         }
     }
@@ -3709,6 +3868,7 @@
             }, 10000); // 10 seconds
         }
     }
+
 
 </script>
 {% endblock %}

@@ -25,3 +25,7 @@ assessments/add_learner_test_cases.txt
 find_unused_procedures.py
 get_remaining_procedure_assignments.py
 assessments/migrations/00*
+firebase_key.json
+populate_data.py
+media/Testing_New_metadata.xlsx
+firebase-debug.log

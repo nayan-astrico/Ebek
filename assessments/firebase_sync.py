@@ -84,53 +84,68 @@ def create_test_and_exam_assignments(learner, skillathon_event, test_ref=None, p
         
         # For each procedure assignment, create an exam assignment for this learner
         for proc_assignment_ref in procedure_assignments:
-            proc_assignment = proc_assignment_ref.get()
-            if not proc_assignment.exists:
-                print("NO PROC ASSIGNMENT FOUND")
-                continue
-                
-            proc_data = proc_assignment.to_dict()
-            procedure_ref = proc_data.get('procedure')
-            
-            if not procedure_ref:
-                print("NO PROCEDURE REF FOUND")
-                continue
-                
-            procedure = procedure_ref.get()
-            if not procedure.exists:
-                print("NO PROCEDURE FOUND")
-                continue
-                
-            procedure_data = procedure.to_dict()
-            
-            # Check if exam assignment already exists for this user and procedure
-            existing_exam_assignments = proc_data.get('examAssignmentArray', [])
-            for existing_ref in existing_exam_assignments:
-                existing_exam = existing_ref.get()
-                if existing_exam.exists:
-                    existing_data = existing_exam.to_dict()
-                    if existing_data.get('user') == learner_user_ref:
-                        # Skip creating new exam assignment if one already exists
+            try:
+                proc_assignment = proc_assignment_ref.get()
+                if not proc_assignment.exists:
+                    print("NO PROC ASSIGNMENT FOUND")
+                    continue
+
+                proc_data = proc_assignment.to_dict()
+                procedure_ref = proc_data.get('procedure')
+
+                if not procedure_ref:
+                    print("NO PROCEDURE REF FOUND")
+                    continue
+
+                procedure = procedure_ref.get()
+                if not procedure.exists:
+                    print("NO PROCEDURE FOUND")
+                    continue
+
+                procedure_data = procedure.to_dict()
+
+                # Check if exam assignment already exists for this user and procedure
+                existing_exam_assignments = proc_data.get('examAssignmentArray', [])
+                exam_assignment_exists = False
+
+                for existing_ref in existing_exam_assignments:
+                    try:
+                        existing_exam = existing_ref.get()
+                        if existing_exam.exists:
+                            existing_data = existing_exam.to_dict()
+                            if existing_data.get('user') == learner_user_ref:
+                                # Skip creating new exam assignment if one already exists
+                                print(f"Exam assignment already exists for user {learner.learner_user.email} and procedure {procedure_data.get('procedureName')}")
+                                exam_assignment_exists = True
+                                break
+                    except Exception as inner_e:
+                        print(f"Error checking existing exam assignment: {inner_e}")
                         continue
-            
-            # Create exam assignment
-            exam_assignment_data = {
-                'user': learner_user_ref,
-                'examMetaData': procedure_data.get('examMetaData', {}),
-                'status': 'Pending',
-                'notes': procedure_data.get('notes', ''),
-                'procedure_name': procedure_data.get('procedureName', ''),
-                'institute': learner.college.name if learner.college else None,
-                'hospital': learner.hospital.name if learner.hospital else None,
-            }
-            
-            # Add exam assignment to Firestore and get its reference
-            exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
-            
-            # Update procedure assignment with new exam assignment reference
-            proc_assignment_ref.update({
-                'examAssignmentArray': firestore.ArrayUnion([exam_assignment_ref])
-            })
+
+                # Only create if exam assignment doesn't exist
+                if not exam_assignment_exists:
+                    # Create exam assignment
+                    exam_assignment_data = {
+                        'user': learner_user_ref,
+                        'examMetaData': procedure_data.get('examMetaData', {}),
+                        'status': 'Pending',
+                        'notes': procedure_data.get('notes', ''),
+                        'procedure_name': procedure_data.get('procedureName', ''),
+                        'institute': learner.college.name if learner.college else None,
+                        'hospital': learner.hospital.name if learner.hospital else None,
+                    }
+
+                    # Add exam assignment to Firestore and get its reference
+                    exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
+                    print(f"Created exam assignment for user {learner.learner_user.email} and procedure {procedure_data.get('procedureName')}")
+
+                    # Update procedure assignment with new exam assignment reference
+                    proc_assignment_ref.update({
+                        'examAssignmentArray': firestore.ArrayUnion([exam_assignment_ref])
+                    })
+            except Exception as proc_e:
+                print(f"Error processing procedure assignment: {proc_e}")
+                continue
     except Exception as e:
         print(e)
         print(traceback.format_exc())
@@ -195,11 +210,12 @@ def on_user_save(sender, instance, created, **kwargs):
     if hasattr(instance, "_raw_password"):
         password = instance._raw_password
     sync_user_to_firestore(instance)
-    if instance.user_role != 'student' or instance.user_role != 'nurse':
-        sync_user_to_firebase_auth(instance, password=password)
+    sync_user_to_firebase_auth(instance, password=password)
 
 @receiver(post_delete, sender=EbekUser)
 def on_user_delete(sender, instance, **kwargs):
+    # Delete the user document and auth
+    # Note: Cascade delete logic is handled in onboarding_views.py
     delete_user_from_firestore(instance)
     delete_user_from_firebase_auth(instance)
 
@@ -222,7 +238,8 @@ def on_institute_save(sender, instance, created, **kwargs):
         "unit_head_email": instance.unit_head.email if instance.unit_head else None,
         "unit_head_phone": instance.unit_head.phone_number if instance.unit_head else None,
         "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
-        "skillathon_event": instance.skillathon.name if instance.skillathon else None
+        "skillathon_event": instance.skillathon.name if instance.skillathon else None,
+        "allowed_to_take_classroom_test": instance.allowed_to_take_classroom_test
     }
 
     db.collection("InstituteNames").document(str(instance.id)).set(data)
@@ -276,7 +293,8 @@ def on_hospital_save(sender, instance, created, **kwargs):
         "unit_head_email": instance.unit_head.email if instance.unit_head else None,
         "unit_head_phone": instance.unit_head.phone_number if instance.unit_head else None,
         "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
-        "skillathon_event": instance.skillathon.name if instance.skillathon else None
+        "skillathon_event": instance.skillathon.name if instance.skillathon else None,
+        "allowed_to_take_classroom_test": instance.allowed_to_take_classroom_test
     }
     db.collection("HospitalNames").document(str(instance.id)).set(data)
     if instance.unit_head:
@@ -414,6 +432,7 @@ def on_learner_save(sender, instance, created, **kwargs):
                 "learner_gender": instance.learner_gender if instance.learner_gender else None,
                 "skillathon_event": instance.skillathon_event.name if instance.skillathon_event else None,
                 "institute": instance.college.name if instance.college else None,
+                "institution": instance.college.name if instance.college else None,
                 "hospital": instance.hospital.name if instance.hospital else None,
                 "course": instance.course if instance.course else None,
                 "stream": instance.stream if instance.stream else None,
@@ -424,7 +443,7 @@ def on_learner_save(sender, instance, created, **kwargs):
                 "onboarding_type": instance.onboarding_type if instance.onboarding_type else None,
                 "pincode": instance.pincode if instance.pincode else None,
                 "address": instance.address if instance.address else None,
-                "is_active": instance.is_active if instance.is_active else None,
+                "is_active": instance.is_active if instance.is_active else False,
                 "educational_institution_nurse": instance.educational_institution if instance.educational_institution else None,
             }
             
@@ -558,153 +577,3 @@ def batch_sync_users_to_firebase_auth(users):
                 password="DefaultPassword123!",  # You may want to handle this securely
                 disabled=not user.is_active
             )
-
-def batch_sync_users_to_firestore_with_progress(users, session_key, total_rows, skillathon_name=""):
-    """
-    Batch sync users to Firestore with real-time progress tracking
-    """
-    print(f"[DEBUG] Starting Firebase sync for {len(users)} users")
-    try:
-        from django.core.cache import cache
-        
-        # Update progress - Starting Firebase sync
-        progress_data = cache.get(f"upload_progress:{session_key}")
-        print(f"[DEBUG] Retrieved initial progress data from cache: {progress_data}")
-        
-        progress_data.update({
-            'status': 'syncing_firebase',
-            'message': 'Starting Firebase sync...',
-            'progress': 30
-        })
-        cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        print(f"[DEBUG] Updated progress to 30% for Firebase sync start")
-        
-        # Step 1: Batch write user documents (30% to 50%)
-        print(f"[DEBUG] Starting batch write to Firestore...")
-        learners_ids = []
-        batch = db.batch()
-        for i, user in enumerate(users):
-            user_data = {
-                "emailID": user.email,
-                "name": user.full_name,
-                "role": user.user_role,
-                "is_active": user.is_active,
-                "date_joined": user.date_joined.isoformat() if user.date_joined else None,
-                "phone_number": user.phone_number,
-                "username": user.email
-            }
-            
-            doc_ref = db.collection("Users").document(str(user.id))
-            batch.set(doc_ref, user_data)
-            learners_ids.append(user.id)
-            
-            # Update progress every 10 users
-            if (i + 1) % 10 == 0:
-                progress = 30 + int((i + 1) / len(users) * 20)
-                progress_data.update({
-                    'message': f'Syncing user {i + 1} of {len(users)} to Firestore...',
-                    'progress': progress
-                })
-                cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        
-        # Commit the batch
-        batch.commit()
-        
-        # Update progress - Batch commit completed
-        progress_data.update({
-            'message': 'Firestore batch commit completed. Updating learner data...',
-            'progress': 50
-        })
-        cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        
-        # Step 2: Update learner data and create assignments (50% to 90%)
-        for i, user in enumerate(users):
-            try:
-                learner = Learner.objects.get(learner_user=user)
-                
-                # Update progress for learner data sync
-                progress = 50 + int((i + 1) / len(users) * 35)
-                progress_data.update({
-                    'message': f'Updating learner data for {learner.learner_user.full_name}...',
-                    'progress': progress
-                })
-                cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-                
-                # Debug print every 5 users
-                if (i + 1) % 5 == 0 or i == 0:
-                    print(f"[DEBUG] Processing learner {i + 1}/{len(users)}: {learner.learner_user.full_name}, Progress: {progress}%")
-                
-                # Find user document in Firestore
-                users_ref = db.collection("Users")
-                query = users_ref.where("emailID", "==", learner.learner_user.email).limit(1)
-                docs = query.get()
-                
-                if docs:
-                    # Update the first matching document with all learner data
-                    user_data = {
-                        "learner_type": learner.learner_type,
-                        "speciality": learner.speciality,
-                        "state": learner.state,
-                        "district": learner.district,
-                        "date_of_birth": learner.date_of_birth.isoformat() if learner.date_of_birth else None,
-                        "certifications": learner.certifications,
-                        "learner_gender": learner.learner_gender,
-                        "skillathon_event": learner.skillathon_event.name if learner.skillathon_event else None,
-                        "onboarding_type": learner.onboarding_type,
-                        "institute": learner.college.name if learner.college else None,
-                        "hospital": learner.hospital.name if learner.hospital else None,
-                        "course": learner.course if learner.course else None,
-                        "stream": learner.stream if learner.stream else None,
-                        "year_of_study": learner.year_of_study if learner.year_of_study else None,
-                        "designation": learner.designation if learner.designation else None,
-                        "years_of_experience": learner.years_of_experience if learner.years_of_experience else None,
-                        "educational_qualification": learner.educational_qualification if learner.educational_qualification else None,
-                    }
-                    
-                    docs[0].reference.update(user_data)
-                    
-                    # Update progress for test/exam assignments
-                    progress = 85 + int((i + 1) / len(users) * 5)
-                    progress_data.update({
-                        'message': f'Creating assignments for {learner.learner_user.full_name}...',
-                        'progress': progress
-                    })
-                    cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-                    
-                    # Create test and exam assignments
-                    # create_test_and_exam_assignments(learner, learner.skillathon_event)
-            
-            except Learner.DoesNotExist:
-                # User exists but no learner record - this is normal for some users
-                continue
-            except Exception as e:
-                print(f"Error processing learner {user.email}: {e}")
-                continue
-        
-        if skillathon_name:
-            SchedularObject.objects.create(
-                data=json.dumps({
-                    "learner_ids": learners_ids,
-                    "skillathon_name": skillathon_name
-                })
-            )
-                
-        # Update progress - Firebase sync completed
-        progress_data.update({
-            'message': 'Firebase sync completed successfully!',
-            'progress': 90
-        })
-        cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        
-    except Exception as e:
-        print(f"Firebase sync error: {e}")
-        print(traceback.format_exc())
-        
-        # Update progress with error
-        progress_data = cache.get(f"upload_progress:{session_key}")
-        progress_data.update({
-            'status': 'error',
-            'message': f'Firebase sync error: {str(e)}',
-            'progress': 100
-        })
-        cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)

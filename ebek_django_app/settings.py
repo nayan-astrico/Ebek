@@ -27,23 +27,11 @@ if DEBUG == "True":
 else:
     DEBUG = False
 
-if DEBUG == True:
-    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_uat_key.json")
-    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
-else:
-    FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
+FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "firebase_key.json")
 
 # Initialize Firebase
-# Initialize Firebase
-try:
-    cred = credentials.Certificate(FIREBASE_KEY_PATH)
-    firebase_admin.initialize_app(cred)
-    print(f"Firebase initialized successfully with key: {FIREBASE_KEY_PATH}")
-except FileNotFoundError:
-    print(f"Warning: Firebase key not found at {FIREBASE_KEY_PATH}")
-    print("Firebase features will be disabled. Please add firebase_key.json to continue.")
-except Exception as e:
-    print(f"Warning: Could not initialize Firebase: {e}")
+cred = credentials.Certificate(FIREBASE_KEY_PATH)
+firebase_admin.initialize_app(cred)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
@@ -72,8 +60,9 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    # 'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'assessments.middleware.CheckInactiveUserMiddleware',  # Check if user is inactive
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -102,7 +91,7 @@ WSGI_APPLICATION = 'ebek_django_app.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
 
-if DEBUG == False:
+if DEBUG == True:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -168,7 +157,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static'),  # optional common static folder
+]
+
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 AUTH_USER_MODEL = 'assessments.EbekUser'
 

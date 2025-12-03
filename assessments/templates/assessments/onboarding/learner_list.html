@@ -32,10 +32,27 @@
         <i class="fas fa-search"></i>
         <input type="text" placeholder="Search learners..." id="searchInput" oninput="filterLearners(this.value)">
     </div>
-    <button class="btn-filter" onclick="toggleFilterPanel()">
+    <button class="btn-filter" onclick="toggleFilterPanel()" id="filterBtn">
         <i class="fas fa-filter"></i>
         Filters
+        <span class="filter-badge" id="filterBadge" style="display: none;">0</span>
     </button>
+    <button id="bulkDeleteBtn" class="btn btn-primary" style="margin-left: 8px;" onclick="openBulkDeleteConfirm()" disabled>
+        <i class="fas fa-trash"></i>
+        Delete Selected
+    </button>
+</div>
+
+<!-- Latest Upload Session -->
+<div id="uploadSessionsList" style="display: none; margin: 20px 0;">
+    <div style="background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); padding: 20px;">
+        <h3 style="margin: 0 0 20px 0; color: #1f2937; font-size: 18px; font-weight: 600;">
+            <i class="fas fa-upload"></i> Latest Upload
+        </h3>
+        <div id="sessionsContainer">
+            <!-- Latest session will be dynamically populated here -->
+        </div>
+    </div>
 </div>
 
 <!-- Filter Side Panel -->
@@ -71,14 +88,19 @@
                 <div class="filter-content" id="institution-content">
                     <div class="filter-search">
                         <input type="text" placeholder="Search institutions" onkeyup="filterOptions('institution')">
-                        <div class="selection-count">0 Institution selected</div>
+                        <div class="selection-count" id="institutionSelectionCount">0 Institution selected</div>
                     </div>
                     <div class="options-list" id="institution-options">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllInstitutions" onchange="toggleSelectAll('institution', this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                             {% for institution in institutions %}
                         <label class="option-item">
                             <input type="checkbox" name="institution" value="{{ institution.id }}"
                                    {% if institution.id in selected_institutions %}checked{% endif %}
-                                   onchange="updateSelectionCount('institution')">
+                                   onchange="updateSelectionCount('institution')"
+                                   class="institution-checkbox">
                             <span>{{ institution.name }}</span>
                         </label>
                             {% endfor %}
@@ -89,14 +111,19 @@
                 <div class="filter-content" id="hospital-content">
                     <div class="filter-search">
                         <input type="text" placeholder="Search hospitals" onkeyup="filterOptions('hospital')">
-                        <div class="selection-count">0 Hospital selected</div>
+                        <div class="selection-count" id="hospitalSelectionCount">0 Hospital selected</div>
                     </div>
                     <div class="options-list" id="hospital-options">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllHospitals" onchange="toggleSelectAll('hospital', this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                             {% for hospital in hospitals %}
                         <label class="option-item">
                             <input type="checkbox" name="hospital" value="{{ hospital.id }}"
                                    {% if hospital.id in selected_hospitals %}checked{% endif %}
-                                   onchange="updateSelectionCount('hospital')">
+                                   onchange="updateSelectionCount('hospital')"
+                                   class="hospital-checkbox">
                             <span>{{ hospital.name }}</span>
                         </label>
                             {% endfor %}
@@ -107,22 +134,28 @@
                 <div class="filter-content" id="learner-type-content">
                     <div class="filter-search">
                         <input type="text" placeholder="Search learner types" onkeyup="filterOptions('learner-type')">
-                        <div class="selection-count">0 Type selected</div>
+                        <div class="selection-count" id="learnerTypeSelectionCount">0 Type selected</div>
                     </div>
                     <div class="options-list" id="learner-type-options">
+                        <label class="option-item select-all-item">
+                            <input type="checkbox" id="selectAllLearnerTypes" onchange="toggleSelectAll('learner-type', this)">
+                            <span><strong>Select All</strong></span>
+                        </label>
                         <label class="option-item">
                             <input type="checkbox" name="learner_type" value="student"
                                    {% if 'student' in selected_learner_types %}checked{% endif %}
-                                   onchange="updateSelectionCount('learner-type')">
+                                   onchange="updateSelectionCount('learner-type')"
+                                   class="learner-type-checkbox">
                             <span>Student</span>
                         </label>
                         <label class="option-item">
                             <input type="checkbox" name="learner_type" value="nurse"
                                    {% if 'nurse' in selected_learner_types %}checked{% endif %}
-                                   onchange="updateSelectionCount('learner-type')">
+                                   onchange="updateSelectionCount('learner-type')"
+                                   class="learner-type-checkbox">
                             <span>Working Nurse</span>
                         </label>
-                </div>
+                    </div>
                     </div>
                 </div>
         </div>
@@ -130,6 +163,7 @@
         <!-- Filter Actions -->
         <div class="filter-actions">
             <button type="button" class="btn btn-light" onclick="toggleFilterPanel()">Cancel</button>
+            <button type="button" class="btn btn-light" onclick="clearAllFilters()">Clear All</button>
             <button type="button" class="btn btn-primary" onclick="applyFilters()">Apply filter</button>
         </div>
     </form>
@@ -140,14 +174,19 @@
     <table class="table">
         <thead>
             <tr>
+                <th style="width:36px;"><input type="checkbox" id="selectAllRows"></th>
                 <th>Full Name</th>
                 <th>Email</th>
                 <th>Mobile</th>
                 <th>Type</th>
                 <th>Institution/Hospital</th>
                 <th>Skillathon</th>
+                {% if "update_learner_status" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <th>Status</th>
+                {% endif %}
+                {% if "edit_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
                 <th>Actions</th>
+                {% endif %}
             </tr>
         </thead>
         <tbody id="learnerTableBody">
@@ -183,6 +222,380 @@
         </div>
     </div>
 </div>
+
+<!-- Bulk Delete Modal -->
+<div class="modal fade" id="bulkDeleteModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); color: white;">
+                <div>
+                    <h5 class="modal-title" style="margin: 0; font-weight: 600;">
+                        <i class="fas fa-trash-alt"></i> Confirm Bulk Deactivation
+                    </h5>
+                    <p style="margin: 5px 0 0 0; font-size: 13px; opacity: 0.9;">
+                        Review learners before deactivating
+                    </p>
+                </div>
+                <button type="button" class="close" data-dismiss="modal" style="color: white; opacity: 1;">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 0;">
+                <!-- Warning Banner -->
+                <div style="padding: 16px 20px; background: #fef2f2; border-bottom: 1px solid #fee2e2;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <i class="fas fa-exclamation-triangle" style="color: #dc2626; font-size: 20px;"></i>
+                        <div>
+                            <p style="margin: 0; font-weight: 600; color: #991b1b; font-size: 14px;">
+                                You are about to deactivate <span id="bulkDeleteCount">0</span> learner(s)
+                            </p>
+                            <p style="margin: 3px 0 0 0; color: #b91c1c; font-size: 13px;">
+                                This action cannot be undone. All related data will be permanently deactivated.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Learners List -->
+                <div style="padding: 20px;">
+                    <h6 style="margin: 0 0 15px 0; color: #374151; font-weight: 600; font-size: 14px;">
+                        Learners to be deactivated:
+                    </h6>
+                    <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead style="position: sticky; top: 0; background: #f9fafb; z-index: 1;">
+                                <tr style="border-bottom: 2px solid #e5e7eb;">
+                                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Name</th>
+                                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Email</th>
+                                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Type</th>
+                                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Institution</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bulkDeleteLearnersList">
+                                <!-- Learners will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="background: #f9fafb; border-top: 2px solid #e5e7eb;">
+                <button type="button" class="btn btn-light" data-dismiss="modal">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button type="button" class="btn btn-danger" onclick="executeBulkDelete()" id="confirmBulkDeleteBtn">
+                    <i class="fas fa-trash-alt"></i> Deactivate <span id="bulkDeleteCountBtn">0</span> Learner(s)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Session Details Modal -->
+<div class="modal fade" id="sessionDetailsModal" tabindex="-1" style="display: none;">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%); color: white;">
+                <div>
+                    <h5 class="modal-title" style="margin: 0; font-weight: 600;">
+                        <i class="fas fa-info-circle"></i> Upload Session Details
+                    </h5>
+                    <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;" id="modalFilename">Filename</p>
+                </div>
+                <button type="button" class="close" onclick="closeSessionDetailsModal()" style="color: white; opacity: 0.9;">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <!-- Session Info Summary -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 25px;">
+                    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px;">
+                        <div style="font-size: 13px; color: #6b7280; margin-bottom: 5px;">Status</div>
+                        <div style="font-size: 16px; font-weight: 600; color: #1f2937;" id="modalStatus">-</div>
+                    </div>
+                    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px;">
+                        <div style="font-size: 13px; color: #6b7280; margin-bottom: 5px;">Total Rows</div>
+                        <div style="font-size: 16px; font-weight: 600; color: #1f2937;" id="modalTotalRows">-</div>
+                    </div>
+                    <div style="background: #dcfce7; padding: 15px; border-radius: 8px;">
+                        <div style="font-size: 13px; color: #166534; margin-bottom: 5px;">Passed</div>
+                        <div style="font-size: 16px; font-weight: 600; color: #15803d;" id="modalSuccessCount">-</div>
+                    </div>
+                    <div style="background: #fee2e2; padding: 15px; border-radius: 8px;">
+                        <div style="font-size: 13px; color: #991b1b; margin-bottom: 5px;">Failed</div>
+                        <div style="font-size: 16px; font-weight: 600; color: #dc2626;" id="modalErrorCount">-</div>
+                    </div>
+                    <div style="background: #dbeafe; padding: 15px; border-radius: 8px;" id="modalCreatedCard">
+                        <div style="font-size: 13px; color: #1e40af; margin-bottom: 5px;">Created</div>
+                        <div style="font-size: 16px; font-weight: 600; color: #2563eb;" id="modalCreatedCount">-</div>
+                    </div>
+                </div>
+
+                <!-- Message -->
+                <div id="modalMessageContainer" style="display: none; padding: 12px 16px; background: #eff6ff; border-left: 4px solid #2563eb; border-radius: 6px; margin-bottom: 20px;">
+                    <p style="margin: 0; color: #1e40af; font-size: 14px;" id="modalMessage"></p>
+                </div>
+
+                <!-- Filter Tabs -->
+                <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #e5e7eb; padding-bottom: 0;">
+                    <button onclick="filterRows('all')" id="filterAll" class="filter-tab active" style="padding: 10px 20px; border: none; background: none; cursor: pointer; font-weight: 500; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
+                        All Rows
+                    </button>
+                    <button onclick="filterRows('pass')" id="filterPass" class="filter-tab" style="padding: 10px 20px; border: none; background: none; cursor: pointer; font-weight: 500; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
+                        Passed
+                    </button>
+                    <button onclick="filterRows('fail')" id="filterFail" class="filter-tab" style="padding: 10px 20px; border: none; background: none; cursor: pointer; font-weight: 500; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
+                        Failed
+                    </button>
+                </div>
+
+                <!-- Row Results Table -->
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Row #</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Name</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Email</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Type</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Status</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Errors</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rowResultsTableBody">
+                            <!-- Rows will be dynamically populated -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Empty State -->
+                <div id="emptyState" style="display: none; text-align: center; padding: 60px 20px; color: #9ca3af;">
+                    <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 15px; opacity: 0.5;"></i>
+                    <p style="margin: 0; font-size: 16px;">No rows to display</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeSessionDetailsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Confirmation Modal for Marking Learner as Inactive -->
+<div class="modal-overlay" id="inactiveLearnerModal" style="display: none;">
+    <div class="confirmation-modal">
+        <div class="modal-header-custom">
+            <h3><i class="fas fa-exclamation-triangle" style="color: #F16564;"></i> Mark Learner as Inactive</h3>
+        </div>
+        <div class="modal-body-custom">
+            <p><strong>Please note the following:</strong></p>
+            <ul style="list-style: none; padding-left: 0; margin: 16px 0;">
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-user-slash" style="color: #F16564; margin-right: 8px;"></i>
+                    The learner's account will be <strong>disabled</strong>
+                </li>
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-trash-alt" style="color: #F16564; margin-right: 8px;"></i>
+                    All <strong>incomplete exam assignments</strong> will be removed
+                </li>
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-users-slash" style="color: #F16564; margin-right: 8px;"></i>
+                    The learner will be <strong>removed from all batches</strong>
+                </li>
+                <li style="margin-bottom: 12px;">
+                    <i class="fas fa-redo" style="color: #F16564; margin-right: 8px;"></i>
+                    You can mark them as active again later if needed
+                </li>
+            </ul>
+            <p style="margin-top: 16px; color: #666;">Are you sure you want to mark this learner as inactive?</p>
+        </div>
+        <div class="modal-actions-custom">
+            <button class="btn btn-light" onclick="cancelInactiveLearner()">Cancel</button>
+            <button class="btn btn-danger" id="confirmInactiveLearnerBtn" onclick="confirmInactiveLearner()">
+                <i class="fas fa-check"></i> Yes, Mark as Inactive
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="statusLoadingOverlay" style="display: none;">
+    <div class="loading-content">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin" style="font-size: 48px; color: #1AA09A;"></i>
+        </div>
+        <p id="loadingMessage" style="margin-top: 20px; font-size: 16px; color: #2d3748;">Updating learner status...</p>
+    </div>
+</div>
+
+<style>
+/* Toggle Switch for Status */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: #1AA09A;
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* Confirmation Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.confirmation-modal {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    max-width: 500px;
+    width: 90%;
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-header-custom {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-header-custom h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #2d3748;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-body-custom {
+    padding: 24px;
+}
+
+.modal-body-custom p {
+    margin: 0 0 8px 0;
+    color: #4a5568;
+    line-height: 1.6;
+}
+
+.modal-body-custom ul li {
+    color: #4a5568;
+    line-height: 1.8;
+}
+
+.modal-actions-custom {
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.btn-danger {
+    background: #F16564;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #e45857;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+}
+
+.loading-content {
+    background: white;
+    border-radius: 12px;
+    padding: 40px 60px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.loading-spinner {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+</style>
 
 <!-- Bulk Upload Panel -->
 <div class="upload-panel" id="uploadPanel">
@@ -287,7 +700,7 @@
         <!-- Progress Section -->
         <div class="upload-section" id="progressSection" style="display: none;">
             <div class="section-header">
-                <!-- <i class="fas fa-spinner fa-spin"></i> -->
+                <i class="fas fa-spinner fa-spin"></i>
                 <h4>Upload Progress</h4>
             </div>
             <div class="progress-container">
@@ -327,6 +740,17 @@
         </div>
     </div>
 
+    <!-- Upload in Progress Warning -->
+    <div id="uploadInProgressWarning" style="display: none; padding: 15px 24px; background: #fef3c7; border-left: 4px solid #f59e0b; margin: 0;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <i class="fas fa-exclamation-triangle" style="color: #f59e0b; font-size: 20px;"></i>
+            <div>
+                <strong style="color: #92400e;">Upload Already in Progress</strong>
+                <p style="margin: 5px 0 0 0; color: #78350f; font-size: 14px;">Another file is currently being processed. Please wait for it to complete before uploading a new file.</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Actions -->
     <div class="upload-actions">
         <button type="button" class="btn btn-light" onclick="toggleUploadPanel()">Cancel</button>
@@ -353,6 +777,16 @@
 
 
 <style>
+#bulkDeleteBtn.btn.btn-primary{
+    background-color: #F16564;
+    border-color: #F16564;
+    color: #fff;
+    transition: background-color .2s ease, border-color .2s ease, color .2s ease;
+}
+.btn.btn-primary.hover-state {
+    background-color: #e45857; 
+    border-color: #e45857;
+}
     
 /* Basic Layout */
 .header {
@@ -451,6 +885,23 @@
 .table td {
     padding: 16px;
     border-top: 1px solid #e2e8f0;
+}
+
+.table tbody tr {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.table tbody tr:hover {
+    background-color: #f7fafc;
+}
+
+.table tbody tr .actions {
+    cursor: default;
+}
+
+.table tbody tr .actions * {
+    cursor: pointer;
 }
 
 /* Institution */
@@ -648,10 +1099,27 @@
     color: #4a5568;
     cursor: pointer;
     transition: all 0.2s;
+    position: relative;
 }
 
 .btn-filter:hover {
     background: #f7fafc;
+}
+
+.filter-badge {
+    background: #F16564;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    position: absolute;
+    top: -5px;
+    right: -5px;
 }
 
 /* Updated Filter Panel Styles */
@@ -704,10 +1172,31 @@
 
 .filter-type {
     padding: 16px 20px;
+    padding-right: 28px; /* room for badge on the right */
     cursor: pointer;
     transition: all 0.2s;
     position: relative;
     color: #4a5568;
+}
+
+.filter-type .filter-type-badge {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    padding: 0 6px;
+    border-radius: 9px;
+    background: #F16564;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
 }
 
 .filter-type:hover {
@@ -776,6 +1265,7 @@
     padding: 16px 20px;
     overflow-y: auto;
     flex: 1;
+    width: 100%;
 }
 
 .option-item {
@@ -784,6 +1274,18 @@
     gap: 12px;
     padding: 8px 0;
     cursor: pointer;
+    width: 100%;
+    user-select: none;
+    margin: 0;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    pointer-events: auto;
+    position: relative;
+}
+
+.option-item:hover {
+    background-color: #f7fafc;
 }
 
 .option-item input[type="checkbox"] {
@@ -792,6 +1294,8 @@
     border: 2px solid #cbd5e0;
     border-radius: 4px;
     cursor: pointer;
+    pointer-events: auto;
+    flex-shrink: 0;
 }
 
 .option-item input[type="checkbox"]:checked {
@@ -802,6 +1306,20 @@
 .option-item span {
     font-size: 14px;
     color: #4a5568;
+    pointer-events: none;
+    flex: 1;
+}
+
+.select-all-item {
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 12px;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.select-all-item span {
+    font-weight: 600;
+    color: #1a202c;
 }
 
 .filter-actions {
@@ -1469,6 +1987,30 @@
 
 <script>
 
+// Declare variables first
+var canEditLearner = false;
+var canDeleteLearner = false;
+var canUpdateStatus = false;
+
+// Then set them based on permissions
+{% if "edit_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
+canEditLearner = true;
+{% endif %}
+
+{% if "delete_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
+canDeleteLearner = true;
+{% endif %}
+
+{% if "update_learner_status" in request.user.get_all_permissions or request.user.has_all_permissions %}
+canUpdateStatus = true;
+{% endif %}
+
+var userPermissions = {
+    canEdit: canEditLearner,
+    canDelete: canDeleteLearner,
+    canUpdateStatus: canUpdateStatus
+};
+
 function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
@@ -1507,7 +2049,175 @@ function confirmDelete(button) {
     const url = button.dataset.url;
     document.getElementById('deleteItemName').textContent = name;
     document.getElementById('deleteForm').action = url;
+    document.getElementById('deleteForm').dataset.bulk = 'false';
     $('#deleteModal').modal('show');
+}
+
+// Bulk delete support
+
+// Make entire row clickable to toggle checkbox (except action buttons)
+document.addEventListener('click', function(e) {
+    // Find the closest table row
+    const row = e.target.closest('tr');
+    if (!row) return;
+
+    // Don't toggle if clicking on:
+    // - Action buttons or their children
+    // - The checkbox itself (to avoid double-toggling - let checkbox handle its own click)
+    // - Links or buttons
+    if (e.target.closest('.actions') ||
+        e.target.closest('a') ||
+        e.target.closest('button') ||
+        e.target.classList.contains('row-select') ||
+        e.target.type === 'checkbox') {
+        return;
+    }
+
+    // Find the checkbox in this row
+    const checkbox = row.querySelector('.row-select');
+    if (!checkbox) return;
+
+    // Toggle the checkbox
+    checkbox.checked = !checkbox.checked;
+
+    // Update bulk delete state and sync select all checkbox
+    updateBulkDeleteState();
+    syncSelectAllCheckbox();
+});
+
+document.addEventListener('change', function(e) {
+    if (e.target && e.target.classList.contains('row-select')) {
+        updateBulkDeleteState();
+        syncSelectAllCheckbox();
+    }
+    if (e.target && e.target.id === 'selectAllRows') {
+        const checks = document.querySelectorAll('.row-select');
+        checks.forEach(cb => {
+            cb.checked = e.target.checked;
+        });
+        updateBulkDeleteState();
+    }
+});
+
+function updateBulkDeleteState() {
+    const btn = document.getElementById('bulkDeleteBtn');
+    if (!btn) return;
+
+    // Count checked checkboxes directly from DOM
+    const checkedCount = document.querySelectorAll('.row-select:checked').length;
+
+    btn.disabled = checkedCount === 0;
+    btn.innerHTML = '<i class="fas fa-trash"></i>Deactivate Selected';
+    btn.classList.remove('btn-danger');
+    btn.classList.add('btn-primary');
+    if (checkedCount > 0) {
+        btn.classList.add('hover-state');
+    } else {
+        btn.classList.remove('hover-state');
+    }
+}
+
+function syncSelectAllCheckbox() {
+    const all = document.querySelectorAll('.row-select');
+    const allChecked = all.length > 0 && Array.from(all).every(cb => cb.checked);
+    const master = document.getElementById('selectAllRows');
+    if (master) master.checked = allChecked;
+}
+
+function openBulkDeleteConfirm() {
+    // Get all checked checkboxes
+    const checkedBoxes = document.querySelectorAll('.row-select:checked');
+
+    if (checkedBoxes.length === 0) {
+        return;
+    }
+
+    // Gather learner data from the table rows
+    const learnersToDelete = [];
+    checkedBoxes.forEach(checkbox => {
+        const row = checkbox.closest('tr');
+        const cells = row.querySelectorAll('td');
+
+        learnersToDelete.push({
+            id: checkbox.getAttribute('data-id'),
+            name: cells[1].textContent.trim(),
+            email: cells[2].textContent.trim(),
+            type: cells[4].textContent.trim(),
+            institution: cells[5].textContent.trim()
+        });
+    });
+
+    // Update modal counts
+    document.getElementById('bulkDeleteCount').textContent = learnersToDelete.length;
+    document.getElementById('bulkDeleteCountBtn').textContent = learnersToDelete.length;
+
+    // Populate the learners list in modal
+    const tbody = document.getElementById('bulkDeleteLearnersList');
+    tbody.innerHTML = '';
+
+    learnersToDelete.forEach((learner, index) => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #e5e7eb';
+        if (index % 2 === 0) tr.style.background = '#f9fafb';
+
+        tr.innerHTML = `
+            <td style="padding: 12px;">${learner.name}</td>
+            <td style="padding: 12px; color: #6b7280; font-size: 13px;">${learner.email}</td>
+            <td style="padding: 12px;">
+                <span style="padding: 4px 8px; background: ${learner.type.toLowerCase() === 'student' ? '#dbeafe' : '#fef3c7'}; color: ${learner.type.toLowerCase() === 'student' ? '#1e40af' : '#92400e'}; border-radius: 4px; font-size: 12px; font-weight: 500;">
+                    ${learner.type}
+                </span>
+            </td>
+            <td style="padding: 12px; color: #6b7280; font-size: 13px;">${learner.institution}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    // Show the modal
+    $('#bulkDeleteModal').modal('show');
+}
+
+function executeBulkDelete() {
+    // Get all checked checkboxes
+    const checkedBoxes = document.querySelectorAll('.row-select:checked');
+    const ids = Array.from(checkedBoxes).map(cb => cb.getAttribute('data-id'));
+
+    if (ids.length === 0) {
+        return;
+    }
+
+    // Disable the delete button to prevent double-clicks
+    const deleteBtn = document.getElementById('confirmBulkDeleteBtn');
+    deleteBtn.disabled = true;
+    deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deactivating...';
+
+    fetch('{% url "learners_bulk_delete" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({ ids })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            $('#bulkDeleteModal').modal('hide');
+            showSuccess('Deactivated ' + data.deleted + ' learner(s) successfully.');
+            // Reload list after a short delay
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showError(data.error || 'Failed to delete learners');
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Delete ' + ids.length + ' Learner(s)';
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        showError('Failed to delete learners');
+        deleteBtn.disabled = false;
+        deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Delete ' + ids.length + ' Learner(s)';
+    });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -1587,7 +2297,62 @@ document.addEventListener('DOMContentLoaded', function() {
     ['institution', 'hospital', 'learner-type'].forEach(category => {
         updateSelectionCount(category);
     });
+    
+    // Initialize filter badge
+    updateFilterBadge();
 });
+
+// Make entire option row clickable to toggle checkbox
+document.addEventListener('click', function(e) {
+    // Find the closest option-item label
+    const label = e.target.closest('label.option-item');
+    if (!label) return;
+    
+    // Skip if it's a "Select All" item (it has its own handler)
+    if (label.classList.contains('select-all-item')) {
+        return;
+    }
+    
+    // Find the checkbox in this label
+    const checkbox = label.querySelector('input[type="checkbox"]');
+    if (!checkbox) return;
+    
+    // If clicking directly on the checkbox, let it handle natively
+    // but ensure updateSelectionCount is called
+    if (e.target === checkbox || e.target.type === 'checkbox') {
+        // Use setTimeout to ensure the checkbox state has updated
+        setTimeout(function() {
+            const container = label.closest('.filter-content');
+            if (container) {
+                const category = container.id.replace('-content', '');
+                if (category) {
+                    updateSelectionCount(category);
+                }
+            }
+        }, 10);
+        return;
+    }
+    
+    // For clicks anywhere else in the label (text, empty space, etc.)
+    // Manually toggle the checkbox
+    e.preventDefault();
+    e.stopPropagation();
+    
+    checkbox.checked = !checkbox.checked;
+    
+    // Trigger change event to fire onchange handlers
+    const changeEvent = new Event('change', { bubbles: true, cancelable: false });
+    checkbox.dispatchEvent(changeEvent);
+    
+    // Update counts
+    const container = label.closest('.filter-content');
+    if (container) {
+        const category = container.id.replace('-content', '');
+        if (category) {
+            updateSelectionCount(category);
+        }
+    }
+}, true); // Use capture phase
 
 function filterOptions(category) {
     const searchInput = document.querySelector(`#${category}-content .filter-search input`);
@@ -1595,24 +2360,162 @@ function filterOptions(category) {
     const options = document.querySelectorAll(`#${category}-options .option-item`);
     
     options.forEach(option => {
+        // Always show "Select All" option
+        if (option.classList.contains('select-all-item')) {
+            option.style.display = '';
+            return;
+        }
         const text = option.querySelector('span').textContent.toLowerCase();
         option.style.display = text.includes(searchTerm) ? '' : 'none';
     });
 }
 
+function toggleSelectAll(category, selectAllCheckbox) {
+    let checkboxSelector;
+    if (category === 'institution') {
+        checkboxSelector = '.institution-checkbox';
+    } else if (category === 'hospital') {
+        checkboxSelector = '.hospital-checkbox';
+    } else if (category === 'learner-type') {
+        checkboxSelector = '.learner-type-checkbox';
+    } else {
+        return;
+    }
+    
+    const checkboxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}`);
+    const isChecked = selectAllCheckbox.checked;
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = isChecked;
+        // Trigger change event to ensure onchange handlers fire
+        const changeEvent = new Event('change', { bubbles: true });
+        checkbox.dispatchEvent(changeEvent);
+    });
+    
+    // Update selection count
+    updateSelectionCount(category);
+}
+
 function updateSelectionCount(category) {
-    const checkboxes = document.querySelectorAll(`#${category}-options input[type="checkbox"]:checked`);
-    const countElement = document.querySelector(`#${category}-content .selection-count`);
-    const count = checkboxes.length;
+    // Get checkboxes excluding the "Select All" checkbox
+    let checkboxSelector;
+    if (category === 'institution') {
+        checkboxSelector = '.institution-checkbox';
+    } else if (category === 'hospital') {
+        checkboxSelector = '.hospital-checkbox';
+    } else if (category === 'learner-type') {
+        checkboxSelector = '.learner-type-checkbox';
+    } else {
+        checkboxSelector = `input[name="${category}"]`;
+    }
+    
+    const checkboxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}`);
+    const checkedBoxes = document.querySelectorAll(`#${category}-options ${checkboxSelector}:checked`);
+    const count = checkedBoxes.length;
+    
+    // Update selection count display
+    const countElement = document.getElementById(`${category}SelectionCount`) || document.querySelector(`#${category}-content .selection-count`);
     const label = category === 'learner-type' ? 'Type' : category.charAt(0).toUpperCase() + category.slice(1);
-    countElement.textContent = `${count} ${label} selected`;
+    if (countElement) {
+        countElement.textContent = `${count} ${label} selected`;
+    }
+    
+    // Sync "Select All" checkbox state
+    let selectAllId;
+    if (category === 'institution') {
+        selectAllId = 'selectAllInstitutions';
+    } else if (category === 'hospital') {
+        selectAllId = 'selectAllHospitals';
+    } else if (category === 'learner-type') {
+        selectAllId = 'selectAllLearnerTypes';
+    }
+    
+    if (selectAllId) {
+        const selectAllCheckbox = document.getElementById(selectAllId);
+        if (selectAllCheckbox && checkboxes.length > 0) {
+            // Check if all are selected
+            selectAllCheckbox.checked = (count === checkboxes.length);
+            // Set indeterminate state if some (but not all) are selected
+            selectAllCheckbox.indeterminate = (count > 0 && count < checkboxes.length);
+        }
+    }
+    
+    updateFilterBadge();
+    setFilterTypeBadge(category, count);
+}
+
+// Helper to show count badges against individual filter types in sidebar
+function setFilterTypeBadge(category, count) {
+    const el = document.querySelector(`.filter-type[data-filter="${category}"]`);
+    if (!el) return;
+    let badge = el.querySelector('.filter-type-badge');
+    if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'filter-type-badge';
+        el.appendChild(badge);
+    }
+    if (count > 0) {
+        badge.textContent = String(count);
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+// Update Filter Badge
+function updateFilterBadge() {
+    // Count only the filter categories that have at least one selection
+    let totalFilterCategories = 0;
+    
+    if (document.querySelectorAll('input[name="institution"]:checked').length > 0) {
+        totalFilterCategories++;
+    }
+    if (document.querySelectorAll('input[name="hospital"]:checked').length > 0) {
+        totalFilterCategories++;
+    }
+    if (document.querySelectorAll('input[name="learner_type"]:checked').length > 0) {
+        totalFilterCategories++;
+    }
+    
+    const badge = document.getElementById('filterBadge');
+    if (badge) {
+        if (totalFilterCategories > 0) {
+            badge.textContent = totalFilterCategories;
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+function showUploadPanel() {
+    const panel = document.getElementById('uploadPanel');
+    if (!panel.classList.contains('active')) {
+        toggleUploadPanel();
+    }
+
+    // Show the progress section inside the panel and scroll to it
+    setTimeout(() => {
+        const progressSection = document.getElementById('progressSection');
+        if (progressSection) {
+            progressSection.style.display = 'block';
+            progressSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }, 300); // Wait for panel animation to complete
 }
 
 function toggleUploadPanel() {
+    // Check if button is disabled (upload in progress)
+    const bulkUploadBtn = document.querySelector('.btn-outline-upload');
+    if (bulkUploadBtn && bulkUploadBtn.disabled && !document.getElementById('uploadPanel').classList.contains('active')) {
+        showError('An upload is currently in progress. Please wait for it to complete before starting a new upload.');
+        return;
+    }
+
     const panel = document.getElementById('uploadPanel');
     const overlay = document.querySelector('.overlay');
     panel.classList.toggle('active');
-    
+
     if (panel.classList.contains('active')) {
         document.body.style.overflow = 'hidden';
         if (!overlay) {
@@ -1624,7 +2527,73 @@ function toggleUploadPanel() {
         setTimeout(() => {
             document.querySelector('.overlay').classList.add('active');
         }, 10);
-        
+
+        // Check if upload is in progress and show warning
+        const uploadButton = document.getElementById('uploadButton');
+        const warningDiv = document.getElementById('uploadInProgressWarning');
+
+        // Check for active sessions from backend
+        fetch('/onboarding/learners/active-uploads/')
+            .then(response => response.json())
+            .then(data => {
+                let hasActiveSession = false;
+                let activeFilename = '';
+
+                if (data.success && data.sessions && data.sessions.length > 0) {
+                    const activeSession = data.sessions.find(s =>
+                        s.status === 'validating' || s.status === 'validated' || s.status === 'creating'
+                    );
+
+                    if (activeSession) {
+                        hasActiveSession = true;
+                        activeFilename = activeSession.filename;
+                    }
+                }
+
+                if (hasActiveSession || isUploadInProgress) {
+                    if (warningDiv) {
+                        // Update warning message
+                        const warningText = activeFilename
+                            ? `Another file "${activeFilename}" is currently being processed. Please wait for it to complete before uploading a new file.`
+                            : 'Another file is currently being processed. Please wait for it to complete before uploading a new file.';
+
+                        warningDiv.querySelector('p').textContent = warningText;
+                        warningDiv.style.display = 'block';
+                    }
+                    if (uploadButton) {
+                        uploadButton.disabled = true;
+                        uploadButton.style.opacity = '0.5';
+                        uploadButton.style.cursor = 'not-allowed';
+                    }
+                } else {
+                    if (warningDiv) warningDiv.style.display = 'none';
+                    if (uploadButton) {
+                        uploadButton.disabled = false;
+                        uploadButton.style.opacity = '1';
+                        uploadButton.style.cursor = 'pointer';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error checking active sessions:', error);
+                // Fallback to local check
+                if (isUploadInProgress) {
+                    if (warningDiv) warningDiv.style.display = 'block';
+                    if (uploadButton) {
+                        uploadButton.disabled = true;
+                        uploadButton.style.opacity = '0.5';
+                        uploadButton.style.cursor = 'not-allowed';
+                    }
+                } else {
+                    if (warningDiv) warningDiv.style.display = 'none';
+                    if (uploadButton) {
+                        uploadButton.disabled = false;
+                        uploadButton.style.opacity = '1';
+                        uploadButton.style.cursor = 'pointer';
+                    }
+                }
+            });
+
         // Reset upload panel state
         resetUploadPanel();
     } else {
@@ -1636,6 +2605,9 @@ function toggleUploadPanel() {
                 overlay.remove();
             }, 300);
         }
+
+        // Reload the page when upload panel is closed
+        location.reload();
     }
 }
 
@@ -1674,6 +2646,9 @@ function resetUploadPanel() {
 // File Upload Handling
 const uploadZone = document.getElementById('uploadZone');
 const fileInput = document.getElementById('fileInput');
+let currentFile = null; // Store the current file for drag & drop
+let activePollingInterval = null; // Track active polling interval to prevent conflicts
+let isUploadInProgress = false; // Track if an upload is currently processing
 
 uploadZone.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -1687,17 +2662,33 @@ uploadZone.addEventListener('dragleave', () => {
 uploadZone.addEventListener('drop', (e) => {
     e.preventDefault();
     uploadZone.classList.remove('dragover');
-    handleFiles(e.dataTransfer.files);
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        // Store the file and update fileInput
+        currentFile = files[0];
+        // Create a new DataTransfer to set fileInput.files
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(currentFile);
+        fileInput.files = dataTransfer.files;
+        handleFiles(files);
+    }
 });
 
 fileInput.addEventListener('change', (e) => {
-    handleFiles(e.target.files);
+    if (e.target.files.length > 0) {
+        currentFile = e.target.files[0];
+        handleFiles(e.target.files);
+    }
 });
 
 function handleFiles(files) {
     if (files.length > 0) {
         const file = files[0];
         if (file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.name.endsWith('.xlsx')) {
+            // Clear previous validations and preview when new file is uploaded
+            document.querySelector('.table-wrapper').innerHTML = '';
+            document.querySelector('.validation-results').innerHTML = '';
+
             showFilePreview(file);
             validateAndPreviewExcel(file);
         } else {
@@ -1729,6 +2720,7 @@ function removeFile() {
     // Clear preview and validation
     document.querySelector('.table-wrapper').innerHTML = '';
     document.querySelector('.validation-results').innerHTML = '';
+    window.location.reload()
 }
 
 function validateAndPreviewExcel(file) {
@@ -1747,24 +2739,21 @@ function validateAndPreviewExcel(file) {
             ).slice(0, 5); // Get up to 5 non-empty rows
             
             // Get total non-empty rows for progress tracking
-            const allNonEmptyRows = jsonData.slice(1).filter(row => 
+            const allNonEmptyRows = jsonData.slice(1).filter(row =>
                 row.some(cell => cell !== null && cell !== undefined && cell.toString().trim() !== '')
             );
-            
+
             // Store total rows for progress tracking
             window.totalRowsToProcess = allNonEmptyRows.length;
-            
-            // Validate headers
+
+            // Validate headers only
             const validationResults = validateHeaders(headers);
-            
-            // Create preview table with non-empty rows
+
+            // Create preview table with non-empty rows (only first 5 for display)
             createPreviewTable(headers, nonEmptyRows);
-            
-            // Validate data (using all rows for validation)
-            const dataValidation = validateData(headers, nonEmptyRows);
-            
-            // Show validation results
-            showValidationResults(validationResults, dataValidation);
+
+            // Show header validation results only (data validation will be done by backend)
+            showValidationResults(validationResults);
         }
     };
     reader.readAsArrayBuffer(file);
@@ -1827,29 +2816,75 @@ function validateData(headers, rows) {
     const phoneRegex = /^\d{10}$/;
     const dateRegex = /^\d{2}\/\d{2}\/\d{4}$/;
     const pincodeRegex = /^\d{6}$/;
+    const seenEmails = new Set();
 
     rows.forEach((row, index) => {
         const rowErrors = [];
         const rowData = {};
-        
+
         // Create object from row data
         headers.forEach((header, i) => {
             rowData[header] = row[i];
         });
 
+        // Validate Onboarding Type (B2B or B2C)
+        const onboardingType = String(rowData['Onboarding Type'] || '').trim().toUpperCase();
+        if (!['B2B', 'B2C'].includes(onboardingType)) {
+            rowErrors.push(`Onboarding Type must be 'B2B' or 'B2C', found: '${rowData['Onboarding Type'] || ''}'`);
+        }
+
         // Validate required fields
         if (!rowData['Learner Name']) {
             rowErrors.push('Name is required');
         }
-        if (!rowData['Learner Email']) {
+
+        // Validate email
+        const email = String(rowData['Learner Email'] || '').trim();
+        if (!email) {
             rowErrors.push('Email is required');
-        } else if (!emailRegex.test(rowData['Learner Email'])) {
+        } else if (!emailRegex.test(email)) {
             rowErrors.push('Invalid email format');
+        } else if (seenEmails.has(email)) {
+            rowErrors.push(`Duplicate email address: '${email}'`);
+        } else {
+            seenEmails.add(email);
         }
+
+        // Validate phone
         if (!rowData['Learner Phone']) {
             rowErrors.push('Phone is required');
-        } else if (!phoneRegex.test(rowData['Learner Phone'])) {
+        } else if (!phoneRegex.test(String(rowData['Learner Phone']).trim())) {
             rowErrors.push('Phone must be 10 digits');
+        }
+
+        // Validate Learner Gender (Male, Female, or Other)
+        const gender = String(rowData['Learner Gender'] || '').trim().toLowerCase();
+        if (!gender) {
+            rowErrors.push('Learner Gender is required');
+        } else if (!['male', 'female', 'other'].includes(gender)) {
+            rowErrors.push(`Learner Gender must be 'Male', 'Female', or 'Other', found: '${rowData['Learner Gender']}'`);
+        }
+
+        // Validate Learner Type (Student or Nurse)
+        const learnerType = String(rowData['Learner Type'] || '').trim().toLowerCase();
+        if (!['student', 'nurse'].includes(learnerType)) {
+            rowErrors.push(`Learner Type must be 'Student' or 'Nurse', found: '${rowData['Learner Type'] || ''}'`);
+        }
+
+        // Validate College for students
+        if (learnerType === 'student') {
+            const college = String(rowData['College'] || '').trim();
+            if (!college) {
+                rowErrors.push('College cannot be empty for students');
+            }
+        }
+
+        // Validate Hospital for nurses
+        if (learnerType === 'nurse') {
+            const hospital = String(rowData['Hospital'] || '').trim();
+            if (!hospital) {
+                rowErrors.push('Hospital cannot be empty for nurses');
+            }
         }
 
         if (rowErrors.length > 0) {
@@ -1890,7 +2925,7 @@ function createPreviewTable(headers, rows) {
     tableWrapper.innerHTML = html;
 }
 
-function showValidationResults(headerValidation, dataValidation) {
+function showValidationResults(headerValidation) {
     const validationResults = document.querySelector('.validation-results');
     let html = '';
 
@@ -1916,38 +2951,14 @@ function showValidationResults(headerValidation, dataValidation) {
                 </div>
             </div>
         `;
-    }
-
-    // Show data validation results
-    if (!dataValidation.isValid) {
-        html += `
-            <div class="alert alert-danger">
-                <i class="fas fa-exclamation-circle"></i>
-                <div class="alert-content">
-                    <strong>Data Validation Failed</strong>
-                    <p>Errors found in the following rows:</p>
-                    <ul>
-                        ${dataValidation.errors.map(error => `
-                            <li>Row ${error.row}:
-                                <ul>
-                                    ${error.errors.map(e => `<li>${e}</li>`).join('')}
-                                </ul>
-                            </li>
-                        `).join('')}
-                    </ul>
-                </div>
-            </div>
-        `;
-    }
-
-    // Show success message if all validations pass
-    if (headerValidation.isValid && dataValidation.isValid) {
+    } else {
+        // Show success message only for header validation
         html += `
             <div class="alert alert-success">
                 <i class="fas fa-check-circle"></i>
                 <div class="alert-content">
-                    <strong>Validation Successful</strong>
-                    <p>All headers and data are valid. You can proceed with the upload.</p>
+                    <strong>Header Validation Successful</strong>
+                    <p>All required columns are present. Click upload to proceed with data validation.</p>
                 </div>
             </div>
         `;
@@ -1957,15 +2968,51 @@ function showValidationResults(headerValidation, dataValidation) {
 }
 
 function submitUpload() {
+    // Check if an upload is already in progress (local check)
+    if (isUploadInProgress) {
+        showError('An upload is already in progress. Please wait for it to complete before uploading another file.');
+        return;
+    }
+
     const form = document.getElementById('uploadForm');
     const formData = new FormData(form);
     const fileInput = document.getElementById('fileInput');
-    
+
     // Make sure we have a file
     if (!fileInput.files.length) {
         alert('Please select a file to upload');
         return;
     }
+
+    // Check for active sessions in backend before proceeding
+    fetch('/onboarding/learners/active-uploads/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.sessions && data.sessions.length > 0) {
+                // Check if any session is actively processing
+                const activeSession = data.sessions.find(s =>
+                    s.status === 'validating' || s.status === 'validated' || s.status === 'creating'
+                );
+
+                if (activeSession) {
+                    showError(`Another upload is currently being processed: "${activeSession.filename}". Please wait for it to complete before uploading a new file.`);
+                    return;
+                }
+            }
+
+            // No active sessions, proceed with upload
+            proceedWithUpload(form, formData, fileInput);
+        })
+        .catch(error => {
+            console.error('Error checking active sessions:', error);
+            // Proceed anyway if check fails
+            proceedWithUpload(form, formData, fileInput);
+        });
+}
+
+function proceedWithUpload(form, formData, fileInput) {
+    // Mark upload as in progress
+    isUploadInProgress = true;
     
     // Show progress section and hide validation section
     document.getElementById('progressSection').style.display = 'block';
@@ -1998,17 +3045,34 @@ function submitUpload() {
     })
     .then(data => {
         if (data.success && data.session_key) {
-            console.log("Hereee")
-            // Start real-time progress tracking
-            startProgressTracking(data.session_key);
+            // Show success notification
+            showSuccess(data.message || 'Thank you for uploading! We will start with the validation.');
+
+            // Close upload panel
+            toggleUploadPanel();
+
+            // Reset form
+            fileInput.value = '';
+            removeFile();
+
+            // Refresh sessions list immediately
+            fetchUploadSessions();
+
+            // Mark upload as complete
+            isUploadInProgress = false;
         } else {
-            updateProgress(100, 'Upload failed: ' + (data.error || 'Unknown error'));
-            showUploadError(data.error || 'Unknown error');
+            // Show detailed validation errors if available
+            if (data.validation_errors && data.validation_errors.length > 0) {
+                showValidationErrors(data.validation_errors);
+            } else {
+                showUploadError(data.error || 'Unknown error');
+            }
+            isUploadInProgress = false;
         }
     })
     .catch(error => {
-        updateProgress(100, 'Upload failed: ' + error.message);
         showUploadError(error.message);
+        isUploadInProgress = false;
     })
     .finally(() => {
         uploadButton.innerHTML = originalText;
@@ -2017,84 +3081,158 @@ function submitUpload() {
 }
 
 function startProgressTracking(sessionKey) {
-    console.log(`[DEBUG] Starting SSE connection for session: ${sessionKey}`);
-    const sseUrl = `/onboarding/learners/upload-progress/${sessionKey}/`;
-    console.log(`[DEBUG] SSE URL: ${sseUrl}`);
-    
-    const eventSource = new EventSource(sseUrl);
-    
-    eventSource.onopen = function(event) {
-        console.log('[DEBUG] SSE connection opened');
-    };
-    
-    eventSource.onmessage = function(event) {
-        console.log(`[DEBUG] Received SSE message:`, event.data);
+    console.log(`[DEBUG] Starting polling for session: ${sessionKey}`);
+
+    // Clear any existing polling interval to prevent conflicts
+    if (activePollingInterval) {
+        console.log('[DEBUG] Clearing previous polling interval');
+        clearInterval(activePollingInterval);
+        activePollingInterval = null;
+    }
+
+    const pollUrl = `/onboarding/learners/upload-details/${sessionKey}/`;
+    console.log(`[DEBUG] Poll URL: ${pollUrl}`);
+
+    let pollCount = 0;
+    const maxPollAttempts = 1200; // 1200 attempts * 3 seconds = 1 hour max
+
+    const pollStatus = async () => {
+        pollCount++;
+
         try {
-            const data = JSON.parse(event.data);
-            console.log(`[DEBUG] Parsed data:`, data);
-            
-            if (data.error) {
-                console.log(`[DEBUG] SSE error:`, data.error);
-                showUploadError(data.error);
-                eventSource.close();
+            const response = await fetch(pollUrl);
+
+            if (!response.ok) {
+                console.error(`[DEBUG] Poll request failed with status: ${response.status}`);
+                if (pollCount > 3) { // Only show error after a few attempts
+                    if (activePollingInterval) {
+                        clearInterval(activePollingInterval);
+                        activePollingInterval = null;
+                    }
+                    showUploadError('Failed to fetch upload status. Please refresh the page.');
+                }
                 return;
             }
-            
-            // Update progress
-            console.log(`[DEBUG] Updating progress to ${data.progress}%`);
-            updateProgress(data.progress, data.message);
-            
-            // Update statistics
-            if (data.total_rows) document.getElementById('totalRows').textContent = data.total_rows;
-            if (data.processed_rows) document.getElementById('processedRows').textContent = data.processed_rows;
-            if (data.success_count) document.getElementById('successCount').textContent = data.success_count;
-            if (data.update_count) document.getElementById('updateCount').textContent = data.update_count;
-            if (data.error_count) document.getElementById('errorCount').textContent = data.error_count;
-            
+
+            const data = await response.json();
+            console.log(`[DEBUG] Received poll data:`, data);
+
+            if (!data.success) {
+                console.log(`[DEBUG] Poll error:`, data.error);
+                if (activePollingInterval) {
+                    clearInterval(activePollingInterval);
+                    activePollingInterval = null;
+                }
+                showUploadError(data.error || 'Upload failed');
+                return;
+            }
+
+            // Calculate progress percentage
+            const progress = data.total_rows > 0
+                ? Math.round((data.completed_count / data.total_rows) * 100)
+                : 0;
+
+            console.log(`[DEBUG] Progress: ${data.completed_count}/${data.total_rows} (${progress}%)`);
+
+            // Update progress bar in upload panel (if open)
+            const statusMessage = data.status === 'processing'
+                ? `Processing... ${data.completed_count}/${data.total_rows} completed`
+                : data.message || 'Processing...';
+            updateProgress(progress, statusMessage);
+
+            // Update statistics in upload panel (if open)
+            const totalRows = document.getElementById('totalRows');
+            const processedRows = document.getElementById('processedRows');
+            const successCount = document.getElementById('successCount');
+            const errorCount = document.getElementById('errorCount');
+
+            if (totalRows) totalRows.textContent = data.total_rows || 0;
+            if (processedRows) processedRows.textContent = data.completed_count || 0;
+            if (successCount) successCount.textContent = data.completed_count || 0;
+            if (errorCount) errorCount.textContent = data.error_count || 0;
+
+            // Update main page progress indicator
+            const mainProgressBar = document.getElementById('mainProgressBar');
+            const mainProgressMessage = document.getElementById('mainProgressMessage');
+            const mainProgressStats = document.getElementById('mainProgressStats');
+            const mainProgressPercent = document.getElementById('mainProgressPercent');
+            const mainPageProgress = document.getElementById('mainPageProgress');
+
+            if (mainPageProgress) mainPageProgress.style.display = 'block';
+            if (mainProgressBar) mainProgressBar.style.width = progress + '%';
+            if (mainProgressMessage) mainProgressMessage.textContent = statusMessage;
+            if (mainProgressStats) mainProgressStats.textContent = `${data.completed_count || 0} / ${data.total_rows || 0} completed`;
+            if (mainProgressPercent) mainProgressPercent.textContent = progress + '%';
+
             // Handle completion
             if (data.status === 'completed') {
                 console.log('[DEBUG] Upload completed');
-                showUploadResult(data);
-                eventSource.close();
-                // Hide progress section after completion
-                // setTimeout(() => {
-                //     document.getElementById('progressSection').style.display = 'none';
-                // }, 3000); // Hide after 3 seconds to show completion message
+                if (activePollingInterval) {
+                    clearInterval(activePollingInterval);
+                    activePollingInterval = null;
+                }
+
+                // Mark upload as no longer in progress
+                isUploadInProgress = false;
+
+                // Hide main page progress and reload to show new learners
+                setTimeout(() => {
+                    const mainPageProgress = document.getElementById('mainPageProgress');
+                    if (mainPageProgress) mainPageProgress.style.display = 'none';
+                    location.reload();
+                }, 2000);
+
+                showUploadResult({
+                    success: true,
+                    message: data.message || 'Upload completed successfully',
+                    total_rows: data.total_rows,
+                    success_count: data.completed_count,
+                    error_count: data.error_count
+                });
             } else if (data.status === 'error') {
                 console.log('[DEBUG] Upload error:', data.message);
-                showUploadError(data.message);
-                eventSource.close();
-                // Hide progress section after error
-                // setTimeout(() => {
-                //     document.getElementById('progressSection').style.display = 'none';
-                // }, 3000); // Hide after 3 seconds to show error message
+                if (activePollingInterval) {
+                    clearInterval(activePollingInterval);
+                    activePollingInterval = null;
+                }
+
+                // Mark upload as no longer in progress
+                isUploadInProgress = false;
+
+                // Hide main page progress
+                const mainPageProgress = document.getElementById('mainPageProgress');
+                if (mainPageProgress) mainPageProgress.style.display = 'none';
+
+                showUploadError(data.message || 'Upload failed');
             }
-            
+
+            // Stop polling if max attempts reached
+            if (pollCount >= maxPollAttempts) {
+                console.log('[DEBUG] Max poll attempts reached');
+                if (activePollingInterval) {
+                    clearInterval(activePollingInterval);
+                    activePollingInterval = null;
+                }
+                showUploadError('Upload is taking too long. Please check the status later.');
+            }
+
         } catch (error) {
-            console.error('[DEBUG] Error parsing SSE data:', error);
+            console.error('[DEBUG] Poll request error:', error);
+            if (pollCount > 3) { // Only show error after a few attempts
+                if (activePollingInterval) {
+                    clearInterval(activePollingInterval);
+                    activePollingInterval = null;
+                }
+                showUploadError('Connection lost. Please check your network connection.');
+            }
         }
     };
-    
-    eventSource.onerror = function(error) {
-        console.error('[DEBUG] SSE connection error:', error);
-        console.error('[DEBUG] Error details:', {
-            readyState: eventSource.readyState,
-            url: eventSource.url
-        });
-        eventSource.close();
-        showUploadError('Connection lost. Please check the upload status.');
-    };
-    
-    // Add timeout to check if connection is working
-    setTimeout(() => {
-        if (eventSource.readyState === 0) { // CONNECTING
-            console.log('[DEBUG] SSE still connecting after 5 seconds...');
-        } else if (eventSource.readyState === 1) { // OPEN
-            console.log('[DEBUG] SSE connection is open');
-        } else if (eventSource.readyState === 2) { // CLOSED
-            console.log('[DEBUG] SSE connection is closed');
-        }
-    }, 5000);
+
+    // Start polling immediately
+    pollStatus();
+
+    // Then poll every 3 seconds and store in global variable
+    activePollingInterval = setInterval(pollStatus, 3000);
 }
 
 function initializeProgress() {
@@ -2254,12 +3392,65 @@ function showUploadError(error) {
             </div>
         </div>
     `;
-    
+
     // Show Done button
     document.getElementById('uploadButton').style.display = 'none';
     document.getElementById('doneButton').style.display = 'inline-flex';
-    
+
     alert('Upload failed: ' + error);
+}
+
+function showValidationErrors(validation_errors) {
+    const progressDetails = document.getElementById('progressDetails');
+
+    // Create detailed error display
+    let errorsHtml = `
+        <div class="progress-detail-item error">
+            <div class="progress-detail-icon error">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <div class="progress-detail-content">
+                <div class="progress-detail-title">Validation Failed</div>
+                <div class="progress-detail-message">Found ${validation_errors.length} row(s) with errors. Please fix and re-upload.</div>
+            </div>
+        </div>
+        <div style="margin-top: 20px;">
+            <h5 style="color: #dc3545; margin-bottom: 15px;">
+                <i class="fas fa-list"></i> Error Details:
+            </h5>
+            <div style="max-height: 400px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; background: #f8f9fa;">
+    `;
+
+    validation_errors.forEach((error, index) => {
+        errorsHtml += `
+            <div style="margin-bottom: 15px; padding: 10px; background: white; border-left: 3px solid #dc3545; border-radius: 4px;">
+                <strong style="color: #dc3545;">Row ${error.row}:</strong>
+                <ul style="margin: 5px 0 0 0; padding-left: 20px; list-style-type: disc;">
+        `;
+
+        error.errors.forEach(errorMsg => {
+            errorsHtml += `<li style="margin: 3px 0; color: #495057;">${errorMsg}</li>`;
+        });
+
+        errorsHtml += `
+                </ul>
+            </div>
+        `;
+    });
+
+    errorsHtml += `
+            </div>
+        </div>
+    `;
+
+    progressDetails.innerHTML = errorsHtml;
+
+    // Show Done button
+    document.getElementById('uploadButton').style.display = 'none';
+    document.getElementById('doneButton').style.display = 'inline-flex';
+
+    // Show alert with summary
+    alert(`Validation failed for ${validation_errors.length} row(s). Please check the error details and fix your Excel file.`);
 }
 
 function completeUpload() {
@@ -2288,24 +3479,94 @@ document.addEventListener('submit', function(e) {
                 'X-CSRFToken': getCookie('csrftoken')
             }
         })
-        .then(response => response.text())
-        .then(html => {
+        .then(response => {
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                return response.json().then(data => ({ isJson: true, data }));
+            } else {
+                return response.text().then(html => ({ isJson: false, html }));
+            }
+        })
+        .then(result => {
             // Remove loading state from button
             if (saveButton) {
                 saveButton.classList.remove('btn-loading');
+                document.getElementById("save-button").innerText = "Save"
             }
 
-            if (html.includes('form-group')) {
-                // Form has errors, re-render it
-                document.getElementById('learnerFormContainer').innerHTML = html;
+            if (result.isJson) {
+                // Handle JSON response (error or success)
+                if (result.data.error) {
+                    // Prompt for same mail
+                    showError(result.data.error);
+                    return;
+                } else {
+                    // Success: close panel and reload page
+                    closeLearnerFormPanel();
+                    location.reload();
+                }
             } else {
-                // Success: close panel and reload page
-                closeLearnerFormPanel();
-                location.reload(); // <--- This reloads the page
+                // Handle HTML response (form with validation errors)
+                if (result.html.includes('form-group')) {
+                    // Form has errors, re-render it
+                    document.getElementById('learnerFormContainer').innerHTML = result.html;
+                } else {
+                    // Success: close panel and reload page
+                    closeLearnerFormPanel();
+                    location.reload();
+                }
             }
+        })
+        .catch(error => {
+            // Remove loading state from button
+            if (saveButton) {
+                saveButton.classList.remove('btn-loading');
+                document.getElementById("save-button").innerText = "Save"
+            }
+            console.error('Error:', error);
+            showError('An error occurred while saving the learner. Please try again.');
         });
     }
 });
+
+// Email field validation prompt on input
+document.addEventListener('input', function(e) {
+    if (e.target && e.target.id === 'id_learner_email') {
+        const input = e.target;
+        input.classList.remove('is-invalid');
+        const existingError = input.parentElement && input.parentElement.querySelector('.invalid-feedback');
+        if (existingError) existingError.remove();
+    }
+});
+
+// Prompt when same email is used
+function showSuccess(message) {
+    const notification = $(`
+        <div class="alert alert-success alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-check-circle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    $('body').append(notification);
+    setTimeout(function() { notification.alert('close'); }, 5000);
+}
+
+function showError(message) {
+    const notification = $(`
+        <div class="alert alert-danger alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            <i class="fas fa-exclamation-triangle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    `);
+    $('body').append(notification);
+    setTimeout(function() { notification.alert('close'); }, 5000);
+}
 
 let offset = 0;
 const limit = 10;
@@ -2314,98 +3575,179 @@ let allLoaded = false;
 let currentSearch = '';
 let currentFilters = {};
 
-// Search functionality
+// Search functionality with debouncing
+let searchTimeout = null;
+
 function filterLearners(searchQuery) {
-    currentSearch = searchQuery;
-    resetLearnerList();
-    applySearch();
+    console.log('🔍 Search input:', searchQuery);
+    
+    // Clear existing timeout
+    if (searchTimeout) {
+        clearTimeout(searchTimeout);
+    }
+    
+    // Trim the search query
+    currentSearch = searchQuery ? searchQuery.trim() : '';
+    
+    // Debounce: wait 300ms after user stops typing
+    searchTimeout = setTimeout(() => {
+        console.log('⚡ Executing search for:', currentSearch);
+        performSearch();
+    }, 300);
+}
+
+function performSearch() {
+    console.log('🎯 performSearch - currentSearch:', currentSearch, 'offset:', offset);
+
+    // CRITICAL: Reset all state
+    offset = 0;
+    allLoaded = false;
+    loading = false; // Must reset loading flag!
+
+    // Clear the table completely
+    const tbody = document.getElementById('learnerTableBody');
+    if (tbody) {
+        tbody.innerHTML = '';
+        console.log('✅ Table cleared');
+    }
+
+    // Show the button
+    const showMoreBtn = document.getElementById('showMoreBtn');
+    if (showMoreBtn) {
+        showMoreBtn.style.display = 'inline-flex';
+    }
+
+    // Update bulk delete button state
+    updateBulkDeleteState();
+
+    // Load fresh data
+    console.log('📡 Calling loadMoreLearners...');
+    loadMoreLearners();
 }
 
 // Apply search with reset functionality
 function applySearch() {
-    offset = 0;
-    allLoaded = false;
-    document.getElementById('learnerTableBody').innerHTML = '';
-    document.getElementById('showMoreBtn').style.display = 'inline-flex';
-    loadMoreLearners();
+    performSearch();
 }
 
 function resetLearnerList() {
     offset = 0;
     allLoaded = false;
-    document.getElementById('learnerTableBody').innerHTML = '';
-    document.getElementById('showMoreBtn').style.display = 'inline-flex';
+    loading = false;
+    const tbody = document.getElementById('learnerTableBody');
+    if (tbody) {
+        tbody.innerHTML = '';
+    }
+    const showMoreBtn = document.getElementById('showMoreBtn');
+    if (showMoreBtn) {
+        showMoreBtn.style.display = 'inline-flex';
+    }
+    // Update bulk delete button state
+    updateBulkDeleteState();
 }
 
 function applyFilters() {
     currentFilters = {};
-    
+
     // Get institution filters
     const institutionCheckboxes = document.querySelectorAll('input[name="institution"]:checked');
     if (institutionCheckboxes.length > 0) {
         currentFilters.institution = Array.from(institutionCheckboxes).map(cb => cb.value);
     }
-    
+
     // Get hospital filters
     const hospitalCheckboxes = document.querySelectorAll('input[name="hospital"]:checked');
     if (hospitalCheckboxes.length > 0) {
         currentFilters.hospital = Array.from(hospitalCheckboxes).map(cb => cb.value);
     }
-    
+
     // Get learner type filters
     const learnerTypeCheckboxes = document.querySelectorAll('input[name="learner_type"]:checked');
     if (learnerTypeCheckboxes.length > 0) {
         currentFilters.learner_type = Array.from(learnerTypeCheckboxes).map(cb => cb.value);
     }
-    
+
     resetLearnerList();
     loadMoreLearners();
     toggleFilterPanel();
 }
 
+function clearAllFilters() {
+    // Uncheck all filter checkboxes (including Select All checkboxes)
+    document.querySelectorAll('.filter-form input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+        cb.indeterminate = false;
+    });
+
+    // Update all selection counts
+    ['institution', 'hospital', 'learner-type'].forEach(category => {
+        updateSelectionCount(category);
+    });
+
+    // Update filter badge
+    updateFilterBadge();
+
+    // Clear current filters
+    currentFilters = {};
+}
+
 function renderLearnerRow(learner) {
-    console.log(learner)
-    return `
-    <tr>
-        <td><div class="institution"><span>${learner.full_name}</span></div></td>
-        <td>${learner.email}</td>
-        <td>${learner.phone_number}</td>
-        <td>${learner.learner_type}</td>
-        <td>${learner.institution}</td>
-        <td>${learner.skillathon}</td>
-        <td>
-            <span class="badge ${learner.is_active ? 'active' : 'inactive'}">
-                ${learner.is_active ? 'Active' : 'Inactive'}
-            </span>
-        </td>
-        <td>
-            <div class="actions">
-                {% if "edit_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                <a href="javascript:void(0);" class="btn-icon"
-                   onclick="openLearnerFormPanel('${learner.edit_url}', 'Edit Learner')">
-                    <i class="fas fa-edit"></i>
-                </a>
-                {% endif %}
-                {% if "delete_learner" in request.user.get_all_permissions or request.user.has_all_permissions %}
-                <button type="button" 
-                        class="btn-icon btn-danger" 
-                        data-name="${learner.full_name}"
-                        data-url="${learner.delete_url}"
-                        onclick="confirmDelete(this)"
-                        title="Delete">
-                    <i class="fas fa-trash"></i>
-                </button>
-                {% endif %}
-            </div>
-        </td>
-    </tr>
-    `;
+    console.log(learner);
+
+    var showActions = userPermissions.canEdit;
+    var showStatus = userPermissions.canUpdateStatus;
+
+    var html = '<tr>' +
+        '<td><input type="checkbox" class="row-select" data-id="' + learner.id + '"></td>' +
+        '<td><div class="institution"><span>' + learner.full_name + '</span></div></td>' +
+        '<td>' + learner.email + '</td>' +
+        '<td>' + learner.phone_number + '</td>' +
+        '<td>' + learner.learner_type + '</td>' +
+        '<td>' + learner.institution + '</td>' +
+        '<td>' + learner.skillathon + '</td>';
+
+    // Status column - toggle switch
+    if (showStatus) {
+        var isActive = learner.is_active;
+        html += '<td>' +
+                '<label class="switch">' +
+                    '<input type="checkbox" ' + (isActive ? 'checked' : '') +
+                    ' onchange="handleLearnerStatusChange(' + learner.id + ', this.checked ? \'active\' : \'inactive\', this)">' +
+                    '<span class="slider round"></span>' +
+                '</label>' +
+                '</td>';
+    }
+
+    // Actions column - only edit button (delete removed)
+    if (showActions) {
+        html += '<td><div class="actions">';
+
+        if (userPermissions.canEdit) {
+            html += '<a href="javascript:void(0);" class="btn-icon" onclick="openLearnerFormPanel(\'' + learner.edit_url + '\', \'Edit Learner\')">' +
+                '<i class="fas fa-edit"></i>' +
+                '</a>';
+        }
+
+        html += '</div></td>';
+    }
+
+    html += '</tr>';
+    return html;
 }
 
 function loadMoreLearners() {
-    if (loading || allLoaded) return;
+    console.log('📥 loadMoreLearners - loading:', loading, 'allLoaded:', allLoaded, 'offset:', offset, 'search:', currentSearch);
+    
+    if (loading || allLoaded) {
+        console.log('❌ Blocked - loading:', loading, 'allLoaded:', allLoaded);
+        return;
+    }
+    
     loading = true;
-    document.getElementById('showMoreBtn').innerText = 'Loading...';
+    const showMoreBtn = document.getElementById('showMoreBtn');
+    if (showMoreBtn) {
+        showMoreBtn.innerText = 'Loading...';
+    }
     
     // Build query parameters
     const params = new URLSearchParams();
@@ -2414,6 +3756,9 @@ function loadMoreLearners() {
     
     if (currentSearch) {
         params.append('search', currentSearch);
+        console.log('🔎 Adding search parameter:', currentSearch);
+    } else {
+        console.log('📋 No search - loading all learners');
     }
     
     // Add filters
@@ -2428,6 +3773,7 @@ function loadMoreLearners() {
     fetch(`/onboarding/learners/api/?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
+            console.log('📦 Received data:', data.learners ? data.learners.length : 0, 'learners');
             const learners = data.learners;
             if (data.all_loaded) {
                 allLoaded = true;
@@ -2435,13 +3781,20 @@ function loadMoreLearners() {
             }
             offset += learners.length;
             const tbody = document.getElementById('learnerTableBody');
+            console.log('➕ Adding', learners.length, 'rows to table (current rows:', tbody.children.length, ')');
             learners.forEach(learner => {
                 tbody.insertAdjacentHTML('beforeend', renderLearnerRow(learner));
             });
+
+            // Update bulk delete button state and select all checkbox after rendering
+            updateBulkDeleteState();
+            syncSelectAllCheckbox();
+
             // If no learners at all, show empty state
             if (offset === 0 && learners.length === 0) {
+                const colspanCount = userPermissions.canEdit || userPermissions.canDelete ? 8 : 7;
                 tbody.innerHTML = `<tr>
-                    <td colspan="8" class="empty">
+                    <td colspan="${colspanCount}" class="empty">
                         <i class="fas fa-user-graduate"></i>
                         <p>No learners found</p>
                         <a href="javascript:void(0);" class="btn btn-primary"
@@ -2459,9 +3812,53 @@ function loadMoreLearners() {
         });
 }
 
+// Check for active upload sessions on page load
+async function checkActiveUploads() {
+    try {
+        const response = await fetch('/onboarding/learners/active-uploads/');
+        const data = await response.json();
+
+        if (data.success && data.sessions && data.sessions.length > 0) {
+            // Find the most recent processing session
+            const processingSession = data.sessions.find(s => s.status === 'processing');
+
+            if (processingSession) {
+                console.log('[DEBUG] Found active upload session on page load:', processingSession.session_key);
+
+                // Mark upload as in progress
+                isUploadInProgress = true;
+
+                // Show main page progress indicator
+                const mainPageProgress = document.getElementById('mainPageProgress');
+                if (mainPageProgress) {
+                    mainPageProgress.style.display = 'block';
+                }
+
+                // Set initial progress on main page
+                const progress = processingSession.progress_percentage || 0;
+                const mainProgressBar = document.getElementById('mainProgressBar');
+                const mainProgressMessage = document.getElementById('mainProgressMessage');
+                const mainProgressStats = document.getElementById('mainProgressStats');
+                const mainProgressPercent = document.getElementById('mainProgressPercent');
+
+                if (mainProgressBar) mainProgressBar.style.width = progress + '%';
+                if (mainProgressMessage) mainProgressMessage.textContent = `Processing ${processingSession.filename || 'learners'}...`;
+                if (mainProgressStats) mainProgressStats.textContent = `${processingSession.completed_count || 0} / ${processingSession.total_rows || 0} completed`;
+                if (mainProgressPercent) mainProgressPercent.textContent = progress + '%';
+
+                // Start polling for this session
+                startProgressTracking(processingSession.session_key);
+            }
+        }
+    } catch (error) {
+        console.error('[DEBUG] Error checking for active uploads:', error);
+    }
+}
+
 // Initial load
 document.addEventListener('DOMContentLoaded', function() {
     loadMoreLearners();
+    checkActiveUploads(); // Check for active uploads on page load
 });
 
 // Function that was referenced in the form but missing from template
@@ -2555,15 +3952,545 @@ function loadHospitals(skillathonId = null, onboardingType = null) {
 function handleSkillathonChange() {
     const skillathonSelect = document.getElementById('id_skillathon_event');
     const onboardingSelect = document.getElementById('id_onboarding_type');
-    
+
     const skillathonId = skillathonSelect ? skillathonSelect.value : null;
     const onboardingType = onboardingSelect ? onboardingSelect.value.toLowerCase() : null;
-    
+
     console.log("DEBUG: Skillathon changed, skillathonId:", skillathonId, "onboardingType:", onboardingType);
-    
+
     // Load institutions and hospitals based on selected skillathon and onboarding type
     loadInstitutions(skillathonId, onboardingType);
     loadHospitals(skillathonId, onboardingType);
 }
+
+// ===== UPLOAD SESSIONS MANAGEMENT =====
+let sessionPollingInterval = null;
+let modalRefreshInterval = null;
+let currentSessionData = null;
+let currentFilteredRows = [];
+let currentSessionKey = null;
+
+// Fetch and display latest upload session only
+function fetchUploadSessions() {
+    fetch('/onboarding/learners/active-uploads/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.sessions && data.sessions.length > 0) {
+                // Get only the latest session (most recent upload)
+                const latestSession = data.sessions.sort((a, b) =>
+                    new Date(b.uploaded_at) - new Date(a.uploaded_at)
+                )[0];
+
+                // Check if session is older than 3 hours
+                const uploadTime = new Date(latestSession.uploaded_at);
+                const currentTime = new Date();
+                const hoursDiff = (currentTime - uploadTime) / (1000 * 60 * 60);
+                // because utc time so 5:30 difference anyway
+                if (hoursDiff <= 11) {
+                    // Show only the latest session
+                    displayUploadSessions([latestSession]);
+                    document.getElementById('uploadSessionsList').style.display = 'block';
+                } else {
+                    // Hide if older than 3 hours
+                    document.getElementById('uploadSessionsList').style.display = 'none';
+                }
+
+                // Update bulk upload button state (check all sessions for active ones)
+                updateBulkUploadButtonState(data.sessions);
+            } else {
+                document.getElementById('uploadSessionsList').style.display = 'none';
+
+                // Enable bulk upload button when no sessions
+                updateBulkUploadButtonState([]);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching upload sessions:', error);
+        });
+}
+
+// Update bulk upload button state based on active sessions
+function updateBulkUploadButtonState(sessions) {
+    const bulkUploadBtn = document.querySelector('.btn-outline-upload');
+    if (!bulkUploadBtn) return;
+
+    const activeSession = sessions.find(s =>
+        s.status === 'validating' || s.status === 'validated' || s.status === 'creating'
+    );
+
+    if (activeSession) {
+        bulkUploadBtn.disabled = true;
+        bulkUploadBtn.style.opacity = '0.6';
+        bulkUploadBtn.style.cursor = 'not-allowed';
+        bulkUploadBtn.title = `Upload in progress: ${activeSession.filename}`;
+    } else {
+        bulkUploadBtn.disabled = false;
+        bulkUploadBtn.style.opacity = '1';
+        bulkUploadBtn.style.cursor = 'pointer';
+        bulkUploadBtn.title = 'Bulk Upload';
+    }
+}
+
+// Display upload sessions list
+function displayUploadSessions(sessions) {
+    const container = document.getElementById('sessionsContainer');
+    container.innerHTML = '';
+
+    sessions.forEach(session => {
+        const statusColors = {
+            'validating': { bg: '#fef3c7', text: '#92400e', icon: 'fa-spinner fa-spin' },
+            'validated': { bg: '#dbeafe', text: '#1e40af', icon: 'fa-check-circle' },
+            'creating': { bg: '#e0e7ff', text: '#4338ca', icon: 'fa-cog fa-spin' },
+            'completed': { bg: '#dcfce7', text: '#166534', icon: 'fa-check-circle' },
+            'error': { bg: '#fee2e2', text: '#991b1b', icon: 'fa-exclamation-circle' }
+        };
+
+        const color = statusColors[session.status] || statusColors['validating'];
+        const statusText = session.status.charAt(0).toUpperCase() + session.status.slice(1);
+
+        const sessionCard = document.createElement('div');
+        sessionCard.style.cssText = 'background: #f9fafb; border-radius: 8px; padding: 20px; margin-bottom: 15px; border: 1px solid #e5e7eb;';
+        sessionCard.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">
+                <div style="flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                        <i class="fas fa-file-excel" style="color: #2563eb; font-size: 18px;"></i>
+                        <h4 style="margin: 0; font-size: 16px; font-weight: 600; color: #1f2937;">${session.filename}</h4>
+                        <span style="padding: 4px 12px; background: ${color.bg}; color: ${color.text}; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                            <i class="fas ${color.icon}"></i> ${statusText}
+                        </span>
+                    </div>
+                    <p style="margin: 0; color: #6b7280; font-size: 13px;">
+                        <i class="fas fa-user"></i> ${session.uploaded_by}
+                        <span style="margin-left: 15px;"><i class="fas fa-clock"></i> ${new Date(session.uploaded_at).toLocaleString()}</span>
+                    </p>
+                    ${session.message ? `<p style="margin: 8px 0 0 0; color: #4b5563; font-size: 13px; font-style: italic;">${session.message}</p>` : ''}
+                </div>
+                <button onclick="viewSessionDetails('${session.session_key}')" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; white-space: nowrap; margin-left: 15px;">
+                    <i class="fas fa-eye"></i> View Details
+                </button>
+            </div>
+            <div style="background: white; border-radius: 6px; height: 8px; overflow: hidden; margin-bottom: 12px;">
+                <div style="height: 100%; background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%); width: ${session.progress_percentage}%; transition: width 0.3s ease;"></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 13px; color: #6b7280;">
+                <div style="display: flex; gap: 20px;">
+                    <span><strong>Total:</strong> ${session.total_rows}</span>
+                    <span><strong>Processed:</strong> ${session.processed_rows}</span>
+                    <span style="color: #15803d;"><strong>Success:</strong> ${session.success_count}</span>
+                    <span style="color: #dc2626;"><strong>Failed:</strong> ${session.error_count}</span>
+                </div>
+                <span><strong>${session.progress_percentage}%</strong></span>
+            </div>
+        `;
+        container.appendChild(sessionCard);
+    });
+}
+
+// View session details in modal
+function viewSessionDetails(sessionKey) {
+    currentSessionKey = sessionKey;
+
+    fetch(`/onboarding/learners/upload-details/${sessionKey}/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentSessionData = data;
+                populateSessionDetailsModal(data);
+                openSessionDetailsModal();
+
+                // Start auto-refresh if still processing
+                if (data.status === 'validating' || data.status === 'validated' || data.status === 'creating') {
+                    startModalRefresh();
+                }
+            } else {
+                alert('Error loading session details: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching session details:', error);
+            alert('Error loading session details');
+        });
+}
+
+// Refresh modal data
+function refreshModalData() {
+    if (!currentSessionKey) return;
+
+    fetch(`/onboarding/learners/upload-details/${currentSessionKey}/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentSessionData = data;
+                populateSessionDetailsModal(data);
+
+                // Stop refreshing if completed or error
+                if (data.status === 'completed' || data.status === 'error') {
+                    stopModalRefresh();
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error refreshing modal data:', error);
+        });
+}
+
+// Start modal auto-refresh
+function startModalRefresh() {
+    if (modalRefreshInterval) {
+        clearInterval(modalRefreshInterval);
+    }
+    modalRefreshInterval = setInterval(refreshModalData, 2000); // Refresh every 2 seconds
+}
+
+// Stop modal auto-refresh
+function stopModalRefresh() {
+    if (modalRefreshInterval) {
+        clearInterval(modalRefreshInterval);
+        modalRefreshInterval = null;
+    }
+}
+
+// Populate modal with session data
+function populateSessionDetailsModal(data) {
+    document.getElementById('modalFilename').textContent = data.filename;
+
+    // Update status with icon
+    const statusElement = document.getElementById('modalStatus');
+    const status = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+
+    if (data.status === 'validating') {
+        statusElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + status;
+    } else if (data.status === 'validated') {
+        statusElement.innerHTML = '<i class="fas fa-check-circle"></i> ' + status;
+    } else if (data.status === 'creating') {
+        statusElement.innerHTML = '<i class="fas fa-cog fa-spin"></i> Creating Learners...';
+    } else if (data.status === 'completed') {
+        statusElement.innerHTML = '<i class="fas fa-check-circle"></i> ' + status;
+    } else if (data.status === 'error') {
+        statusElement.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + status;
+    } else {
+        statusElement.textContent = status;
+    }
+
+    document.getElementById('modalTotalRows').textContent = data.total_rows;
+    document.getElementById('modalSuccessCount').textContent = data.success_count;
+    document.getElementById('modalErrorCount').textContent = data.error_count;
+
+    // Show/hide Created card and update count based on status
+    const createdCard = document.getElementById('modalCreatedCard');
+    const createdCountElement = document.getElementById('modalCreatedCount');
+
+    if (data.status === 'creating' || data.status === 'completed') {
+        createdCard.style.display = 'block';
+        const createdCount = data.created_count || 0;
+        createdCountElement.textContent = `${createdCount} / ${data.success_count}`;
+    } else {
+        createdCard.style.display = 'none';
+    }
+
+    // Show message if available
+    const messageContainer = document.getElementById('modalMessageContainer');
+    const messageText = document.getElementById('modalMessage');
+
+    if (data.message) {
+        messageText.textContent = data.message;
+
+        // Style message container based on content
+        if (data.message.includes('rejected') || data.message.includes('failed')) {
+            messageContainer.style.background = '#fee2e2';
+            messageContainer.style.borderLeftColor = '#dc2626';
+            messageText.style.color = '#991b1b';
+        } else if (data.message.includes('success')) {
+            messageContainer.style.background = '#dcfce7';
+            messageContainer.style.borderLeftColor = '#15803d';
+            messageText.style.color = '#166534';
+        } else {
+            messageContainer.style.background = '#eff6ff';
+            messageContainer.style.borderLeftColor = '#2563eb';
+            messageText.style.color = '#1e40af';
+        }
+
+        messageContainer.style.display = 'block';
+    } else {
+        // Show status-based message
+        let statusMessage = '';
+        messageContainer.style.background = '#eff6ff';
+        messageContainer.style.borderLeftColor = '#2563eb';
+        messageText.style.color = '#1e40af';
+
+        if (data.status === 'validating') {
+            statusMessage = 'Validating rows... Please wait.';
+        } else if (data.status === 'validated') {
+            statusMessage = 'Validation complete. Preparing to create learners...';
+        } else if (data.status === 'creating') {
+            statusMessage = `Creating ${data.success_count} learner(s)... Please wait.`;
+        }
+
+        if (statusMessage) {
+            messageText.textContent = statusMessage;
+            messageContainer.style.display = 'block';
+        } else {
+            messageContainer.style.display = 'none';
+        }
+    }
+
+    // Populate row results table
+    currentFilteredRows = data.row_results || [];
+    displayRowResults(currentFilteredRows);
+}
+
+// Display row results in table
+function displayRowResults(rows) {
+    const tbody = document.getElementById('rowResultsTableBody');
+    tbody.innerHTML = '';
+
+    if (rows.length === 0) {
+        document.getElementById('emptyState').style.display = 'block';
+        tbody.closest('div').querySelector('table').style.display = 'none';
+        return;
+    }
+
+    document.getElementById('emptyState').style.display = 'none';
+    tbody.closest('div').querySelector('table').style.display = 'table';
+
+    rows.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #e5e7eb';
+
+        const statusColor = row.status === 'pass' ? '#15803d' : '#dc2626';
+        const statusBg = row.status === 'pass' ? '#dcfce7' : '#fee2e2';
+        const statusIcon = row.status === 'pass' ? 'fa-check-circle' : 'fa-times-circle';
+
+        const errorsHtml = row.errors && row.errors.length > 0
+            ? row.errors.map(err => `<div style="padding: 4px 0; color: #dc2626; font-size: 12px;"><i class="fas fa-exclamation-triangle"></i> ${err}</div>`).join('')
+            : '<span style="color: #9ca3af; font-size: 12px;">No errors</span>';
+
+        tr.innerHTML = `
+            <td style="padding: 12px; color: #6b7280; font-size: 13px;">${row.row_number}</td>
+            <td style="padding: 12px; color: #1f2937; font-size: 13px;">${row.name || '-'}</td>
+            <td style="padding: 12px; color: #1f2937; font-size: 13px;">${row.email || '-'}</td>
+            <td style="padding: 12px; color: #6b7280; font-size: 13px; text-transform: capitalize;">${row.learner_type || '-'}</td>
+            <td style="padding: 12px;">
+                <span style="padding: 4px 10px; background: ${statusBg}; color: ${statusColor}; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                    <i class="fas ${statusIcon}"></i> ${row.status.toUpperCase()}
+                </span>
+            </td>
+            <td style="padding: 12px; font-size: 13px;">${errorsHtml}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// Filter rows by status
+function filterRows(filter) {
+    // Update active tab
+    document.querySelectorAll('.filter-tab').forEach(tab => {
+        tab.classList.remove('active');
+        tab.style.color = '#6b7280';
+        tab.style.borderBottomColor = 'transparent';
+    });
+
+    const activeTab = document.getElementById('filter' + filter.charAt(0).toUpperCase() + filter.slice(1));
+    activeTab.classList.add('active');
+    activeTab.style.color = '#2563eb';
+    activeTab.style.borderBottomColor = '#2563eb';
+
+    // Filter rows
+    if (filter === 'all') {
+        currentFilteredRows = currentSessionData.row_results || [];
+    } else {
+        currentFilteredRows = (currentSessionData.row_results || []).filter(row => row.status === filter);
+    }
+
+    displayRowResults(currentFilteredRows);
+}
+
+// Open session details modal
+function openSessionDetailsModal() {
+    const modal = document.getElementById('sessionDetailsModal');
+    modal.style.display = 'block';
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+
+    // Reset filter to 'all'
+    filterRows('all');
+}
+
+// Close session details modal
+function closeSessionDetailsModal() {
+    const modal = document.getElementById('sessionDetailsModal');
+    modal.style.display = 'none';
+    modal.classList.remove('show');
+    document.body.style.overflow = 'auto';
+
+    // Stop auto-refresh
+    stopModalRefresh();
+    currentSessionKey = null;
+}
+
+// Start polling for session updates
+function startSessionPolling() {
+    if (sessionPollingInterval) {
+        clearInterval(sessionPollingInterval);
+    }
+
+    // Fetch immediately
+    fetchUploadSessions();
+
+    // Then poll every 3 seconds
+    sessionPollingInterval = setInterval(fetchUploadSessions, 3000);
+}
+
+// Stop polling
+function stopSessionPolling() {
+    if (sessionPollingInterval) {
+        clearInterval(sessionPollingInterval);
+        sessionPollingInterval = null;
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    startSessionPolling();
+
+    // Stop polling when user leaves page
+    window.addEventListener('beforeunload', stopSessionPolling);
+});
+
+// Variables to store learner info for the modal
+let pendingLearnerId = null;
+let pendingLearnerStatus = null;
+let pendingCheckbox = null;
+
+function handleLearnerStatusChange(learnerId, newStatus, checkboxElement) {
+    console.log('[LEARNER MODAL] handleLearnerStatusChange called:', learnerId, newStatus);
+    if (newStatus === 'inactive') {
+        // Store the pending info and show confirmation modal
+        pendingLearnerId = learnerId;
+        pendingLearnerStatus = newStatus;
+        pendingCheckbox = checkboxElement;
+
+        console.log('[LEARNER MODAL] Showing modal for learner:', learnerId);
+        const modal = document.getElementById('inactiveLearnerModal');
+        console.log('[LEARNER MODAL] Modal element:', modal);
+
+        // Show the modal
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    } else {
+        // If marking as active, no confirmation needed
+        console.log('[LEARNER MODAL] Marking as active, no confirmation needed');
+        toggleLearnerStatus(learnerId, newStatus);
+    }
+}
+
+function confirmInactiveLearner() {
+    // Disable button and show loading state
+    const confirmBtn = document.getElementById('confirmInactiveLearnerBtn');
+    confirmBtn.disabled = true;
+    confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+
+    // Proceed with status change
+    if (pendingLearnerId && pendingLearnerStatus) {
+        toggleLearnerStatus(pendingLearnerId, pendingLearnerStatus);
+    }
+}
+
+function cancelInactiveLearner() {
+    // Hide modal
+    document.getElementById('inactiveLearnerModal').style.display = 'none';
+    document.body.style.overflow = '';
+
+    // Revert the checkbox
+    if (pendingCheckbox) {
+        pendingCheckbox.checked = true; // Revert to active (checked)
+    }
+
+    // Clear pending data
+    pendingLearnerId = null;
+    pendingLearnerStatus = null;
+    pendingCheckbox = null;
+}
+
+function toggleLearnerStatus(learnerId, status) {
+    // Hide confirmation modal
+    document.getElementById('inactiveLearnerModal').style.display = 'none';
+
+    // Show loading overlay
+    const loadingOverlay = document.getElementById('statusLoadingOverlay');
+    const loadingMessage = document.getElementById('loadingMessage');
+    loadingMessage.textContent = status === 'active'
+        ? 'Activating learner account...'
+        : 'Deactivating learner and removing from batches...';
+    loadingOverlay.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    fetch(`/onboarding/learners/${learnerId}/toggle-status/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({ status: status })
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Hide loading overlay
+        loadingOverlay.style.display = 'none';
+        document.body.style.overflow = '';
+
+        // Clear pending data
+        pendingLearnerId = null;
+        pendingLearnerStatus = null;
+        pendingCheckbox = null;
+
+        // Reset confirm button
+        const confirmBtn = document.getElementById('confirmInactiveLearnerBtn');
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = '<i class="fas fa-check"></i> Yes, Mark as Inactive';
+
+        if (data.success) {
+            showSuccess(data.message || 'Learner status updated successfully!');
+            // Reload learners to reflect changes
+            offset = 0;
+            allLoaded = false;
+            document.getElementById('learnerTableBody').innerHTML = '';
+            loadMoreLearners();
+        } else {
+            showError(data.error || 'Failed to update learner status');
+            // Reload learners to revert the toggle
+            offset = 0;
+            allLoaded = false;
+            document.getElementById('learnerTableBody').innerHTML = '';
+            loadMoreLearners();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+
+        // Hide loading overlay
+        loadingOverlay.style.display = 'none';
+        document.body.style.overflow = '';
+
+        // Clear pending data
+        pendingLearnerId = null;
+        pendingLearnerStatus = null;
+        pendingCheckbox = null;
+
+        // Reset confirm button
+        const confirmBtn = document.getElementById('confirmInactiveLearnerBtn');
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = '<i class="fas fa-check"></i> Yes, Mark as Inactive';
+
+        showError('Error updating learner status');
+        // Reload learners to revert the toggle
+        offset = 0;
+        allLoaded = false;
+        document.getElementById('learnerTableBody').innerHTML = '';
+        loadMoreLearners();
+    });
+}
+
 </script>
 {% endblock %} 

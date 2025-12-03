@@ -64,19 +64,21 @@ class EbekUser(AbstractBaseUser, PermissionsMixin):
         'Institution', 
         blank=True,
         help_text='Institutions assigned to this user',
-        related_name='assigned_users'
+        related_name='assigned_users',
     )
+
     assigned_hospitals = models.ManyToManyField(
         'Hospital', 
         blank=True,
         help_text='Hospitals assigned to this user',
-        related_name='assigned_users'
+        related_name='assigned_users',
     )
+
     assigned_skillathons = models.ManyToManyField(
         'SkillathonEvent', 
         blank=True,
         help_text='Skillathon events assigned to this user',
-        related_name='assigned_users'
+        related_name='assigned_users',
     )
     
     # Permissions many-to-many relationship
@@ -84,7 +86,7 @@ class EbekUser(AbstractBaseUser, PermissionsMixin):
         'Permission',
         blank=True,
         help_text='Custom permissions assigned to this user',
-        related_name='users'
+        related_name='users',
     )
 
     objects = EbekUserManager()
@@ -143,6 +145,8 @@ class EbekUser(AbstractBaseUser, PermissionsMixin):
         return False
     
     def check_icon_navigation_permissions(self, tab_name):
+        onboarding_permissions = []
+        
         if tab_name == 'reports':
             if "view_overall_report" in self.get_all_permissions() \
                 or 'view_candidate_report' in self.get_all_permissions() \
@@ -181,11 +185,26 @@ class EbekUser(AbstractBaseUser, PermissionsMixin):
                 or self.has_all_permissions():
                 return True
         if tab_name == 'onboarding':
-            if ("view_institutions" in self.get_all_permissions()  or "view_hospitals" in self.get_all_permissions() or "view_learners" in self.get_all_permissions() or "view_assessors" in self.get_all_permissions() or "view_skillathons" in self.get_all_permissions()) \
-                or self.has_all_permissions():
-                return True
+                    # Check if user has ANY onboarding-related permission
+                    onboarding_permissions = [
+                        # Learners
+                        'view_learners', 'add_learner', 'edit_learner', 'delete_learner', 'bulk_upload_learners',
+                        # Institutions
+                        'view_institutes', 'create_institute', 'edit_institute', 'delete_institute',
+                        # Hospitals
+                        'view_hospitals', 'create_hospital', 'edit_hospital', 'delete_hospital',
+                        # Assessors
+                        'view_assessors', 'add_assessor', 'edit_assessor', 'delete_assessor',
+                        # Skillathons
+                        'view_skillathons', 'add_skillathon', 'edit_skillathon', 'delete_skillathon',
+                        # Groups
+                        'view_groups', 'create_group', 'edit_group', 'delete_group'
+                    ]
+        user_perms = self.get_all_permissions()
+        if any(perm in user_perms for perm in onboarding_permissions) or self.has_all_permissions():
+                    return True
         return False
-
+    
 class PasswordResetToken(models.Model):
     user = models.ForeignKey('EbekUser', on_delete=models.CASCADE)
     token = models.UUIDField(default=uuid.uuid4, unique=True)
@@ -231,6 +250,7 @@ class Institution(models.Model):
     institute_id = models.CharField(max_length=50, unique=True, editable=False)
     onboarding_type = models.CharField(max_length=3, choices=ONBOARDING_TYPES)
     skillathon = models.ForeignKey('SkillathonEvent', on_delete=models.SET_NULL, null=True, blank=True)
+    allowed_to_take_classroom_test = models.BooleanField(default=False, help_text='Whether this institution allows classroom tests')
 
     def save(self, *args, **kwargs):
         if not self.institute_id:
@@ -260,6 +280,7 @@ class Hospital(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     onboarding_type = models.CharField(max_length=3, choices=ONBOARDING_TYPES)
     skillathon = models.ForeignKey('SkillathonEvent', on_delete=models.SET_NULL, null=True, blank=True)
+    allowed_to_take_classroom_test = models.BooleanField(default=False, help_text='Whether this hospital allows classroom tests')
 
     def save(self, *args, **kwargs):
         if not self.hospital_id:
@@ -399,13 +420,21 @@ class SkillathonEvent(models.Model):
         return self.assessor_set.count()
 
 class SchedularObject(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('passed', 'Passed'),
+        ('failed', 'Failed'),
+    ]
+
     created_at = models.DateTimeField(auto_now_add=True)
     is_completed = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    error_message = models.TextField(null=True, blank=True)
     data = models.TextField(null=True, blank=True)
     update_data = models.TextField(null=True, blank=True)
 
     def __str__(self):
-        return str(self.created_at)
+        return f"{self.created_at} - {self.status}"
 
 class ExamAssignment(models.Model):
     learner = models.ForeignKey(Learner, on_delete=models.CASCADE)

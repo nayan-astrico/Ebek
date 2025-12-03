@@ -113,7 +113,12 @@ class Command(BaseCommand):
             for test_doc in test_refs:
                 test_data = test_doc.to_dict()
                 procedure_assignments = test_data.get('procedureAssignments', []) or []
-                
+
+                # Skip if procedure_assignments doesn't exist or is empty
+                if not procedure_assignments:
+                    self.stdout.write(self.style.WARNING(f'Skipping test {test_doc.id} - no procedure assignments found'))
+                    continue
+
                 self.stdout.write(f'Processing test {test_doc.id} with {len(procedure_assignments)} procedure assignments')
 
                 for proc_assignment_ref in procedure_assignments:
@@ -161,7 +166,8 @@ class Command(BaseCommand):
                         'status': 'Pending',
                         'notes': procedure.get('notes', ''),
                         'procedure_name': procedure.get('procedureName', ''),
-                        'institute': learner_user_doc.get("institution") if learner_user_doc.get("institution") else None,
+                        'institute': learner_user_doc.get("institute") if learner_user_doc.get("institute") else None,
+                        'institution': learner_user_doc.get("institute") if learner_user_doc.get("institute") else None,
                         'hospital': learner_user_doc.get("hospital") if learner_user_doc.get("hospital") else None,
                     }
                     
@@ -183,18 +189,27 @@ class Command(BaseCommand):
                     
             with transaction.atomic():
                 schedular_object.is_completed = True
+                schedular_object.status = 'passed'
                 schedular_object.save()
-                
+
             end_time = time.time()
             self.stdout.write(
                 self.style.SUCCESS(
                     f'Processed {processed_count} exam assignments in {end_time - start_time:.2f} seconds'
                 )
             )
-            
+
         except Exception as e:
+            error_msg = f'{str(e)}\n{traceback.format_exc()}'
+
+            # Mark scheduler object as failed
+            with transaction.atomic():
+                schedular_object.is_completed = True
+                schedular_object.status = 'failed'
+                schedular_object.error_message = error_msg
+                schedular_object.save()
+
             self.stdout.write(
                 self.style.ERROR(f'Error processing scheduler object: {e}')
             )
-            self.stdout.write(traceback.format_exc())
-            raise 
+            self.stdout.write(traceback.format_exc()) 

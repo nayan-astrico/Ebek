@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Q
-from .models import Group, Institution, Hospital, Learner, Assessor, SkillathonEvent, EbekUser
+from .models import Group, Institution, Hospital, Learner, Assessor, SkillathonEvent, EbekUser, SchedularObject
 from .onboarding_forms import (
     GroupForm, InstitutionForm, HospitalForm, LearnerForm,
     AssessorForm, SkillathonEventForm, BulkLearnerUploadForm
@@ -27,7 +27,7 @@ from django.http import JsonResponse
 from .firebase_sync import sync_user_to_firestore, sync_user_to_firebase_auth, batch_sync_users_to_firebase_auth, create_test_and_exam_assignments, DisableSignals, enable_all_signals
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import Signal
-from firebase_admin import firestore
+from firebase_admin import firestore, auth as firebase_auth
 import traceback
 import json
 import os
@@ -40,11 +40,13 @@ from .firebase_sync import (
     on_learner_save, on_learner_delete,
     on_assessor_save, on_assessor_delete,
     on_skillathon_save, on_skillathon_delete,
-    on_group_save, on_group_delete, batch_sync_users_to_firestore_with_progress
+    on_group_save, on_group_delete
 )
 import threading
 from django.db.models import Q
 import logging
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -313,16 +315,27 @@ def institution_create(request):
     if request.method == 'POST':
         form = InstitutionForm(request.POST)
         if form.is_valid():
-            
             institution_name = form.cleaned_data['name'].strip()
+            onboarding_type = str(form.cleaned_data.get('onboarding_type', '')).lower()
+            print(onboarding_type)
             user = None
 
-            existing_institute = db.collection('InstituteNames').where('instituteName', '==', institution_name).limit(1).stream()
-            
-            if list(existing_institute):
-                return JsonResponse({'error': 'An institution with this name already exists'}, status=400)
-            
+            # Append " - B2C" suffix for B2C institutions
+            if onboarding_type.lower() == "b2c":
+                print("here")
+                institution_name = str(institution_name) + " - B2C"
+
+            # Validate uniqueness by onboarding type and name (case-insensitive)
+            if Institution.objects.filter(name__iexact=institution_name, onboarding_type=onboarding_type).exists():
+                return JsonResponse({'error': 'Institution already exists for this onboarding type.'}, status=400)
+
+            # Create instance and modify name AFTER save(commit=False)
             institution = form.save(commit=False)
+
+            # Set the modified name on the instance
+            if onboarding_type.lower() == "b2c":
+                institution.name = institution_name  # Use the modified name with " - B2C"
+
             if request.POST.get('is_active') == 'on':
                 institution.is_active = True
             else:
@@ -344,13 +357,11 @@ def institution_edit(request, pk):
     if request.method == 'POST':
         form = InstitutionForm(request.POST, instance=institution)
         if form.is_valid():
-            institution_name = form.cleaned_data['name']
-            
-            # Check if institution name is being changed and if it already exists in Firebase
-            if institution_old_name != institution_name:
-                existing_institute = db.collection('InstituteNames').where('instituteName', '==', institution_name).limit(1).stream()
-                if list(existing_institute):
-                    return JsonResponse({'error': 'An institution with this name already exists'}, status=400)
+            institution_name = form.cleaned_data['name'].strip()
+            onboarding_type = str(form.cleaned_data.get('onboarding_type', '')).lower()
+            # Enforce uniqueness within same onboarding type (exclude current)
+            if Institution.objects.filter(name__iexact=institution_name, onboarding_type=onboarding_type).exclude(pk=pk).exists():
+                return JsonResponse({'error': 'Institution already exists for this onboarding type.'}, status=400)
             
             if request.POST.get('is_active') == 'on':
                 institution.is_active = True
@@ -374,6 +385,195 @@ def institution_delete(request, pk):
         messages.success(request, 'Institution deleted successfully.')
         return redirect('institution_list')
     return redirect('institution_list')
+
+@login_required
+def institution_toggle_status(request, pk):
+    """Toggle institution active/inactive status with progress tracking"""
+    if not (request.user.has_all_permissions() or 'update_institute_status' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    if request.method == 'POST':
+        try:
+
+            data = json.loads(request.body)
+            new_status = data.get('status', '').strip().lower()
+
+            if new_status not in ['active', 'inactive']:
+                return JsonResponse({'error': 'Invalid status. Must be "active" or "inactive"'}, status=400)
+
+            institution = get_object_or_404(Institution, pk=pk)
+            is_active = (new_status == 'active')
+
+            # Generate unique task ID
+            task_id = str(uuid.uuid4())
+
+            # Get all users to update
+            learners = list(Learner.objects.filter(college=institution).select_related('learner_user'))
+            assessor_users = list(EbekUser.objects.filter(assigned_institutions=institution).prefetch_related('assigned_institutions'))
+
+            # Filter assessors who only have this institution
+            assessors_to_update = []
+            for user in assessor_users:
+                if user.assigned_institutions.count() == 1 and user.assigned_hospitals.count() == 0:
+                    try:
+                        assessor = Assessor.objects.get(assessor_user=user)
+                        assessors_to_update.append((user, assessor))
+                    except Assessor.DoesNotExist:
+                        pass
+
+            total_learners = len(learners)
+            total_assessors = len(assessors_to_update)
+
+            # Get batch count - use pk not institute_id UUID
+            institution_ref = db.collection('InstituteNames').document(str(institution.pk))
+            print(f"[BATCH COUNT] Querying batches for institution reference: {institution_ref.path}")
+            batches_list = list(db.collection('Batches').where('unit', '==', institution_ref).stream())
+            total_batches = sum(1 for b in batches_list if b.to_dict().get('unitType') == 'institution')
+            print(f"[BATCH COUNT] Found {total_batches} institution batches (out of {len(batches_list)} total batches with this reference)")
+
+            # Initialize progress in cache
+            cache.set(f'status_update_{task_id}', {
+                'status': 'running',
+                'total_learners': total_learners,
+                'updated_learners': 0,
+                'total_assessors': total_assessors,
+                'updated_assessors': 0,
+                'total_batches': total_batches,
+                'updated_batches': 0,
+                'current_user': 'Starting updates...'
+            }, timeout=600)
+
+            # Background task - updates EVERYTHING
+            def update_all_in_background():
+                try:
+                    # Update institution first
+                    institution.is_active = is_active
+                    institution.save()
+
+                    # Update learners
+                    for idx, learner in enumerate(learners, 1):
+                        learner.is_active = is_active
+                        learner.save()
+
+                        if learner.learner_user and learner.learner_user.email:
+                            cache.set(f'status_update_{task_id}', {
+                                'status': 'running',
+                                'total_learners': total_learners,
+                                'updated_learners': idx,
+                                'total_assessors': total_assessors,
+                                'updated_assessors': 0,
+                                'total_batches': total_batches,
+                                'updated_batches': 0,
+                                'current_user': f'{learner.learner_user.email}'
+                            }, timeout=600)
+
+                            try:
+                                firebase_user = firebase_auth.get_user_by_email(learner.learner_user.email)
+                                firebase_auth.update_user(firebase_user.uid, disabled=(not is_active))
+                            except Exception as e:
+                                print(f"Error updating Firebase for learner {learner.learner_user.email}: {str(e)}")
+
+                    # Update assessors
+                    for idx, (user, assessor) in enumerate(assessors_to_update, 1):
+                        user.is_active = is_active
+                        user.save()
+                        assessor.is_active = is_active
+                        assessor.save()
+
+                        cache.set(f'status_update_{task_id}', {
+                            'status': 'running',
+                            'total_learners': total_learners,
+                            'updated_learners': total_learners,
+                            'total_assessors': total_assessors,
+                            'updated_assessors': idx,
+                            'total_batches': total_batches,
+                            'updated_batches': 0,
+                            'current_user': f'{user.email}'
+                        }, timeout=600)
+
+                        if user.email:
+                            try:
+                                firebase_user = firebase_auth.get_user_by_email(user.email)
+                                firebase_auth.update_user(firebase_user.uid, disabled=(not is_active))
+                            except Exception as e:
+                                print(f"Error updating Firebase for assessor {user.email}: {str(e)}")
+
+                    # Update all batches associated with this institution
+                    try:
+                        import traceback
+                        institution_ref = db.collection('InstituteNames').document(str(institution.pk))
+                        print(f"[BATCH UPDATE] Searching for batches with unit reference: {institution_ref.path}")
+
+                        batches_query = db.collection('Batches').where('unit', '==', institution_ref).stream()
+
+                        batch_count = 0
+                        for batch_doc in batches_query:
+                            batch_data = batch_doc.to_dict()
+                            print(f"[BATCH UPDATE] Found batch {batch_doc.id}: unitType={batch_data.get('unitType')}, current status={batch_data.get('status')}")
+
+                            # Only update if it's an institution batch
+                            if batch_data.get('unitType') == 'institution':
+                                print(f"[BATCH UPDATE] Updating batch {batch_doc.id} status to {'active' if is_active else 'inactive'}")
+                                batch_doc.reference.update({
+                                    'status': 'active' if is_active else 'inactive'
+                                })
+                                batch_count += 1
+
+                                cache.set(f'status_update_{task_id}', {
+                                    'status': 'running',
+                                    'total_learners': total_learners,
+                                    'updated_learners': total_learners,
+                                    'total_assessors': total_assessors,
+                                    'updated_assessors': total_assessors,
+                                    'total_batches': total_batches,
+                                    'updated_batches': batch_count,
+                                    'current_user': f'Updating batches ({batch_count}/{total_batches})...'
+                                }, timeout=600)
+                            else:
+                                print(f"[BATCH UPDATE] Skipping batch {batch_doc.id} (unitType mismatch)")
+
+                        print(f"[BATCH UPDATE] Updated {batch_count} batches for institution {institution.name}")
+                    except Exception as e:
+                        print(f"[BATCH UPDATE ERROR] Error updating batches for institution: {str(e)}")
+                        traceback.print_exc()
+
+                    # Mark as complete
+                    cache.set(f'status_update_{task_id}', {
+                        'status': 'completed',
+                        'total_learners': total_learners,
+                        'updated_learners': total_learners,
+                        'total_assessors': total_assessors,
+                        'updated_assessors': total_assessors,
+                        'total_batches': total_batches,
+                        'updated_batches': total_batches,
+                        'current_user': 'All updates completed!'
+                    }, timeout=600)
+
+                except Exception as e:
+                    cache.set(f'status_update_{task_id}', {
+                        'status': 'error',
+                        'error': str(e),
+                        'current_user': f'Error: {str(e)}'
+                    }, timeout=600)
+                    print(f"Error in background update: {str(e)}")
+
+            # Start background thread
+            thread = threading.Thread(target=update_all_in_background, daemon=True)
+            thread.start()
+
+            return JsonResponse({
+                'success': True,
+                'task_id': task_id,
+                'total_learners': total_learners,
+                'total_assessors': total_assessors,
+                'total_batches': total_batches,
+                'message': f'Starting update of {total_learners} learner(s), {total_assessors} assessor(s), and {total_batches} batch(es)...'
+            }, status=200)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 @login_required
 def institution_list_api(request):
@@ -523,13 +723,11 @@ def hospital_create(request):
         form = HospitalForm(request.POST)
         if form.is_valid():
             hospital_name = form.cleaned_data['name'].strip()
+            onboarding_type = str(form.cleaned_data.get('onboarding_type', '')).lower()
             user = None
-            
-            # Check if hospital with same name already exists in Firebase
-            existing_hospital = db.collection('HospitalNames').where('hospitalName', '==', hospital_name).limit(1).stream()
-            
-            if list(existing_hospital):
-                return JsonResponse({'error': 'A hospital with this name already exists'}, status=400)
+            # Validate uniqueness by onboarding type and name (case-insensitive)
+            if Hospital.objects.filter(name__iexact=hospital_name, onboarding_type=onboarding_type).exists():
+                return JsonResponse({'error': 'Hospital already exists for this onboarding type.'}, status=400)
 
             hospital = form.save(commit=False)
             if request.POST.get('is_active') == 'on':
@@ -553,14 +751,11 @@ def hospital_edit(request, pk):
     if request.method == 'POST':
         form = HospitalForm(request.POST, instance=hospital)
         if form.is_valid():
-            
-            hospital_name = form.cleaned_data['name']
-            
-            # Check if hospital name is being changed and if it already exists in Firebase
-            if hospital_old_name != hospital_name:
-                existing_hospital = db.collection('HospitalNames').where('hospitalName', '==', hospital_name).limit(1).stream()
-                if list(existing_hospital):
-                    return JsonResponse({'error': 'A hospital with this name already exists'}, status=400)
+            hospital_name = form.cleaned_data['name'].strip()
+            onboarding_type = str(form.cleaned_data.get('onboarding_type', '')).lower()
+            # Enforce uniqueness within same onboarding type (exclude current)
+            if Hospital.objects.filter(name__iexact=hospital_name, onboarding_type=onboarding_type).exclude(pk=pk).exists():
+                return JsonResponse({'error': 'Hospital already exists for this onboarding type.'}, status=400)
             
             
             if request.POST.get('is_active') == 'on':
@@ -585,6 +780,204 @@ def hospital_delete(request, pk):
         messages.success(request, 'Hospital deleted successfully.')
         return redirect('hospital_list')
     return redirect('hospital_list')
+
+@login_required
+def hospital_toggle_status(request, pk):
+    """Toggle hospital active/inactive status with progress tracking"""
+    if not (request.user.has_all_permissions() or 'update_hospital_status' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            new_status = data.get('status', '').strip().lower()
+
+            if new_status not in ['active', 'inactive']:
+                return JsonResponse({'error': 'Invalid status. Must be "active" or "inactive"'}, status=400)
+
+            hospital = get_object_or_404(Hospital, pk=pk)
+            is_active = (new_status == 'active')
+
+            # Generate unique task ID
+            task_id = str(uuid.uuid4())
+
+            # Get all users to update
+            learners = list(Learner.objects.filter(hospital=hospital).select_related('learner_user'))
+            assessor_users = list(EbekUser.objects.filter(assigned_hospitals=hospital).prefetch_related('assigned_hospitals'))
+
+            # Filter assessors who only have this hospital
+            assessors_to_update = []
+            for user in assessor_users:
+                if user.assigned_hospitals.count() == 1 and user.assigned_institutions.count() == 0:
+                    try:
+                        assessor = Assessor.objects.get(assessor_user=user)
+                        assessors_to_update.append((user, assessor))
+                    except Assessor.DoesNotExist:
+                        pass
+
+            total_learners = len(learners)
+            total_assessors = len(assessors_to_update)
+
+            # Get batch count - use pk not hospital_id UUID
+            hospital_ref = db.collection('HospitalNames').document(str(hospital.pk))
+            print(f"[BATCH COUNT] Querying batches for hospital reference: {hospital_ref.path}")
+            batches_list = list(db.collection('Batches').where('unit', '==', hospital_ref).stream())
+            total_batches = sum(1 for b in batches_list if b.to_dict().get('unitType') == 'hospital')
+            print(f"[BATCH COUNT] Found {total_batches} hospital batches (out of {len(batches_list)} total batches with this reference)")
+
+            # Initialize progress in cache
+            cache.set(f'status_update_{task_id}', {
+                'status': 'running',
+                'total_learners': total_learners,
+                'updated_learners': 0,
+                'total_assessors': total_assessors,
+                'updated_assessors': 0,
+                'total_batches': total_batches,
+                'updated_batches': 0,
+                'current_user': 'Starting updates...'
+            }, timeout=600)
+
+            # Background task - updates EVERYTHING
+            def update_all_in_background():
+                try:
+                    # Update hospital first
+                    hospital.is_active = is_active
+                    hospital.save()
+
+                    # Update learners
+                    for idx, learner in enumerate(learners, 1):
+                        learner.is_active = is_active
+                        learner.save()
+
+                        if learner.learner_user and learner.learner_user.email:
+                            cache.set(f'status_update_{task_id}', {
+                                'status': 'running',
+                                'total_learners': total_learners,
+                                'updated_learners': idx,
+                                'total_assessors': total_assessors,
+                                'updated_assessors': 0,
+                                'total_batches': total_batches,
+                                'updated_batches': 0,
+                                'current_user': f'{learner.learner_user.email}'
+                            }, timeout=600)
+
+                            try:
+                                firebase_user = firebase_auth.get_user_by_email(learner.learner_user.email)
+                                firebase_auth.update_user(firebase_user.uid, disabled=(not is_active))
+                            except Exception as e:
+                                print(f"Error updating Firebase for learner {learner.learner_user.email}: {str(e)}")
+
+                    # Update assessors
+                    for idx, (user, assessor) in enumerate(assessors_to_update, 1):
+                        user.is_active = is_active
+                        user.save()
+                        assessor.is_active = is_active
+                        assessor.save()
+
+                        cache.set(f'status_update_{task_id}', {
+                            'status': 'running',
+                            'total_learners': total_learners,
+                            'updated_learners': total_learners,
+                            'total_assessors': total_assessors,
+                            'updated_assessors': idx,
+                            'total_batches': total_batches,
+                            'updated_batches': 0,
+                            'current_user': f'{user.email}'
+                        }, timeout=600)
+
+                        if user.email:
+                            try:
+                                firebase_user = firebase_auth.get_user_by_email(user.email)
+                                firebase_auth.update_user(firebase_user.uid, disabled=(not is_active))
+                            except Exception as e:
+                                print(f"Error updating Firebase for assessor {user.email}: {str(e)}")
+
+                    # Update all batches associated with this hospital
+                    try:
+                        import traceback
+                        hospital_ref = db.collection('HospitalNames').document(str(hospital.pk))
+                        print(f"[BATCH UPDATE] Searching for batches with unit reference: {hospital_ref.path}")
+
+                        batches_query = db.collection('Batches').where('unit', '==', hospital_ref).stream()
+
+                        batch_count = 0
+                        for batch_doc in batches_query:
+                            batch_data = batch_doc.to_dict()
+                            print(f"[BATCH UPDATE] Found batch {batch_doc.id}: unitType={batch_data.get('unitType')}, current status={batch_data.get('status')}")
+
+                            # Only update if it's a hospital batch
+                            if batch_data.get('unitType') == 'hospital':
+                                print(f"[BATCH UPDATE] Updating batch {batch_doc.id} status to {'active' if is_active else 'inactive'}")
+                                batch_doc.reference.update({
+                                    'status': 'active' if is_active else 'inactive'
+                                })
+                                batch_count += 1
+
+                                cache.set(f'status_update_{task_id}', {
+                                    'status': 'running',
+                                    'total_learners': total_learners,
+                                    'updated_learners': total_learners,
+                                    'total_assessors': total_assessors,
+                                    'updated_assessors': total_assessors,
+                                    'total_batches': total_batches,
+                                    'updated_batches': batch_count,
+                                    'current_user': f'Updating batches ({batch_count}/{total_batches})...'
+                                }, timeout=600)
+                            else:
+                                print(f"[BATCH UPDATE] Skipping batch {batch_doc.id} (unitType mismatch)")
+
+                        print(f"[BATCH UPDATE] Updated {batch_count} batches for hospital {hospital.name}")
+                    except Exception as e:
+                        print(f"[BATCH UPDATE ERROR] Error updating batches for hospital: {str(e)}")
+                        traceback.print_exc()
+
+                    # Mark as complete
+                    cache.set(f'status_update_{task_id}', {
+                        'status': 'completed',
+                        'total_learners': total_learners,
+                        'updated_learners': total_learners,
+                        'total_assessors': total_assessors,
+                        'updated_assessors': total_assessors,
+                        'current_user': 'All updates completed!'
+                    }, timeout=600)
+
+                except Exception as e:
+                    cache.set(f'status_update_{task_id}', {
+                        'status': 'error',
+                        'error': str(e),
+                        'current_user': f'Error: {str(e)}'
+                    }, timeout=600)
+                    print(f"Error in background update: {str(e)}")
+
+            # Start background thread
+            thread = threading.Thread(target=update_all_in_background, daemon=True)
+            thread.start()
+
+            return JsonResponse({
+                'success': True,
+                'task_id': task_id,
+                'total_learners': total_learners,
+                'total_assessors': total_assessors,
+                'total_batches': total_batches,
+                'message': f'Starting update of {total_learners} learner(s), {total_assessors} assessor(s), and {total_batches} batch(es)...'
+            }, status=200)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@login_required
+def check_status_update_progress(request, task_id):
+    """API endpoint to check progress of status update"""
+    from django.core.cache import cache
+
+    progress = cache.get(f'status_update_{task_id}')
+
+    if not progress:
+        return JsonResponse({'error': 'Task not found or expired'}, status=404)
+
+    return JsonResponse(progress, status=200)
 
 @login_required
 def hospital_list_api(request):
@@ -755,15 +1148,62 @@ def learner_create(request):
     if request.method == 'POST':
         form = LearnerForm(request.POST)
         if form.is_valid():
-            # Enforce B2C requirements
-            onboarding_type = form.cleaned_data.get('onboarding_type', '')
-            if str(onboarding_type).lower() == 'b2c':
-                if not form.cleaned_data.get('skillathon_event') or not form.cleaned_data.get('college'):
-                    return JsonResponse({
-                        'error': 'For B2C onboarding, Skillathon Event and College are required.'
-                    }, status=400)
-            learner_name = form.cleaned_data['learner_name']
+            # Get form data
             learner_email = form.cleaned_data['learner_email']
+            onboarding_type = form.cleaned_data.get('onboarding_type', '').lower()
+            
+            # Check for duplicate email with same onboarding type
+            existing_learner = Learner.objects.filter(
+                learner_user__email=learner_email,
+                onboarding_type=onboarding_type
+            ).first()
+            
+            if existing_learner:
+                return JsonResponse({
+                    'error': f'A learner with email {learner_email} and onboarding type {onboarding_type.upper()} already exists.',
+                    'field': 'learner_email'
+                }, status=400)
+            
+            # Enforce B2C requirements by learner type
+            if str(onboarding_type).lower() == 'b2c':
+                learner_type = form.cleaned_data.get('learner_type', '').lower()
+                skillathon = form.cleaned_data.get('skillathon_event')
+                college = form.cleaned_data.get('college')
+                hospital = form.cleaned_data.get('hospital')
+                if learner_type == 'student':
+                    if not skillathon or not college:
+                        return JsonResponse({
+                            'error': 'For B2C Students, Skillathon Event and College are required.'
+                        }, status=400)
+                elif learner_type == 'nurse':
+                    if not skillathon or not hospital:
+                        return JsonResponse({
+                            'error': 'For B2C Working Nurses, Skillathon Event and Hospital are required.'
+                        }, status=400)
+
+                # Validate that an active Test exists for the skillathon
+                if skillathon:
+                    try:
+                        skillathon_name = skillathon.name if hasattr(skillathon, 'name') else str(skillathon)
+
+                        # Query for tests with this skillathon where status != "Completed"
+                        tests_query = db.collection('Test').where('skillathon', '==', skillathon_name).stream()
+                        has_active_test = False
+
+                        for test_doc in tests_query:
+                            test_data = test_doc.to_dict()
+                            if test_data.get('status') != 'Completed':
+                                has_active_test = True
+                                break
+
+                        if not has_active_test:
+                            return JsonResponse({
+                                'error': f'Please create an assignment for skillathon "{skillathon_name}" before creating learners.'
+                            }, status=400)
+                    except Exception as e:
+                        print(f"[WARNING] Failed to check Test in Firebase: {e}")
+                        # Continue without blocking if Firebase check fails
+            learner_name = form.cleaned_data['learner_name']
             learner_phone = form.cleaned_data['learner_phone']
 
             if learner_name == '' or learner_email == '' or learner_phone == '':
@@ -802,10 +1242,19 @@ def learner_create(request):
             if user is not None:
                 learner.learner_user = user
             learner.save()
-            
-            # Create test and exam assignments if skillathon is assigned
-            create_test_and_exam_assignments(learner, learner.skillathon_event)
-            
+
+            # Create scheduler object for exam assignments if skillathon is assigned
+            if learner.skillathon_event and learner.learner_user:
+                import json
+                scheduler_data = {
+                    "learner_ids": [learner.learner_user.id],
+                    "skillathon_name": learner.skillathon_event.name
+                }
+                SchedularObject.objects.create(
+                    data=json.dumps(scheduler_data),
+                    is_completed=False
+                )
+
             messages.success(request, 'Learner created successfully.')
             return HttpResponse('OK')
     else:
@@ -821,16 +1270,63 @@ def learner_edit(request, pk):
     if request.method == 'POST':
         form = LearnerForm(request.POST, instance=learner)
         if form.is_valid():
-            # Enforce B2C requirements on update
-            print(form.cleaned_data)
-            onboarding_type = form.cleaned_data.get('onboarding_type', '')
-            if str(onboarding_type).lower() == 'b2c':
-                if not form.cleaned_data.get('skillathon_event') or not form.cleaned_data.get('college'):
-                    return JsonResponse({
-                        'error': 'For B2C onboarding, Skillathon Event and College are required.'
-                    }, status=400)
-            learner_name = form.cleaned_data['learner_name']
+            # Get form data
             learner_email = form.cleaned_data['learner_email']
+            onboarding_type = form.cleaned_data.get('onboarding_type', '').lower()
+            
+            # Check for duplicate email with same onboarding type (excluding current learner)
+            existing_learner = Learner.objects.filter(
+                learner_user__email=learner_email,
+                onboarding_type=onboarding_type
+            ).exclude(pk=pk).first()
+            
+            if existing_learner:
+                return JsonResponse({
+                    'error': f'A learner with email {learner_email} and onboarding type {onboarding_type.upper()} already exists.',
+                    'field': 'learner_email'
+                }, status=400)
+            
+            # Enforce B2C requirements on update by learner type
+            print(form.cleaned_data)
+            if str(onboarding_type).lower() == 'b2c':
+                learner_type = form.cleaned_data.get('learner_type', '').lower()
+                skillathon = form.cleaned_data.get('skillathon_event')
+                college = form.cleaned_data.get('college')
+                hospital = form.cleaned_data.get('hospital')
+                if learner_type == 'student':
+                    if not skillathon or not college:
+                        return JsonResponse({
+                            'error': 'For B2C Students, Skillathon Event and College are required.'
+                        }, status=400)
+                elif learner_type == 'nurse':
+                    if not skillathon or not hospital:
+                        return JsonResponse({
+                            'error': 'For B2C Working Nurses, Skillathon Event and Hospital are required.'
+                        }, status=400)
+
+                # Validate that an active Test exists for the skillathon
+                if skillathon:
+                    try:
+                        skillathon_name = skillathon.name if hasattr(skillathon, 'name') else str(skillathon)
+
+                        # Query for tests with this skillathon where status != "Completed"
+                        tests_query = db.collection('Test').where('skillathon', '==', skillathon_name).stream()
+                        has_active_test = False
+
+                        for test_doc in tests_query:
+                            test_data = test_doc.to_dict()
+                            if test_data.get('status') != 'Completed':
+                                has_active_test = True
+                                break
+
+                        if not has_active_test:
+                            return JsonResponse({
+                                'error': f'Please create an assignment for skillathon "{skillathon_name}" before creating learners.'
+                            }, status=400)
+                    except Exception as e:
+                        print(f"[WARNING] Failed to check Test in Firebase: {e}")
+                        # Continue without blocking if Firebase check fails
+            learner_name = form.cleaned_data['learner_name']
             learner_phone = form.cleaned_data['learner_phone']
             current_user = learner.learner_user
             
@@ -874,10 +1370,19 @@ def learner_edit(request, pk):
             
             learner = form.save(commit=False)
             learner.save()
-            
-            # Create test and exam assignments if skillathon is assigned
-            create_test_and_exam_assignments(learner, learner.skillathon_event)
-            
+
+            # Create scheduler object for exam assignments if skillathon is assigned
+            if learner.skillathon_event and learner.learner_user:
+                import json
+                scheduler_data = {
+                    "learner_ids": [learner.learner_user.id],
+                    "skillathon_name": learner.skillathon_event.name
+                }
+                SchedularObject.objects.create(
+                    data=json.dumps(scheduler_data),
+                    is_completed=False
+                )
+
             messages.success(request, 'Learner updated successfully.')
             return HttpResponse('OK')
     else:
@@ -907,46 +1412,91 @@ def learner_bulk_upload(request):
             })
 
         try:
-            # Generate unique session key for this upload
-            session_key = str(uuid.uuid4())
-            
             # Save file temporarily
             file_name = f"{uuid.uuid4()}_{file.name}".replace(" ", "_")
             file_path = os.path.join('media', 'uploaded_excels', file_name)
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            
+
             with open(file_path, 'wb+') as destination:
                 for chunk in file.chunks():
                     destination.write(chunk)
-            
-            # Initialize progress
-            progress_data = {
-                'status': 'starting',
-                'message': 'Reading Excel file...',
-                'progress': 0,
-                'total_rows': 0,
+
+            # ===== BASIC FILE STRUCTURE VALIDATION ONLY =====
+            print(f"[DEBUG] Checking Excel file structure...")
+            wb = openpyxl.load_workbook(file_path)
+            ws = wb.active
+
+            # Define required headers
+            required_headers = [
+                'Onboarding Type', 'Learner Type', 'Learner Name', 'Learner Email',
+                'Learner Phone', 'College', 'Hospital', 'Skillathon Event',
+                'Learner Gender'
+            ]
+
+            # Read headers
+            headers = [cell.value for cell in ws[1]]
+
+            # Only validate that required columns exist
+            missing_headers = []
+            for required_col in required_headers:
+                if required_col not in headers:
+                    missing_headers.append(required_col)
+
+            if missing_headers:
+                os.remove(file_path)  # Clean up file
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Missing required columns: {", ".join(missing_headers)}'
+                })
+
+            # Get total row count for progress tracking
+            all_rows = list(ws.iter_rows(min_row=2, values_only=True))
+            non_empty_rows = [
+                row for row in all_rows
+                if any(cell is not None and str(cell).strip() for cell in row)
+            ]
+            total_rows = len(non_empty_rows)
+
+            # ===== FILE ACCEPTED - START BACKGROUND PROCESSING =====
+            session_key = str(uuid.uuid4())
+
+            # Initialize session data for progress tracking
+            from datetime import datetime
+            upload_session = {
+                'session_key': session_key,
+                'filename': file.name,
+                'status': 'validating',
+                'uploaded_by': request.user.email,
+                'uploaded_at': datetime.now().isoformat(),
+                'total_rows': total_rows,
                 'processed_rows': 0,
                 'success_count': 0,
-                'update_count': 0,
                 'error_count': 0,
-                'errors': []
+                'created_count': 0,
+                'row_results': []  # Will store {row_number, status, name, email, errors[]}
             }
-            cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-            
-            # Start background processing in a separate thread
-            print(f"[DEBUG] Starting background thread for session: {session_key}")
+            cache.set(f"upload_session:{session_key}", upload_session, timeout=7200)  # 2 hours
+
+            # Add to active sessions list
+            active_sessions = cache.get('active_upload_sessions', [])
+            active_sessions.append(session_key)
+            cache.set('active_upload_sessions', active_sessions, timeout=7200)
+
+            # Start background processing
+            print(f"[DEBUG] File accepted. Starting background validation for session: {session_key}")
             background_thread = threading.Thread(
                 target=process_bulk_upload_with_progress,
                 args=(file_path, session_key),
                 daemon=True
             )
             background_thread.start()
-            print(f"[DEBUG] Background thread started for session: {session_key}")
-            
+
             return JsonResponse({
                 'success': True,
                 'session_key': session_key,
-                'message': 'Upload started. You can track progress in real-time.'
+                'message': 'Thank you for uploading! We will start with the validation.',
+                'filename': file.name,
+                'total_rows': total_rows
             })
 
         except Exception as e:
@@ -964,335 +1514,631 @@ def learner_bulk_upload(request):
 
 def process_bulk_upload_with_progress(file_path, session_key):
     """
-    Process bulk upload with real-time progress tracking
+    Validate and process bulk upload in background, tracking row-wise results
     """
-    print(f"[DEBUG] Starting bulk upload process for session: {session_key}")
-    print(f"[DEBUG] File path: {file_path}")
-    print(f"[DEBUG] Thread ID: {threading.current_thread().ident}")
-    print(f"[DEBUG] Thread name: {threading.current_thread().name}")
-    
+    print(f"[DEBUG] Starting background validation for session: {session_key}")
+
     try:
-        # Update progress - Reading file
-        progress_data = {
-            'status': 'reading',
-            'message': 'Reading Excel file...',
-            'progress': 5,
-            'total_rows': 0,
-            'processed_rows': 0,
-            'success_count': 0,
-            'update_count': 0,
-            'error_count': 0,
-            'errors': []
-        }
-        cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        print(f"[DEBUG] Initial progress set: {progress_data}")
-        
         # Load Excel file
-        print(f"[DEBUG] Loading Excel file...")
         wb = openpyxl.load_workbook(file_path)
         ws = wb.active
-        print(f"[DEBUG] Excel file loaded successfully")
-
-        # Define header mapping
-        header_map = {
-            'Onboarding Type': 'onboarding_type',
-            'Learner Type': 'learner_type',
-            'Learner Name': 'learner_name',
-            'Learner Email': 'learner_email',
-            'Learner Phone': 'learner_phone',
-            'College': 'college',
-            'Course': 'course',
-            'Stream': 'stream',
-            'Year of Study': 'year_of_study',
-            'Hospital': 'hospital',
-            'Designation': 'designation',
-            'Years of Experience': 'years_of_experience',
-            'Educational Qualification': 'educational_qualification',
-            'Speciality': 'speciality',
-            'State': 'state',
-            'District': 'district',
-            'Pincode': 'pincode',
-            'Address': 'address',
-            'Date of Birth': 'date_of_birth',
-            'Certifications': 'certifications',
-            'Learner Gender': 'learner_gender',
-            'Skillathon Event': 'skillathon_event',
-            'Educational Institution': 'educational_institution',
-        }
 
         # Read headers
         headers = [cell.value for cell in ws[1]]
-        
-        # Validate headers
-        missing_headers = []
-        for excel_col, form_field in header_map.items():
-            if excel_col not in headers:
-                missing_headers.append(excel_col)
-        
-        if missing_headers:
-            progress_data.update({
-                'status': 'error',
-                'message': f'Missing required columns: {", ".join(missing_headers)}',
-                'progress': 100
-            })
-            cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-            return
-        
+
         # Get all rows and filter out empty ones
-        print(f"[DEBUG] Reading rows from Excel...")
         all_rows = list(ws.iter_rows(min_row=2, values_only=True))
-        print(f"[DEBUG] Total rows in Excel: {len(all_rows)}")
-        
         non_empty_rows = [
             (idx, row) for idx, row in enumerate(all_rows, start=2)
             if any(cell is not None and str(cell).strip() for cell in row)
         ]
-        
-        total_rows = len(non_empty_rows)
-        print(f"[DEBUG] Non-empty rows: {total_rows}")
-        
-        # Update progress - Validating data
-        progress_data.update({
-            'status': 'validating',
-            'message': 'Validating data...',
-            'progress': 10,
-            'total_rows': total_rows
-        })
-        cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        print(f"[DEBUG] Progress updated to 10%: {progress_data}")
-        
-        success_count = 0
-        update_count = 0
-        error_rows = []
-        User = get_user_model()
-        users_to_sync = []
-        skillathon_name = ""
-        
-        # Disable signals during bulk creation
-        print(f"[DEBUG] Starting Django processing loop...")
-        with DisableSignals((post_save, Learner), (post_save, EbekUser)):
-            for idx, (row_idx, row) in enumerate(non_empty_rows):
+
+        print(f"[DEBUG] Validating {len(non_empty_rows)} rows...")
+
+        # ===== PHASE 1: VALIDATION =====
+        # Get all reference data from database
+        all_skillathons = set(SkillathonEvent.objects.values_list('name', flat=True))
+        all_colleges = set(Institution.objects.values_list('name', flat=True))
+        all_hospitals = set(Hospital.objects.values_list('name', flat=True))
+        existing_emails = set(EbekUser.objects.values_list('email', flat=True))
+
+        # Get all active Tests (status != "Completed") from Firebase
+        active_tests_by_skillathon = {}
+        try:
+            tests_ref = db.collection('Test').stream()
+            for test_doc in tests_ref:
+                test_data = test_doc.to_dict()
+                if test_data.get('status') != 'Completed':
+                    skillathon_name = test_data.get('skillathon', '').strip()
+                    if skillathon_name:
+                        active_tests_by_skillathon[skillathon_name] = True
+            print(f"[DEBUG] Found {len(active_tests_by_skillathon)} skillathons with active tests")
+        except Exception as e:
+            print(f"[WARNING] Failed to fetch Tests from Firebase: {e}")
+            # Continue with validation, but we won't be able to check for active tests
+
+        # Helper function to safely get string value
+        def safe_str(value):
+            if value is None:
+                return ''
+            return str(value).strip()
+
+        # Helper function to validate email format
+        def is_valid_email(email):
+            import re
+            pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            return re.match(pattern, email) is not None
+
+        # Validate each row and store results
+        seen_emails = set()
+        row_results = []
+
+        for row_idx, row in non_empty_rows:
+            row_data = dict(zip(headers, row))
+            row_errors = []
+
+            # Extract basic info
+            learner_name = safe_str(row_data.get('Learner Name'))
+            email = safe_str(row_data.get('Learner Email'))
+            learner_type = safe_str(row_data.get('Learner Type')).lower()
+
+            # Validate Onboarding Type
+            onboarding_type = safe_str(row_data.get('Onboarding Type')).upper()
+            if onboarding_type not in ['B2B', 'B2C']:
+                row_errors.append(f"Onboarding Type must be 'B2B' or 'B2C', found: '{row_data.get('Onboarding Type', '')}'")
+
+            # Validate Learner Name
+            if not learner_name:
+                row_errors.append("Learner Name cannot be empty")
+
+            # Validate Email
+            if not email:
+                row_errors.append("Learner Email cannot be empty")
+            else:
+                if not is_valid_email(email):
+                    row_errors.append(f"Invalid email format: '{email}'")
+                if email in seen_emails:
+                    row_errors.append(f"Duplicate email address in file: '{email}'")
+                else:
+                    seen_emails.add(email)
+                if email in existing_emails:
+                    row_errors.append(f"Email address already exists in system: '{email}'")
+
+            # Validate Phone Number
+            phone = safe_str(row_data.get('Learner Phone'))
+            if not phone:
+                row_errors.append("Learner Phone cannot be empty")
+
+            # Validate Learner Gender
+            gender = safe_str(row_data.get('Learner Gender'))
+            if gender and gender.lower() not in ['male', 'female', 'other']:
+                row_errors.append(f"Learner Gender must be 'Male', 'Female', or 'Other', found: '{gender}'")
+
+            # Validate Learner Type
+            if learner_type not in ['student', 'nurse']:
+                row_errors.append(f"Learner Type must be 'Student' or 'Nurse', found: '{row_data.get('Learner Type', '')}'")
+
+            # Validate Skillathon Event
+            skillathon = safe_str(row_data.get('Skillathon Event'))
+
+            if skillathon:
+                if skillathon not in all_skillathons:
+                    row_errors.append(f"Skillathon Event '{skillathon}' does not exist. Please create it first before uploading.")
+                elif skillathon not in active_tests_by_skillathon:
+                    row_errors.append(f"Please create an assignment named '{skillathon}' before uploading.")
+
+            # Validate College for students
+            if learner_type == 'student':
+                college = safe_str(row_data.get('College'))
+                if not college:
+                    row_errors.append("College cannot be empty for students")
+                elif college not in all_colleges:
+                    row_errors.append(f"College '{college}' does not exist in system. Please create it first before uploading.")
+
+            # Validate Hospital for nurses
+            if learner_type == 'nurse':
+                hospital = safe_str(row_data.get('Hospital'))
+                if not hospital:
+                    row_errors.append("Hospital cannot be empty for nurses")
+                elif hospital not in all_hospitals:
+                    row_errors.append(f"Hospital '{hospital}' does not exist in system. Please create it first before uploading.")
+
+            # Store row result
+            row_result = {
+                'row_number': row_idx,
+                'name': learner_name,
+                'email': email,
+                'learner_type': learner_type,
+                'status': 'fail' if row_errors else 'pass',
+                'errors': row_errors
+            }
+            row_results.append(row_result)
+
+        # Update session with validation results
+        session_data = cache.get(f"upload_session:{session_key}", {})
+        if session_data:
+            session_data['status'] = 'validated'
+            session_data['row_results'] = row_results
+            session_data['processed_rows'] = len(row_results)
+            session_data['success_count'] = sum(1 for r in row_results if r['status'] == 'pass')
+            session_data['error_count'] = sum(1 for r in row_results if r['status'] == 'fail')
+            cache.set(f"upload_session:{session_key}", session_data, timeout=7200)
+
+        print(f"[DEBUG] Validation complete: {session_data['success_count']} passed, {session_data['error_count']} failed")
+
+        # ===== CHECK: ALL-OR-NOTHING VALIDATION =====
+        # If even 1 row fails, reject entire upload
+        if session_data['error_count'] > 0:
+            session_data = cache.get(f"upload_session:{session_key}", {})
+            if session_data:
+                session_data['status'] = 'completed'
+                session_data['message'] = f'Upload rejected: {session_data["error_count"]} row(s) failed validation. Please fix all errors and re-upload. No learners were created.'
+                cache.set(f"upload_session:{session_key}", session_data, timeout=7200)
+            logger.info(f"[DEBUG] Upload rejected due to validation errors: {session_data['error_count']} row(s) failed")
+            return
+
+        # ===== PHASE 2: CREATE LEARNERS FOR PASSED ROWS =====
+        if session_data['success_count'] > 0:
+            session_data['status'] = 'creating'
+            cache.set(f"upload_session:{session_key}", session_data, timeout=7200)
+
+            # Define header mapping for form data
+            header_map = {
+                'Onboarding Type': 'onboarding_type',
+                'Learner Type': 'learner_type',
+                'Learner Name': 'learner_name',
+                'Learner Email': 'learner_email',
+                'Learner Phone': 'learner_phone',
+                'College': 'college',
+                'Course': 'course',
+                'Stream': 'stream',
+                'Year of Study': 'year_of_study',
+                'Hospital': 'hospital',
+                'Designation': 'designation',
+                'Years of Experience': 'years_of_experience',
+                'Educational Qualification': 'educational_qualification',
+                'Speciality': 'speciality',
+                'State': 'state',
+                'District': 'district',
+                'Pincode': 'pincode',
+                'Address': 'address',
+                'Date of Birth': 'date_of_birth',
+                'Certifications': 'certifications',
+                'Learner Gender': 'learner_gender',
+                'Skillathon Event': 'skillathon_event',
+                'Educational Institution': 'educational_institution',
+            }
+
+            User = get_user_model()
+            created_count = 0
+            skillathon_learner_ids = []
+            skillathon_name = ""
+
+            # Process only rows that passed validation
+            print(f"[DEBUG] Starting to create learners for {len(non_empty_rows)} total rows")
+            print(f"[DEBUG] Row results count: {len(row_results)}")
+
+            for row_idx, row in non_empty_rows:
+                # Find the result for this row
+                row_result = next((r for r in row_results if r['row_number'] == row_idx), None)
+                if not row_result:
+                    print(f"[DEBUG] Row {row_idx}: No validation result found")
+                    continue
+                if row_result['status'] != 'pass':
+                    print(f"[DEBUG] Row {row_idx}: Validation failed, skipping")
+                    continue
+
+                print(f"[DEBUG] Row {row_idx}: Starting creation process")
                 try:
-                    # Update progress for Django processing (10% to 30%)
-                    progress = 10 + int((idx / total_rows) * 20)
-                    progress_data.update({
-                        'status': 'processing_django',
-                        'message': f'Processing row {idx + 1} of {total_rows}...',
-                        'progress': progress,
-                        'processed_rows': idx + 1
-                    })
-                    cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-                    
-                    # Debug print every 5 rows
-                    if (idx + 1) % 5 == 0 or idx == 0:
-                        print(f"[DEBUG] Processing row {idx + 1}/{total_rows}, Progress: {progress}%")
-                    
                     row_data = dict(zip(headers, row))
-                    
+
                     # Prepare form data
                     form_data = {}
                     for excel_col, form_field in header_map.items():
                         value = row_data.get(excel_col)
-                        print(f"[DEBUG] Value: {row_data}")
-                        
                         if value is not None:
-                            value = str(value).strip()
-                            if value:
+                            # Convert to string first (handles both strings and numbers)
+                            value_str = str(value).strip()
+                            if value_str:
                                 # Handle ForeignKeys by name
-                                if form_field == 'college' and value:
+                                if form_field == 'college' and value_str:
                                     try:
-                                        form_data['college'] = Institution.objects.get(name=value).id
+                                        form_data['college'] = Institution.objects.get(name=value_str).id
                                     except Institution.DoesNotExist:
                                         form_data['college'] = None
-                                elif form_field == 'hospital' and value:
+                                elif form_field == 'hospital' and value_str:
                                     try:
-                                        form_data['hospital'] = Hospital.objects.get(name=value).id
+                                        form_data['hospital'] = Hospital.objects.get(name=value_str).id
                                     except Hospital.DoesNotExist:
                                         form_data['hospital'] = None
                                 else:
-                                    form_data[form_field] = value
-                                
-                                if form_field == 'onboarding_type' and value:
-                                    form_data['onboarding_type'] = value.lower()
-                                
-                                if form_field == 'learner_gender' and value:
-                                    form_data['learner_gender'] = value.lower()
-                                
-                                if form_field == 'skillathon_event' and value:
+                                    form_data[form_field] = value_str
+
+                                # Convert to lowercase
+                                if form_field == 'onboarding_type':
+                                    form_data['onboarding_type'] = value_str.lower()
+                                if form_field == 'learner_type':
+                                    form_data['learner_type'] = value_str.lower()
+                                if form_field == 'learner_gender':
+                                    form_data['learner_gender'] = value_str.lower()
+                                if form_field == 'skillathon_event':
                                     try:
-                                        form_data['skillathon_event'] = SkillathonEvent.objects.get(name=value.strip()).id
-                                        skillathon_name = value.strip()
+                                        form_data['skillathon_event'] = SkillathonEvent.objects.get(name=value_str).id
+                                        skillathon_name = value_str
                                     except SkillathonEvent.DoesNotExist:
                                         form_data['skillathon_event'] = None
-                    
-                    # Add required user fields
-                    form_data['learner_name'] = row_data.get('Learner Name', '').strip()
-                    form_data['learner_email'] = row_data.get('Learner Email', '').strip()
-                    form_data['learner_phone'] = str(row_data.get('Learner Phone', '')).strip()[:10]
-                    
-                    # Skip if required fields are empty
-                    if not all([form_data['learner_name'], form_data['learner_email'], form_data['learner_phone']]):
-                        error_rows.append({
-                            'row': row_idx,
-                            'errors': {'__all__': ['Name, email and phone are required']}
-                        })
-                        continue
-                    
+
+                    # Add required user fields (convert to string to handle both text and numbers)
+                    learner_name = row_data.get('Learner Name', '')
+                    form_data['learner_name'] = str(learner_name).strip() if learner_name else ''
+
+                    learner_email = row_data.get('Learner Email', '')
+                    form_data['learner_email'] = str(learner_email).strip() if learner_email else ''
+
+                    learner_phone = row_data.get('Learner Phone', '')
+                    form_data['learner_phone'] = str(learner_phone).strip()[:10] if learner_phone else ''
+
                     form = LearnerForm(form_data)
                     if form.is_valid():
-                        # Check if learner already exists
-                        existing_learner = Learner.objects.filter(
-                            learner_user__email=form.cleaned_data['learner_email'],
-                            learner_user__full_name=form.cleaned_data['learner_name'],
-                            learner_user__phone_number=form.cleaned_data['learner_phone']
-                        ).first()
-                        
-                        if existing_learner:
-                            # Update existing learner
-                            for field, value in form.cleaned_data.items():
-                                if field != 'learner_user':
-                                    setattr(existing_learner, field, value)
-                            existing_learner.save()
-                            update_count += 1
-                            users_to_sync.append(existing_learner.learner_user)
-                        else:
-                            # Create new learner
-                            email = form.cleaned_data['learner_email']
-                            full_name = form.cleaned_data['learner_name']
-                            phone = form.cleaned_data['learner_phone']
-                            user, created = User.objects.get_or_create(
-                                email=email,
-                                defaults={'full_name': full_name, 'phone_number': phone, 'is_active': True}
-                            )
-                            if not created:
-                                # Update name/phone if changed
-                                updated = False
-                                if user.full_name != full_name:
-                                    user.full_name = full_name
-                                    updated = True
-                                if user.phone_number != phone:
-                                    user.phone_number = phone
-                                    updated = True
-                                if updated:
-                                    user.save()
-                                    users_to_sync.append(user)
-                            else:
-                                # Set default password for new users
-                                default_password = 'Success@123$'
-                                user.set_password(default_password)
-                                user.save()
-                                users_to_sync.append(user)
-                            learner = form.save(commit=False)
-                            learner.learner_user = user
-                            learner.save()
-                            success_count += 1
-                            
+                        # Create new learner
+                        email = form.cleaned_data['learner_email']
+                        full_name = form.cleaned_data['learner_name']
+                        phone = form.cleaned_data['learner_phone']
+                        user, user_created = User.objects.get_or_create(
+                            email=email,
+                            defaults={'full_name': full_name, 'phone_number': phone, 'is_active': True}
+                        )
+                        if user_created:
+                            default_password = 'Success@123$'
+                            user.set_password(default_password)
+                            user.save()
+
+                        learner = form.save(commit=False)
+                        learner.learner_user = user
+                        learner.save()
+                        created_count += 1
+
+                        # Track for skillathon assignments
+                        if learner.skillathon_event:
+                            skillathon_learner_ids.append(user.id)
+
+                        print(f"[DEBUG] Created learner: {full_name} ({created_count}/{session_data['success_count']})")
+
+                        # Update progress in cache after each learner creation
+                        progress_data = cache.get(f"upload_session:{session_key}", {})
+                        if progress_data:
+                            progress_data['created_count'] = created_count
+                            progress_data['message'] = f'Creating learner {created_count} of {session_data["success_count"]}: {full_name}'
+                            cache.set(f"upload_session:{session_key}", progress_data, timeout=7200)
                     else:
-                        error_rows.append({
-                            'row': row_idx,
-                            'errors': form.errors
-                        })
-                        
+                        print(f"[DEBUG] Row {row_idx}: Form validation failed")
+                        print(f"[DEBUG] Form errors: {form.errors}")
+                        logger.error(f"Form validation failed for row {row_idx}: {form.errors}")
+
                 except Exception as e:
-                    logger.error(f"Processing error: {str(e)}")
+                    logger.error(f"Error creating learner for row {row_idx}: {str(e)}")
                     logger.error(traceback.format_exc())
-                    error_rows.append({
-                        'row': row_idx,
-                        'errors': {'__all__': [f'Processing error: {str(e)}']}
-                    })
-        
-        # Reconnect signals
-        reconnect_all_signals()
-        logger.info(f"[DEBUG] Django processing completed. Success: {success_count}, Updates: {update_count}, Errors: {len(error_rows)}")
-        
-        # Update progress for Firebase sync (30% to 90%)
-        progress_data.update({
-            'status': 'syncing_firebase',
-            'message': 'Syncing with Firebase...',
-            'progress': 30,
-            'success_count': success_count,
-            'update_count': update_count,
-            'error_count': len(error_rows)
-        })
-        cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        logger.info(f"[DEBUG] Progress updated to 30% for Firebase sync: {progress_data}")
-        
-        # Batch sync all users to Firebase with progress tracking
-        if users_to_sync:
-            logger.info(f"[DEBUG] Starting Firebase sync for {len(users_to_sync)} users...")
-            batch_sync_users_to_firestore_with_progress(users_to_sync, session_key, total_rows, skillathon_name)
+
+            # Create scheduler object for skillathon assignments
+            if skillathon_learner_ids and skillathon_name:
+                logger.info(f"[DEBUG] Creating scheduler for {len(skillathon_learner_ids)} learners with skillathon: {skillathon_name}")
+                SchedularObject.objects.create(
+                    data=json.dumps({
+                        "learner_ids": skillathon_learner_ids,
+                        "skillathon_name": skillathon_name
+                    }),
+                    is_completed=False
+                )
+
+            # Update final status
+            session_data = cache.get(f"upload_session:{session_key}", {})
+            if session_data:
+                session_data['status'] = 'completed'
+                session_data['message'] = f'Validation complete. {created_count} learner(s) created successfully. {session_data["error_count"]} row(s) failed validation.'
+                cache.set(f"upload_session:{session_key}", session_data, timeout=7200)
+
+            logger.info(f"[DEBUG] Bulk upload completed: {created_count} created, {session_data['error_count']} failed")
         else:
-            logger.info(f"[DEBUG] No users to sync to Firebase")
-        
-        # Final progress update
-        progress_data.update({
-            'status': 'completed',
-            'message': f'Successfully imported {success_count} new learners and updated {update_count} existing learners.',
-            'progress': 100,
-            'success_count': success_count,
-            'update_count': update_count,
-            'error_count': len(error_rows),
-            'errors': error_rows if error_rows else None
-        })
-        cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
-        logger.info(f"[DEBUG] Final progress set to 100%: {progress_data}")
-        logger.info(f"[DEBUG] Bulk upload process completed for session: {session_key}")
-        
+            # No valid rows to create
+            session_data = cache.get(f"upload_session:{session_key}", {})
+            if session_data:
+                session_data['status'] = 'completed'
+                session_data['message'] = f'Validation complete. All {session_data["error_count"]} row(s) failed validation. No learners created.'
+                cache.set(f"upload_session:{session_key}", session_data, timeout=7200)
+
     except Exception as e:
         # Handle any unexpected errors
-        progress_data.update({
-            'status': 'error',
-            'message': f'Error processing file: {str(e)}',
-            'progress': 100
-        })
-        cache.set(f"upload_progress:{session_key}", progress_data, timeout=3600)
+        session_data = cache.get(f"upload_session:{session_key}", {})
+        if session_data:
+            session_data['status'] = 'error'
+            session_data['message'] = f'Error processing file: {str(e)}'
+            cache.set(f"upload_session:{session_key}", session_data, timeout=7200)
         logger.error(f"Bulk upload error: {e}")
         logger.error(traceback.format_exc())
-        logger.error(f"[DEBUG] Bulk upload process failed for session: {session_key}")
 
 @login_required
-def upload_progress_stream(request, session_key):
+def get_active_upload_sessions(request):
     """
-    SSE endpoint for real-time upload progress
+    API endpoint to get all active upload sessions for displaying progress bars.
+    Returns basic info for all ongoing uploads.
     """
-    print(f"[DEBUG] SSE connection started for session: {session_key}")
-    print(f"[DEBUG] Request method: {request.method}")
-    print(f"[DEBUG] Request user: {request.user}")
-    
-    def event_stream():
-        print(f"[DEBUG] Event stream function started")
-        while True:
-            # Get progress from cache
-            progress_data = cache.get(f"upload_progress:{session_key}")
-            
-            if not progress_data:
-                # No progress data found
-                print(f"[DEBUG] No progress data found for session: {session_key}")
-                yield f"data: {json.dumps({'error': 'No progress data found'})}"
-                break
-            
-            # Send progress data
-            yield f"data: {json.dumps(progress_data)}\n\n"
-            
-            # If completed or error, stop streaming
-            if progress_data.get('status') in ['completed', 'error']:
-                print(f"[DEBUG] Upload {progress_data.get('status')}, stopping SSE stream")
-                break
-                        
-    
-    response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
-    response['Cache-Control'] = 'no-cache'
-    response['X-Accel-Buffering'] = 'no'
-    return response
+    active_session_keys = cache.get('active_upload_sessions', [])
+    sessions = []
+
+    for session_key in active_session_keys:
+        session_data = cache.get(f"upload_session:{session_key}")
+        if session_data:
+            # Include all statuses (validating, validated, creating, completed, error)
+            status = session_data.get('status', 'validating')
+            total_rows = session_data.get('total_rows', 0)
+            processed_rows = session_data.get('processed_rows', 0)
+
+            # Calculate progress percentage
+            if status in ['validating', 'validated', 'creating']:
+                # Show progress based on processed rows
+                progress_percentage = int((processed_rows / total_rows * 100)) if total_rows > 0 else 0
+            elif status == 'completed':
+                progress_percentage = 100
+            else:
+                progress_percentage = 0
+
+            sessions.append({
+                'session_key': session_key,
+                'filename': session_data.get('filename', ''),
+                'status': status,
+                'uploaded_by': session_data.get('uploaded_by', ''),
+                'uploaded_at': session_data.get('uploaded_at', ''),
+                'total_rows': total_rows,
+                'processed_rows': processed_rows,
+                'success_count': session_data.get('success_count', 0),
+                'error_count': session_data.get('error_count', 0),
+                'progress_percentage': progress_percentage,
+                'message': session_data.get('message', '')
+            })
+
+    return JsonResponse({
+        'success': True,
+        'sessions': sessions
+    })
+
+@login_required
+def get_upload_session_details(request, session_key):
+    """
+    API endpoint to get detailed info about a specific upload session.
+    Returns row-wise validation results for display in modal.
+    """
+    session_data = cache.get(f"upload_session:{session_key}")
+
+    if not session_data:
+        return JsonResponse({
+            'success': False,
+            'error': 'No upload session found for this key'
+        })
+
+    return JsonResponse({
+        'success': True,
+        'session_key': session_key,
+        'filename': session_data.get('filename', ''),
+        'status': session_data.get('status', 'validating'),
+        'uploaded_by': session_data.get('uploaded_by', ''),
+        'uploaded_at': session_data.get('uploaded_at', ''),
+        'total_rows': session_data.get('total_rows', 0),
+        'processed_rows': session_data.get('processed_rows', 0),
+        'success_count': session_data.get('success_count', 0),
+        'error_count': session_data.get('error_count', 0),
+        'created_count': session_data.get('created_count', 0),
+        'row_results': session_data.get('row_results', []),
+        'message': session_data.get('message', '')
+    })
+
+def cascade_delete_learner_data(learner):
+    """
+    Cascading delete for learner data in Firebase.
+    Removes learner from Batches, and deletes all associated ExamAssignments
+    and their references from BatchAssignment or ProcedureAssignment.
+    """
+    try:
+        if not learner.learner_user:
+            print(f"Warning: Learner {learner.pk} has no associated user")
+            return
+
+        user_id = learner.learner_user.id
+        # Create DocumentReference instead of string path
+        user_ref = db.collection('Users').document(str(user_id))
+        user_path = f'/Users/{user_id}'  # Keep for logging
+
+        print(f"Starting cascading delete for learner user: {user_path}, onboarding_type: {learner.onboarding_type}")
+
+        # Step 1: Find all ExamAssignments for this user (using DocumentReference)
+        exam_assignments_query = db.collection('ExamAssignment').where('user', '==', user_ref).where('status', '==', 'Pending').stream()
+        exam_assignment_ids = []
+        exam_assignment_paths = []
+
+        for exam_doc in exam_assignments_query:
+            exam_assignment_ids.append(exam_doc.id)
+            exam_assignment_paths.append(f'/ExamAssignment/{exam_doc.id}')
+
+        print(f"Found {len(exam_assignment_ids)} ExamAssignment(s) for user {user_path}")
+
+        if learner.onboarding_type.lower() == 'b2b':
+            # B2B: Remove from Batches, BatchAssignment, then delete ExamAssignments
+
+            # Step 2a: Remove user from all Batches and collect batch paths (using DocumentReference)
+            batches_query = db.collection('Batches').where('learners', 'array_contains', user_ref).stream()
+            batch_count = 0
+            batch_paths = []
+
+            for batch_doc in batches_query:
+                batch_id = batch_doc.id
+                batch_path = f'/Batches/{batch_id}'
+                batch_paths.append(batch_path)
+
+                batch_ref = db.collection('Batches').document(batch_id)
+                # Use DocumentReference in ArrayRemove
+                batch_ref.update({
+                    'learners': firestore.ArrayRemove([user_ref])
+                })
+                batch_count += 1
+                print(f"Removed user from Batch: {batch_id} (path: {batch_path})")
+
+            print(f"Removed user from {batch_count} Batch(es)")
+            print(f"Batch paths to check: {batch_paths}")
+
+            # Step 2b: Remove ExamAssignment references from BatchAssignment for relevant batches only
+            if exam_assignment_paths and batch_paths:
+                print(f"Looking for BatchAssignments with batch in: {batch_paths}")
+
+                # Query BatchAssignments only for the batches the user was in
+                for batch_path in batch_paths:
+                    batch_assignments_query = db.collection('BatchAssignment').where('batch', '==', batch_path).stream()
+
+                    for ba_doc in batch_assignments_query:
+                        ba_data = ba_doc.to_dict()
+                        ba_id = ba_doc.id
+                        ba_ref = db.collection('BatchAssignment').document(ba_id)
+
+                        print(f"Found BatchAssignment: {ba_id} for batch: {batch_path}")
+                        print(f"  Current examassignment array: {[ref.path for ref in ba_data.get('examassignment', [])]}")
+
+                        # Check each exam assignment reference
+                        removed_count = 0
+                        for exam_path in exam_assignment_paths:
+                            if exam_path in ba_data.get('examassignment', []):
+                                ba_ref.update({
+                                    'examassignment': firestore.ArrayRemove([exam_path])
+                                })
+                                removed_count += 1
+                                print(f"  Removed {exam_path} from BatchAssignment: {ba_id}")
+
+                        if removed_count == 0:
+                            print(f"  No matching exam assignments found in this BatchAssignment")
+            elif exam_assignment_paths and not batch_paths:
+                print(f"Warning: User has {len(exam_assignment_paths)} exam assignments but was not found in any batches")
+
+        else:
+            # B2C: Remove ExamAssignment references from ProcedureAssignment
+
+            if exam_assignment_paths:
+                procedure_assignments_query = db.collection('ProcedureAssignment').stream()
+                for pa_doc in procedure_assignments_query:
+                    pa_data = pa_doc.to_dict()
+                    pa_ref = db.collection('ProcedureAssignment').document(pa_doc.id)
+
+                    # Check each exam assignment reference
+                    for exam_path in exam_assignment_paths:
+                        if exam_path in pa_data.get('examAssignmentArray', []):
+                            pa_ref.update({
+                                'examAssignmentArray': firestore.ArrayRemove([exam_path])
+                            })
+                            print(f"Removed {exam_path} from ProcedureAssignment: {pa_doc.id}")
+
+        # Step 3: Delete all ExamAssignments
+        for exam_id in exam_assignment_ids:
+            db.collection('ExamAssignment').document(exam_id).delete()
+            print(f"Deleted ExamAssignment: {exam_id}")
+
+        print(f"Cascading delete completed for learner user: {user_path}")
+
+    except Exception as e:
+        print(f"Error during cascading delete for learner {learner.pk}: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 @login_required
 def learner_delete(request, pk):
     learner = get_object_or_404(Learner, pk=pk)
     if request.method == 'POST':
+        # Perform cascading delete before deleting the learner
+        cascade_delete_learner_data(learner)
         learner.delete()
         messages.success(request, 'Learner deleted successfully.')
         return redirect('learner_list')
     return redirect('learner_list')
+
+@login_required
+def learner_toggle_status(request, pk):
+    """Toggle learner status between active and inactive."""
+    if not (request.user.has_all_permissions() or 'update_learner_status' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+    try:
+        learner = get_object_or_404(Learner, pk=pk)
+        
+        data = json.loads(request.body)
+        new_status = data.get('status', '').strip().lower()
+
+        if new_status not in ['active', 'inactive']:
+            return JsonResponse({'error': 'Invalid status. Must be "active" or "inactive"'}, status=400)
+
+        is_active = (new_status == 'active')
+
+        # If marking as inactive, perform cascade delete
+        if not is_active:
+            cascade_delete_learner_data(learner)    
+
+        if is_active:
+            if learner.college:
+                if learner.college.is_active == False:
+                    return JsonResponse({'error': 'The institute assosciated is not active'}, status=400)   
+
+            if learner.hospital:
+                if learner.hospital.is_active == False:
+                    return JsonResponse({'error': 'The hospital assosciated is not active'}, status=400)             
+
+        # Update learner user status
+        if learner.learner_user:
+            learner.learner_user.is_active = is_active
+            learner.learner_user.save()
+
+            # Update Firebase Auth account
+            if learner.learner_user.email:
+                try:
+                    firebase_user = firebase_auth.get_user_by_email(learner.learner_user.email)
+                    firebase_auth.update_user(firebase_user.uid, disabled=(not is_active))
+                except Exception as e:
+                    print(f"Error updating Firebase Auth for learner {learner.learner_user.email}: {str(e)}")
+
+        message = f'Learner marked as {new_status} successfully'
+        if not is_active:
+            message += '. The learner has been removed from all batches and incomplete exam assignments have been deleted.'
+
+        learner.is_active = is_active
+        learner.save()
+        return JsonResponse({
+            'success': True,
+            'message': message
+        }, status=200)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+def learners_bulk_delete(request):
+    if not (request.user.has_all_permissions() or 'delete_learner' in request.user.get_all_permissions()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+        ids = data.get('ids', [])
+        if not ids:
+            return JsonResponse({'error': 'No learners selected'}, status=400)
+        qs = Learner.objects.filter(pk__in=ids)
+        count = qs.count()
+        for learner in qs:
+            # Perform cascading delete before deleting the learner
+            cascade_delete_learner_data(learner)
+            learner_user = learner.learner_user
+            learner_user.is_active = False
+            learner_user.save()
+            learner.is_active = False
+            learner.save()
+        return JsonResponse({'success': True, 'deleted': count})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 # Assessor Views
 @login_required
@@ -1422,8 +2268,10 @@ def assessor_create(request):
             
             assessor.save()
             assessor_user = assessor.assessor_user
-            assessor_user.assigned_institutions.add(assessor.institution)
-            assessor_user.assigned_hospitals.add(assessor.hospital)
+            if institution_id:
+                assessor_user.assigned_institutions.add(assessor.institution)
+            if hospital_id:
+                assessor_user.assigned_hospitals.add(assessor.hospital)
             assessor_user.save()
             
             messages.success(request, 'Assessor created successfully.')
@@ -1533,10 +2381,12 @@ def assessor_edit(request, pk):
                 assessor.is_active = False
             assessor = form.save(commit=False)
             assessor_user = assessor.assessor_user
-            assessor_user.assigned_institutions.add(assessor.institution)
-            assessor_user.assigned_hospitals.add(assessor.hospital)
-            assessor_user.save()
+            if institution_id:
+                assessor_user.assigned_institutions.add(assessor.institution)
+            if hospital_id:
+                assessor_user.assigned_hospitals.add(assessor.hospital)
             assessor.save()
+            assessor_user.save()
             messages.success(request, 'Assessor updated successfully.')
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return HttpResponse('OK')
