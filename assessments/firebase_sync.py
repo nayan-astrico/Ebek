@@ -133,6 +133,7 @@ def create_test_and_exam_assignments(learner, skillathon_event, test_ref=None, p
                         'procedure_name': procedure_data.get('procedureName', ''),
                         'institute': learner.college.name if learner.college else None,
                         'hospital': learner.hospital.name if learner.hospital else None,
+                        'skillathon': skillathon_name,  # Add skillathon field for report queries
                     }
 
                     # Add exam assignment to Firestore and get its reference

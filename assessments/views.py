@@ -2104,22 +2104,135 @@ def fetch_exam_metrics(request):
        skillathon_name = request.GET.get("skillathon_name")
        institution_name = request.GET.get("institution_name")  # Now using name, not ID
 
-
        if not skillathon_name:
            return JsonResponse({"error": "skillathon_name is required"}, status=400)
 
+       # Strip whitespace and validate skillathon_name
+       skillathon_name = skillathon_name.strip()
+       if not skillathon_name:
+           return JsonResponse({"error": "skillathon_name cannot be empty"}, status=400)
 
+       print(f"[fetch_exam_metrics] Querying for skillathon: '{skillathon_name}'")
+       
        # Build query
-       base_query = db.collection('ExamAssignment') \
-           .where('status', '==', 'Completed') \
-           .where('skillathon', '==', skillathon_name)
+       try:
+           # First, try exact match
+           base_query = db.collection('ExamAssignment') \
+               .where('status', '==', 'Completed') \
+               .where('skillathon', '==', skillathon_name)
 
+           if institution_name:
+               institution_name = institution_name.strip()
+               print(f"[fetch_exam_metrics] Filtering by institution: '{institution_name}'")
+               # Try 'institution' field first
+               base_query = base_query.where('institution', '==', institution_name)
+           else:
+               print(f"[fetch_exam_metrics] No institution filter - fetching all institutions")
+           
+           print(f"[fetch_exam_metrics] Executing query with skillathon='{skillathon_name}'...")
+           exam_assignments = list(base_query.stream())
+           print(f"[fetch_exam_metrics] Found {len(exam_assignments)} exam assignments")
+           
+           # If filtering by institution and no results, check what institution values exist
+           if institution_name and len(exam_assignments) == 0:
+               print(f"[fetch_exam_metrics] No results for institution '{institution_name}'. Checking what institution values exist for this skillathon...")
+               # Get all exams for this skillathon (without institution filter)
+               all_exams_query = db.collection('ExamAssignment') \
+                   .where('status', '==', 'Completed') \
+                   .where('skillathon', '==', skillathon_name)
+               all_exams = list(all_exams_query.stream())
+               institution_values_found = set()
+               institute_values_found = set()
+               for exam in all_exams:
+                   exam_data = exam.to_dict()
+                   inst_val = exam_data.get('institution')
+                   inst_val2 = exam_data.get('institute')
+                   if inst_val:
+                       institution_values_found.add(inst_val)
+                   if inst_val2:
+                       institute_values_found.add(inst_val2)
+               
+               all_institution_values = institution_values_found.union(institute_values_found)
+               print(f"[fetch_exam_metrics] Institution values found in 'institution' field: {sorted(list(institution_values_found))}")
+               print(f"[fetch_exam_metrics] Institution values found in 'institute' field: {sorted(list(institute_values_found))}")
+               print(f"[fetch_exam_metrics] All institution values: {sorted(list(all_institution_values))}")
+               print(f"[fetch_exam_metrics] Looking for: '{institution_name}'")
+               
+               # Check for case-insensitive or similar matches
+               matching_institution = None
+               for val in all_institution_values:
+                   if val and val.strip().lower() == institution_name.strip().lower():
+                       matching_institution = val
+                       print(f"[fetch_exam_metrics] Found case-insensitive match: '{val}' matches '{institution_name}'")
+                       break
+               
+               if matching_institution:
+                   # Try both fields
+                   print(f"[fetch_exam_metrics] Retrying query with exact institution match: '{matching_institution}'")
+                   # Try 'institution' field first
+                   base_query = db.collection('ExamAssignment') \
+                       .where('status', '==', 'Completed') \
+                       .where('skillathon', '==', skillathon_name) \
+                       .where('institution', '==', matching_institution)
+                   exam_assignments = list(base_query.stream())
+                   
+                   # If still no results, try 'institute' field
+                   if len(exam_assignments) == 0:
+                       print(f"[fetch_exam_metrics] No results in 'institution' field, trying 'institute' field...")
+                       base_query = db.collection('ExamAssignment') \
+                           .where('status', '==', 'Completed') \
+                           .where('skillathon', '==', skillathon_name) \
+                           .where('institute', '==', matching_institution)
+                       exam_assignments = list(base_query.stream())
+                       print(f"[fetch_exam_metrics] Found {len(exam_assignments)} exam assignments using 'institute' field")
+                   else:
+                       print(f"[fetch_exam_metrics] Found {len(exam_assignments)} exam assignments with corrected institution name")
+               else:
+                   print(f"[fetch_exam_metrics] WARNING: No matching institution found. Available institutions: {sorted(list(all_institution_values))}")
+           
+           # If no results found, try to find what skillathon values actually exist
+           if len(exam_assignments) == 0:
+               print(f"[fetch_exam_metrics] No results found. Checking for ExamAssignments with status='Completed'...")
+               # Get a sample of completed exams to see what skillathon values exist
+               sample_query = db.collection('ExamAssignment') \
+                   .where('status', '==', 'Completed') \
+                   .limit(10)
+               sample_exams = list(sample_query.stream())
+               skillathon_values_found = set()
+               for exam in sample_exams:
+                   exam_data = exam.to_dict()
+                   skillathon_val = exam_data.get('skillathon')
+                   if skillathon_val:
+                       skillathon_values_found.add(skillathon_val)
+               
+               print(f"[fetch_exam_metrics] Sample skillathon values found in ExamAssignment: {list(skillathon_values_found)}")
+               print(f"[fetch_exam_metrics] Looking for: '{skillathon_name}'")
+               
+               # Check if there's a case-insensitive match
+               matching_skillathon = None
+               for val in skillathon_values_found:
+                   if val and val.strip().lower() == skillathon_name.strip().lower():
+                       matching_skillathon = val
+                       print(f"[fetch_exam_metrics] Found case-insensitive match: '{val}' matches '{skillathon_name}'")
+                       break
+               
+               if matching_skillathon and matching_skillathon != skillathon_name:
+                   print(f"[fetch_exam_metrics] Retrying query with exact match: '{matching_skillathon}'")
+                   base_query = db.collection('ExamAssignment') \
+                       .where('status', '==', 'Completed') \
+                       .where('skillathon', '==', matching_skillathon)
+                   if institution_name:
+                       base_query = base_query.where('institution', '==', institution_name)
+                   exam_assignments = list(base_query.stream())
+                   print(f"[fetch_exam_metrics] Found {len(exam_assignments)} exam assignments with corrected skillathon name")
+       except Exception as query_error:
+           print(f"[fetch_exam_metrics] Query error: {str(query_error)}")
+           import traceback
+           traceback.print_exc()
+           return JsonResponse({"error": f"Query error: {str(query_error)}"}, status=500)
 
-       if institution_name:
-           base_query = base_query.where('institution', '==', institution_name)
-
-       exam_assignments = list(base_query.stream())
-
+       print(f"[fetch_exam_metrics] Starting analytics calculation for {len(exam_assignments)} exam assignments")
+       
        # --- Analytics Calculation ---
        total_students = set()
        procedure_counts = defaultdict(int)
@@ -2143,11 +2256,19 @@ def fetch_exam_metrics(request):
        student_marks = {}  # {email: {'obtained': total, 'max': total}}
        student_gender = {}  # {email: gender} - Track student gender (use first exam occurrence)
 
+       processed_count = 0
+       skipped_no_email = 0
+       skipped_no_exam_meta = 0
+       
        for exam in exam_assignments:
            exam_doc = exam.to_dict()
            email = exam_doc.get('emailID')
            if not email:
+               skipped_no_email += 1
+               print(f"[fetch_exam_metrics] Skipping exam {exam.id} - no emailID")
                continue
+           
+           processed_count += 1
            total_students.add(email)
 
            procedure_name = exam_doc.get('procedureName', 'Unknown')
@@ -2157,6 +2278,14 @@ def fetch_exam_metrics(request):
            student_completed_procedures[email].add(procedure_name)
 
            gender = (exam_doc.get('gender') or 'others').lower()
+           
+           # Normalize gender: 'other' -> 'others' to match the metrics structure
+           if gender == 'other':
+               gender = 'others'
+           
+           # Ensure gender is one of the valid values
+           if gender not in ['male', 'female', 'others']:
+               gender = 'others'
 
            # Store student's gender (use first occurrence)
            if email not in student_gender:
@@ -2164,13 +2293,27 @@ def fetch_exam_metrics(request):
 
            percentage = 0
            total_score = exam_doc.get("marks", 0)
-           max_marks = sum(
-               question.get('right_marks_for_question', 0)
-               for section in exam_doc.get('examMetaData', [])
-               for question in section.get("section_questions", [])
-           )
+           exam_meta_data = exam_doc.get('examMetaData', [])
+           
+           if not exam_meta_data:
+               skipped_no_exam_meta += 1
+               print(f"[fetch_exam_metrics] Skipping exam {exam.id} for {email} - no examMetaData")
+               continue
+           
+           try:
+               max_marks = sum(
+                   question.get('right_marks_for_question', 0)
+                   for section in exam_meta_data
+                   for question in section.get("section_questions", [])
+               )
+           except Exception as e:
+               print(f"[fetch_exam_metrics] Error calculating max_marks for exam {exam.id}: {e}")
+               max_marks = 0
+           
            if max_marks > 0:
                percentage = round((total_score / max_marks) * 100, 2)
+           else:
+               print(f"[fetch_exam_metrics] Warning: Exam {exam.id} for {email} has max_marks=0 (total_score={total_score})")
            grade = get_grade_letter(percentage)
 
            # Track student-level marks using Total Marks Method
@@ -2198,7 +2341,7 @@ def fetch_exam_metrics(request):
            # Critical steps
            critical_missed = 0
            missed_steps = []
-           for section in exam_doc.get("examMetaData", []):
+           for section in exam_meta_data:
                for question in section.get("section_questions", []):
                    if question.get("critical") and question.get("answer_scored", 0) == 0:
                        critical_missed += 1
@@ -2214,6 +2357,13 @@ def fetch_exam_metrics(request):
                    skill_wise_metrics[procedure_name]["common_missed_steps"][step] = 0
                skill_wise_metrics[procedure_name]["common_missed_steps"][step] += 1
 
+       print(f"[fetch_exam_metrics] Processing complete:")
+       print(f"  - Total exam assignments processed: {processed_count}")
+       print(f"  - Skipped (no email): {skipped_no_email}")
+       print(f"  - Skipped (no examMetaData): {skipped_no_exam_meta}")
+       print(f"  - Unique students found: {len(total_students)}")
+       print(f"  - Procedures found: {list(procedure_counts.keys())}")
+       
        # Calculate completed_all_procedures metric
        all_procedures = set(procedure_counts.keys())
        completed_all_procedures = sum(
@@ -2253,6 +2403,10 @@ def fetch_exam_metrics(request):
                student_overall_pct = round((marks['obtained'] / marks['max']) * 100, 2)
                student_grade = get_grade_letter(student_overall_pct)
                student_gender_val = student_gender.get(email, 'others')
+               
+               # Normalize gender value to ensure it's valid
+               if student_gender_val not in ['male', 'female', 'others']:
+                   student_gender_val = 'others'
 
                # Count this STUDENT once per gender and grade (STUDENT-LEVEL, not exam-level)
                gender_metrics["total"][student_gender_val] += 1
@@ -2269,7 +2423,8 @@ def fetch_exam_metrics(request):
 
        for exam in exam_assignments:
            exam_doc = exam.to_dict()
-           institute = exam_doc.get('institution', 'Unknown')
+           # Check both 'institution' and 'institute' fields for compatibility
+           institute = exam_doc.get('institution') or exam_doc.get('institute') or 'Unknown'
            procedure = exam_doc.get('procedureName', exam_doc.get('procedure_name', 'Unknown'))
            email = exam_doc.get('emailID')
            total_score = exam_doc.get("marks", 0)
@@ -2350,8 +2505,10 @@ def fetch_exam_metrics(request):
 
 
    except Exception as e:
-       print(f"Error in fetch_exam_metrics: {str(e)}")
-       return JsonResponse({"error": str(e)}, status=500)
+       print(f"[fetch_exam_metrics] Error: {str(e)}")
+       import traceback
+       traceback.print_exc()
+       return JsonResponse({"error": f"Error fetching exam metrics: {str(e)}"}, status=500)
 
 def get_grade_letter(percentage):
     if percentage >= 90:
