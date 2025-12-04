@@ -579,6 +579,13 @@
     background: #e45857;
 }
 
+.btn.btn-primary:disabled {
+    background: #F16564;
+    color: white;
+    opacity: 1;
+    cursor: not-allowed;
+}
+
 /* Table container */
 .table-container {
     background: #FFFFFF;
@@ -625,6 +632,13 @@
 
 .btn-primary:hover {
     background: #e45857;
+}
+
+.btn-primary:disabled {
+    background: #F16564;
+    color: white;
+    opacity: 1;
+    cursor: not-allowed;
 }
 
 .btn-light {
@@ -1698,11 +1712,21 @@ function loadBatches() {
         url += 'status=' + filters.statuses.join(',') + '&';
     }
 
-    // Show loading spinner
-    const loadingSpinner = document.getElementById('batchesLoadingSpinner');
+    // Clear table immediately when loading starts
+    const tbody = document.getElementById('batchesTableBody');
+    tbody.innerHTML = '';
+    
+    // Hide empty state
+    const emptyState = document.getElementById('emptyState');
+    if (emptyState) {
+        emptyState.style.display = 'none';
+    }
+    
+    // Show loading state on button
     const showMoreBtn = document.getElementById('showMoreBatchesBtn');
-    loadingSpinner.style.display = 'flex';
-    showMoreBtn.style.display = 'none';
+    showMoreBtn.style.display = 'inline-block';
+    showMoreBtn.textContent = 'Loading...';
+    showMoreBtn.disabled = true;
     
     fetch(url)
         .then(response => response.json())
@@ -1722,9 +1746,14 @@ function loadBatches() {
         })
         .catch(error => {
             console.error('Error:', error);
-        })
-        .finally(() => {
-            loadingSpinner.style.display = 'none';
+            // On error, restore button state
+            const showMoreBtn = document.getElementById('showMoreBatchesBtn');
+            if (allBatches.length > 0) {
+                showMoreBtn.textContent = 'Show More';
+                showMoreBtn.disabled = false;
+            } else {
+                showMoreBtn.style.display = 'none';
+            }
         });
 }
 
@@ -1787,6 +1816,8 @@ function updateShowMoreButton(hasNext) {
     const showMoreBtn = document.getElementById('showMoreBatchesBtn');
     if (hasNext && allBatches.length > 0) {
         showMoreBtn.style.display = 'inline-block';
+        showMoreBtn.textContent = 'Show More';
+        showMoreBtn.disabled = false;
     } else {
         showMoreBtn.style.display = 'none';
     }
@@ -1812,7 +1843,9 @@ function loadMoreBatches() {
     }
 
     const showMoreBtn = document.getElementById('showMoreBatchesBtn');
-    showMoreBtn.style.display = 'none';
+    const originalButtonText = showMoreBtn.textContent;
+    showMoreBtn.textContent = 'Loading...';
+    showMoreBtn.disabled = true;
 
     fetch(url)
         .then(response => response.json())
@@ -1827,6 +1860,11 @@ function loadMoreBatches() {
         })
         .catch(error => {
             console.error('Error:', error);
+        })
+        .finally(() => {
+            // Restore button state
+            showMoreBtn.textContent = originalButtonText;
+            showMoreBtn.disabled = false;
         });
 }
 

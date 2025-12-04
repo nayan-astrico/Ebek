@@ -2259,6 +2259,7 @@
 </style>
 
 <script>
+    
     let offset = 0;
     const limit = 10;
     let hasMoreData = true;
@@ -2597,12 +2598,40 @@
     }
 
     function updateGenderCharts(metrics) {
+        // Check if gender_metrics exists, otherwise use defaults
+        if (!metrics || !metrics.gender_metrics) {
+            console.warn('Gender metrics not available, using defaults');
+            metrics = {
+                gender_metrics: {
+                    total: { male: 0, female: 0, others: 0 },
+                    grade_wise: {
+                        A: { male: 0, female: 0, others: 0 },
+                        B: { male: 0, female: 0, others: 0 },
+                        C: { male: 0, female: 0, others: 0 },
+                        D: { male: 0, female: 0, others: 0 },
+                        E: { male: 0, female: 0, others: 0 }
+                    }
+                }
+            };
+        }
+
+        // Safely access gender_metrics with defaults
+        const genderMetrics = metrics.gender_metrics || {};
+        const total = genderMetrics.total || { male: 0, female: 0, others: 0 };
+        const gradeWise = genderMetrics.grade_wise || {
+            A: { male: 0, female: 0, others: 0 },
+            B: { male: 0, female: 0, others: 0 },
+            C: { male: 0, female: 0, others: 0 },
+            D: { male: 0, female: 0, others: 0 },
+            E: { male: 0, female: 0, others: 0 }
+        };
+
         // Update Total Gender Distribution
         if (genderTotalChart) {
             genderTotalChart.data.datasets[0].data = [
-                metrics.gender_metrics.total.male,
-                metrics.gender_metrics.total.female,
-                metrics.gender_metrics.total.others
+                total.male || 0,
+                total.female || 0,
+                total.others || 0
             ];
             genderTotalChart.update();
         }
@@ -2610,7 +2639,7 @@
         // Update Male Grade Distribution
         if (maleGradeChart) {
             const maleData = ['A', 'B', 'C', 'D', 'E'].map(grade => 
-                metrics.gender_metrics.grade_wise[grade].male
+                (gradeWise[grade] && gradeWise[grade].male) || 0
             );
             maleGradeChart.data.datasets[0].data = maleData;
             maleGradeChart.update();
@@ -2619,7 +2648,7 @@
         // Update Female Grade Distribution
         if (femaleGradeChart) {
             const femaleData = ['A', 'B', 'C', 'D', 'E'].map(grade => 
-                metrics.gender_metrics.grade_wise[grade].female
+                (gradeWise[grade] && gradeWise[grade].female) || 0
             );
             femaleGradeChart.data.datasets[0].data = femaleData;
             femaleGradeChart.update();
@@ -2628,7 +2657,7 @@
         // Update Others Grade Distribution
         if (othersGradeChart) {
             const othersData = ['A', 'B', 'C', 'D', 'E'].map(grade => 
-                metrics.gender_metrics.grade_wise[grade].others
+                (gradeWise[grade] && gradeWise[grade].others) || 0
             );
             othersGradeChart.data.datasets[0].data = othersData;
             othersGradeChart.update();
@@ -2924,12 +2953,35 @@
         if (!skillathonName) return;
         let url = `/fetch-exam-metrics/?skillathon_name=${encodeURIComponent(skillathonName)}`;
         if (instituteName) url += `&institution_name=${encodeURIComponent(instituteName)}`;
+        
+        // Show loading state
+        const goButton = document.getElementById('goButton');
+        const originalText = goButton ? goButton.textContent : '';
+        if (goButton) goButton.disabled = true;
+        if (goButton) goButton.textContent = 'Loading...';
+        
         fetch(url)
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                    });
+                }
+                return response.json();
+            })
             .then(data => {
                 if (!data.error) {
                     updateMetricsDisplay(data);
                     updateInstituteTable(data);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching metrics:', error);
+            })
+            .finally(() => {
+                if (goButton) {
+                    goButton.disabled = false;
+                    goButton.textContent = originalText;
                 }
             });
     }
@@ -2951,7 +3003,14 @@
         }
 
         fetch(url)
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                    });
+                }
+                return response.json();
+            })
             .then(data => {
                 const studentMetrics = document.getElementById('studentMetrics');
                 const noDataFound = document.getElementById('noDataFound');
@@ -3487,8 +3546,6 @@
             instituteFilter.innerHTML = '<option value="">All Institutes</option>';
             instituteFilter.disabled = false;
             
-            // Show error message
-            showError('Failed to load institutes for selected skillathon');
         });
     }
 
@@ -3604,7 +3661,7 @@
             .catch(error => {
                 console.error('Error fetching institutes:', error);
             });
-
+        
         // Add event listeners
         document.getElementById('skillathonFilter').addEventListener('change', onSkillathonChange);
         document.getElementById('instituteFilter').addEventListener('change', onInstituteChange);
@@ -3676,8 +3733,6 @@
             studentInstituteFilter.innerHTML = '<option value="">All Institutes</option>';
             studentInstituteFilter.disabled = false;
             
-            // Show error message
-            showError('Failed to load institutes for selected skillathon');
         });
     }
 

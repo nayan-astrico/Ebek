@@ -217,6 +217,13 @@ input:checked + .slider:before {
 .btn-danger:hover {
     background: #e45857;
 }
+
+.btn-primary:disabled {
+    background: #F16564;
+    color: white;
+    opacity: 1;
+    cursor: not-allowed;
+}
 </style>
 
 <!-- Header -->
@@ -242,8 +249,7 @@ input:checked + .slider:before {
         <input type="text"
                placeholder="Search hospitals..."
                value="{{ search_query }}"
-               id="hospitalSearchInput"
-               oninput="filterHospitals(this.value)">
+               id="hospitalSearchInput">
         <!-- <button class="btn-search" type="button" onclick="applySearch()">
         <i class="fas fa-search"></i>
             <span class="search-text">Search</span>
@@ -477,6 +483,10 @@ const limit = 10;
 let loading = false;
 let allLoaded = false;
 let searchQuery = '';
+// Tracks latest search context so stale async responses are ignored
+let currentSearchToken = 0;
+// Debounce timer for search input
+let searchDebounceTimer = null;
 
 // Helper function to safely get elements
 function getElement(id) {
@@ -576,6 +586,10 @@ function renderHospitalRow(hospital) {
 function loadMoreHospitals() {
     if (loading || allLoaded) return Promise.resolve();
     
+    // Capture the search context for this specific request
+    const requestSearchToken = currentSearchToken;
+    const requestSearchQuery = searchQuery;
+    
     loading = true;
     setElementText('showMoreBtn', 'Loading...');
     setElementStyle('showMoreBtn', 'disabled', 'true');
@@ -586,6 +600,12 @@ function loadMoreHospitals() {
     return fetch(apiUrl)
         .then(response => response.json())
         .then(data => {
+            // If the search has changed since this request was made, ignore this response
+            if (requestSearchToken !== currentSearchToken || requestSearchQuery !== searchQuery) {
+                console.log('DEBUG: Ignoring stale hospital search response for:', requestSearchQuery);
+                return;
+            }
+            
             console.log('DEBUG: Hospital API response:', data);
             
             const hospitals = data.hospitals || [];
@@ -637,12 +657,41 @@ function loadMoreHospitals() {
         });
 }
 
-// Real-time search function
+// Real-time search function with debouncing
 function filterHospitals(searchText) {
-    searchQuery = searchText || '';
-    console.log('DEBUG: Real-time hospital search triggered with:', searchQuery);
-    resetHospitalList();
-    loadMoreHospitals();
+    // Clear any existing debounce timer
+    if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+    }
+    
+    // Update search query immediately for UI responsiveness
+    const trimmedSearch = (searchText || '').trim();
+    
+    // If search is cleared, execute immediately (no debounce for clearing)
+    if (trimmedSearch === '' && searchQuery !== '') {
+        searchQuery = '';
+        currentSearchToken++;
+        resetHospitalList();
+        loadMoreHospitals();
+        return;
+    }
+    
+    // Debounce the API call - wait 300ms after user stops typing
+    searchDebounceTimer = setTimeout(function() {
+        // Trim the search text and update global searchQuery
+        searchQuery = trimmedSearch;
+        console.log('DEBUG: Debounced hospital search triggered with:', searchQuery);
+        
+        // Increment search token so older async responses can be ignored
+        currentSearchToken++;
+        
+        // Reset list and reload with new search query
+        resetHospitalList();
+        loadMoreHospitals();
+        
+        // Clear the timer reference
+        searchDebounceTimer = null;
+    }, 300);
 }
 
 // Apply search with reset functionality
@@ -664,8 +713,15 @@ function applySearch() {
 function resetHospitalList() {
     offset = 0;
     allLoaded = false;
+    loading = false; // Reset loading flag so new requests can be made
     
-    // Clear existing table content
+    // Clear any pending search debounce timer
+    if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = null;
+    }
+    
+    // Clear existing table content immediately
     const tbody = getElement('hospitalTableBody');
     if (tbody) {
         tbody.innerHTML = '';
@@ -678,10 +734,10 @@ function resetHospitalList() {
         emptyState.classList.remove('show');
     }
     
-    // Reset show more button
+    // Show loading button
     setElementStyle('showMoreBtn', 'display', 'inline-block');
-    setElementText('showMoreBtn', 'Show More');
-    setElementStyle('showMoreBtn', 'disabled', 'false');
+    setElementText('showMoreBtn', 'Loading...');
+    setElementStyle('showMoreBtn', 'disabled', 'true');
 }
 
 // Apply filters with reset functionality
@@ -693,19 +749,31 @@ function applyFilters() {
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize search
-    const searchInput = document.querySelector('.search-box input');
+    const searchInput = document.getElementById('hospitalSearchInput');
     if (searchInput) {
         // Set initial search query from URL params
         const urlParams = new URLSearchParams(window.location.search);
         searchQuery = urlParams.get('search') || '';
         searchInput.value = searchQuery;
         
+        // Add input event listener for search (with debouncing)
+        searchInput.addEventListener('input', function() {
+            filterHospitals(this.value);
+        });
+        
         // Add Enter key event listener for search
         searchInput.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                console.log('DEBUG: Enter key pressed, applying hospital search');
-                applySearch();
+                // Clear debounce and apply search immediately
+                if (searchDebounceTimer) {
+                    clearTimeout(searchDebounceTimer);
+                    searchDebounceTimer = null;
+                }
+                searchQuery = this.value.trim();
+                currentSearchToken++;
+                resetHospitalList();
+                loadMoreHospitals();
             }
         });
         
@@ -724,6 +792,29 @@ document.addEventListener('DOMContentLoaded', function() {
     ['group', 'state', 'status'].forEach(category => {
         updateSelectionCount(category);
     });
+    
+    // Initialize search token
+    currentSearchToken = 0;
+    
+    // Clear table and show loading button
+    const tbody = getElement('hospitalTableBody');
+    if (tbody) {
+        tbody.innerHTML = '';
+    }
+    
+    // Hide empty state
+    const emptyState = getElement('emptyState');
+    if (emptyState) {
+        emptyState.style.display = 'none';
+    }
+    
+    // Show loading button
+    const showMoreBtn = getElement('showMoreBtn');
+    if (showMoreBtn) {
+        showMoreBtn.style.display = 'inline-block';
+        showMoreBtn.textContent = 'Loading...';
+        showMoreBtn.disabled = true;
+    }
     
     // Load initial data
     loadMoreHospitals();

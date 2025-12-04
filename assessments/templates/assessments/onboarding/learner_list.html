@@ -30,7 +30,7 @@
 <div class="search-filter-bar">
     <div class="search-box">
         <i class="fas fa-search"></i>
-        <input type="text" placeholder="Search learners..." id="searchInput" oninput="filterLearners(this.value)">
+        <input type="text" placeholder="Search learners..." id="searchInput">
     </div>
     <button class="btn-filter" onclick="toggleFilterPanel()" id="filterBtn">
         <i class="fas fa-filter"></i>
@@ -786,6 +786,13 @@ input:checked + .slider:before {
 .btn.btn-primary.hover-state {
     background-color: #e45857; 
     border-color: #e45857;
+}
+
+.btn-primary:disabled {
+    background: #F16564;
+    color: white;
+    opacity: 1;
+    cursor: not-allowed;
 }
     
 /* Basic Layout */
@@ -3577,6 +3584,8 @@ let currentFilters = {};
 
 // Search functionality with debouncing
 let searchTimeout = null;
+// Tracks latest search context so stale async responses are ignored
+let currentSearchToken = 0;
 
 function filterLearners(searchQuery) {
     console.log('🔍 Search input:', searchQuery);
@@ -3587,12 +3596,28 @@ function filterLearners(searchQuery) {
     }
     
     // Trim the search query
-    currentSearch = searchQuery ? searchQuery.trim() : '';
+    const trimmedSearch = searchQuery ? searchQuery.trim() : '';
+    
+    // If search is cleared, execute immediately (no debounce for clearing)
+    if (trimmedSearch === '' && currentSearch !== '') {
+        currentSearch = '';
+        currentSearchToken++;
+        performSearch();
+        return;
+    }
     
     // Debounce: wait 300ms after user stops typing
     searchTimeout = setTimeout(() => {
-        console.log('⚡ Executing search for:', currentSearch);
-        performSearch();
+        // Only increment search token if search actually changed
+        if (trimmedSearch !== currentSearch) {
+            currentSearch = trimmedSearch;
+            // Increment search token so older async responses can be ignored
+            currentSearchToken++;
+            console.log('⚡ Executing search for:', currentSearch);
+            performSearch();
+        }
+        // Clear the timer reference
+        searchTimeout = null;
     }, 300);
 }
 
@@ -3604,17 +3629,19 @@ function performSearch() {
     allLoaded = false;
     loading = false; // Must reset loading flag!
 
-    // Clear the table completely
+    // Clear the table completely immediately
     const tbody = document.getElementById('learnerTableBody');
     if (tbody) {
         tbody.innerHTML = '';
         console.log('✅ Table cleared');
     }
 
-    // Show the button
+    // Show loading button
     const showMoreBtn = document.getElementById('showMoreBtn');
     if (showMoreBtn) {
-        showMoreBtn.style.display = 'inline-flex';
+        showMoreBtn.style.display = 'inline-block';
+        showMoreBtn.textContent = 'Loading...';
+        showMoreBtn.disabled = true;
     }
 
     // Update bulk delete button state
@@ -3634,14 +3661,27 @@ function resetLearnerList() {
     offset = 0;
     allLoaded = false;
     loading = false;
+    
+    // Clear any pending search debounce timer
+    if (searchTimeout) {
+        clearTimeout(searchTimeout);
+        searchTimeout = null;
+    }
+    
+    // Clear the table immediately
     const tbody = document.getElementById('learnerTableBody');
     if (tbody) {
         tbody.innerHTML = '';
     }
+    
+    // Show loading button
     const showMoreBtn = document.getElementById('showMoreBtn');
     if (showMoreBtn) {
-        showMoreBtn.style.display = 'inline-flex';
+        showMoreBtn.style.display = 'inline-block';
+        showMoreBtn.textContent = 'Loading...';
+        showMoreBtn.disabled = true;
     }
+    
     // Update bulk delete button state
     updateBulkDeleteState();
 }
@@ -3667,6 +3707,9 @@ function applyFilters() {
         currentFilters.learner_type = Array.from(learnerTypeCheckboxes).map(cb => cb.value);
     }
 
+    // Increment search token so older async responses can be ignored
+    currentSearchToken++;
+    
     resetLearnerList();
     loadMoreLearners();
     toggleFilterPanel();
@@ -3743,10 +3786,16 @@ function loadMoreLearners() {
         return;
     }
     
+    // Capture the search context for this specific request
+    const requestSearchToken = currentSearchToken;
+    const requestSearch = currentSearch;
+    
     loading = true;
     const showMoreBtn = document.getElementById('showMoreBtn');
     if (showMoreBtn) {
-        showMoreBtn.innerText = 'Loading...';
+        showMoreBtn.style.display = 'inline-block';
+        showMoreBtn.textContent = 'Loading...';
+        showMoreBtn.disabled = true;
     }
     
     // Build query parameters
@@ -3773,11 +3822,19 @@ function loadMoreLearners() {
     fetch(`/onboarding/learners/api/?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
+            // If the search has changed since this request was made, ignore this response
+            if (requestSearchToken !== currentSearchToken || requestSearch !== currentSearch) {
+                console.log('DEBUG: Ignoring stale learner search response for:', requestSearch);
+                return;
+            }
+            
             console.log('📦 Received data:', data.learners ? data.learners.length : 0, 'learners');
-            const learners = data.learners;
-            if (data.all_loaded) {
+            const learners = data.learners || [];
+            if (data.all_loaded || learners.length < limit) {
                 allLoaded = true;
-                document.getElementById('showMoreBtn').style.display = 'none';
+                if (showMoreBtn) {
+                    showMoreBtn.style.display = 'none';
+                }
             }
             offset += learners.length;
             const tbody = document.getElementById('learnerTableBody');
@@ -3791,7 +3848,8 @@ function loadMoreLearners() {
             syncSelectAllCheckbox();
 
             // If no learners at all, show empty state
-            if (offset === 0 && learners.length === 0) {
+            const wasFirstLoad = (offset - learners.length) === 0;
+            if (wasFirstLoad && learners.length === 0) {
                 const colspanCount = userPermissions.canEdit || userPermissions.canDelete ? 8 : 7;
                 tbody.innerHTML = `<tr>
                     <td colspan="${colspanCount}" class="empty">
@@ -3803,12 +3861,35 @@ function loadMoreLearners() {
                         </a>
                     </td>
                 </tr>`;
-                document.getElementById('showMoreBtn').style.display = 'none';
+                if (showMoreBtn) {
+                    showMoreBtn.style.display = 'none';
+                }
+            }
+            
+            // Update button state
+            if (!allLoaded && learners.length > 0) {
+                if (showMoreBtn) {
+                    showMoreBtn.style.display = 'inline-block';
+                    showMoreBtn.textContent = 'Show More';
+                    showMoreBtn.disabled = false;
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error loading learners:', error);
+            // On error, restore button state
+            if (showMoreBtn) {
+                const tbody = document.getElementById('learnerTableBody');
+                if (tbody && tbody.children.length > 0) {
+                    showMoreBtn.textContent = 'Show More';
+                    showMoreBtn.disabled = false;
+                } else {
+                    showMoreBtn.style.display = 'none';
+                }
             }
         })
         .finally(() => {
             loading = false;
-            if (!allLoaded) document.getElementById('showMoreBtn').innerText = 'Show More';
         });
 }
 
@@ -3857,6 +3938,31 @@ async function checkActiveUploads() {
 
 // Initial load
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize search token
+    currentSearchToken = 0;
+    
+    // Clear table and show loading button
+    const tbody = document.getElementById('learnerTableBody');
+    if (tbody) {
+        tbody.innerHTML = '';
+    }
+    
+    // Show loading button
+    const showMoreBtn = document.getElementById('showMoreBtn');
+    if (showMoreBtn) {
+        showMoreBtn.style.display = 'inline-block';
+        showMoreBtn.textContent = 'Loading...';
+        showMoreBtn.disabled = true;
+    }
+    
+    // Hook up search input event listener
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            filterLearners(this.value);
+        });
+    }
+    
     loadMoreLearners();
     checkActiveUploads(); // Check for active uploads on page load
 });

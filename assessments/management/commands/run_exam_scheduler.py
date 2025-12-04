@@ -169,6 +169,7 @@ class Command(BaseCommand):
                         'institute': learner_user_doc.get("institute") if learner_user_doc.get("institute") else None,
                         'institution': learner_user_doc.get("institute") if learner_user_doc.get("institute") else None,
                         'hospital': learner_user_doc.get("hospital") if learner_user_doc.get("hospital") else None,
+                        'skillathon': skillathon_name,  # Add skillathon field for report queries
                     }
                     
                     exam_assignment_ref = db.collection('ExamAssignment').add(exam_assignment_data)[1]
