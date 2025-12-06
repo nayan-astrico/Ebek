@@ -5986,6 +5986,12 @@ def create_roles(request):
             if not role_name:
                 return JsonResponse({'error': 'Role name is required'}, status=400)
             
+            # Filter out delete permissions 
+            permission_codes = [code for code in permission_codes if not code.startswith('delete_')]
+            
+            if not permission_codes:
+                return JsonResponse({'error': 'At least one permission is required (delete permissions are not allowed)'}, status=400)
+            
             # Get permission objects
             permissions = Permission.objects.filter(code__in=permission_codes, is_active=True)
 
@@ -6023,7 +6029,12 @@ def create_roles(request):
             return JsonResponse({'error': str(e)}, status=500)
     
     # GET request - render the form
-    permissions = Permission.objects.filter(is_active=True).order_by('category', 'name')
+    # Exclude all delete permissions from the list
+    permissions = Permission.objects.filter(
+        is_active=True
+    ).exclude(
+        code__startswith='delete_'
+    ).order_by('category', 'name')
     return render(request, 'assessments/create_roles.html', {
         'permissions': permissions
     })
@@ -6080,6 +6091,9 @@ def edit_role(request, role_id):
             
             if not role_name:
                 return JsonResponse({'error': 'Role name is required'}, status=400)
+
+            # Filter out delete permissions (they should not be assignable)
+            permission_codes = [code for code in permission_codes if not code.startswith('delete_')]
 
             # Ensure at least one permission is selected
             if not permission_codes:
